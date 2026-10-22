@@ -1,0 +1,49 @@
+{
+  "name": "spider-math-backend",
+  "version": "2.0.0",
+  "description": "Spider Math Educational Platform — High-Concurrency Serverless Backend API (Node.js LTS + Express.js + TypeScript)",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only --exit-child src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "lint": "eslint src/**/*.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "mean-stack",
+    "express",
+    "typescript",
+    "mongodb-atlas",
+    "lru-cache",
+    "serverless",
+    "education-platform"
+  ],
+  "author": "Eng. Mohamed Khaled Abdel-Sattar (Principal Software Architect)",
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "compression": "^1.7.5",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "google-auth-library": "^11.3.1",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "lru-cache": "^10.4.3",
+    "mongoose": "^8.9.5",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/compression": "^1.7.5",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.8",
+    "@types/node": "^22.10.7",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
