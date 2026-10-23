@@ -68,7 +68,7 @@ export const errorHandler: ErrorRequestHandler = (
 
   // Log internal errors on server console for observability
   if (statusCode >= 500) {
-    console.error(`💥 [Unhandled Error] ${req.method} ${req.originalUrl}:`, err);
+    console.error(`[Unhandled Error] ${req.method} ${req.originalUrl}:`, err);
   }
 
   // Include stack trace only in development

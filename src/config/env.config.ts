@@ -97,7 +97,7 @@ function validateEnv(): EnvConfig {
       .map((err) => `  - [${err.path.join('.')}]: ${err.message}`)
       .join('\n');
 
-    console.error('\n❌ FATAL: Environment Variable Validation Failed:');
+    console.error('\n[FATAL] Environment Variable Validation Failed:');
     console.error(formattedErrors);
     console.error('\nPlease verify your .env file matches .env.example specifications.\n');
 

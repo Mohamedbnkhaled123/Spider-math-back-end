@@ -56,11 +56,11 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
     cached.promise = mongoose
       .connect(env.MONGODB_URI, mongooseOptions)
       .then((m) => {
-        console.log(`✅ [MongoDB Atlas] Connected successfully to: ${m.connection.name} (PoolSize: 10, M0 Optimized)`);
+        console.log(`[MongoDB Atlas] Connected successfully to: ${m.connection.name} (PoolSize: 10, M0 Optimized)`);
         return m;
       })
       .catch((err) => {
-        console.error('❌ [MongoDB Atlas] Connection Error:', err.message);
+        console.error('[MongoDB Atlas] Connection Error:', err.message);
         cached.promise = null; // Reset promise so subsequent invocations can retry
         throw err;
       });
@@ -84,6 +84,6 @@ export async function disconnectFromDatabase(): Promise<void> {
     await mongoose.disconnect();
     cached.conn = null;
     cached.promise = null;
-    console.log('🔌 [MongoDB Atlas] Disconnected gracefully.');
+    console.log('[MongoDB Atlas] Disconnected gracefully.');
   }
 }
