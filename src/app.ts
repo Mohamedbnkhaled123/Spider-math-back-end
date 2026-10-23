@@ -15,7 +15,7 @@ import {
   publicCmsCache,
   assessmentAnswerKeyCache
 } from './config/cache.config';
-import { authRouter, adminDeviceRouter } from './modules/auth/auth.routes';
+import { authRouter, adminDeviceRouter, adminUsersRouter } from './modules/auth/auth.routes';
 import { publicRouter } from './modules/public-discovery/public.routes';
 import { publicController } from './modules/public-discovery/controllers/public.controller';
 import { leadsRouter } from './modules/leads-placement/leads.routes';
@@ -133,6 +133,7 @@ export function createApp(): Application {
   app.use('/api/v1/notifications', notificationsRouter);
   app.use('/api/v1/parent', parentRouter);
   app.use('/api/v1/admin/device-requests', adminDeviceRouter);
+  app.use('/api/v1/admin/users', adminUsersRouter);
   app.use('/api/v1/admin/leads', leadsRouter);
   app.use('/api/v1/admin/cms-config', cmsRouter);
   app.use('/api/v1/admin/units', adminUnitsRouter);

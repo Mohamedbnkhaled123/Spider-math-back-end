@@ -95,6 +95,18 @@ export class AuthController {
       next(error);
     }
   }
+
+  /**
+   * GET /api/v1/admin/users/students
+   */
+  public async getAllStudents(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const students = await authService.getAllStudents();
+      res.status(200).json(createSuccessResponse(students, { totalCount: students.length }));
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const authController = new AuthController();

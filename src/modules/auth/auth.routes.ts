@@ -94,3 +94,11 @@ adminDeviceRouter.post(
   validateBody(deviceDecisionDtoSchema),
   authController.decideDeviceRequest
 );
+
+// Router for /api/v1/admin/users
+export const adminUsersRouter = Router();
+
+adminUsersRouter.get(
+  '/students',
+  authController.getAllStudents
+);

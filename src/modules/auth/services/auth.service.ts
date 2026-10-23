@@ -536,6 +536,16 @@ export class AuthService {
       };
     }
   }
+
+  /**
+   * Fetches all registered users/students from Atlas for Super Admin overview.
+   */
+  public async getAllStudents() {
+    return UserModel.find()
+      .select('full_name student_code email phone parent_phone curriculum grade_level approved_devices total_xp has_active_subscription account_lock_status role createdAt')
+      .sort({ createdAt: -1 })
+      .lean();
+  }
 }
 
 export const authService = new AuthService();
