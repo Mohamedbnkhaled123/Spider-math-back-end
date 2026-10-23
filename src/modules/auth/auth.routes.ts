@@ -34,6 +34,15 @@ authRouter.post(
 );
 
 /**
+ * POST /api/v1/auth/student-code-login
+ * Direct HA Code authentication for enrolled students.
+ */
+authRouter.post(
+  '/student-code-login',
+  authController.studentCodeLogin
+);
+
+/**
  * POST /api/v1/auth/complete-student-profile
  * Protected student endpoint: validates 5-level placement + governorate, generates atomic HAxxxx code.
  */

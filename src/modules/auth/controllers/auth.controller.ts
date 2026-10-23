@@ -47,6 +47,21 @@ export class AuthController {
   }
 
   /**
+   * POST /api/v1/auth/student-code-login
+   */
+  public async studentCodeLogin(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await authService.studentCodeLogin({
+        student_ha_code: req.body.student_ha_code,
+        deviceUuid: req.header('X-Device-UUID') || req.body.deviceUuid
+      });
+      res.status(200).json(createSuccessResponse(result));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * POST /api/v1/auth/parent-activate-login
    */
   public async parentActivateLogin(req: Request, res: Response, next: NextFunction): Promise<void> {

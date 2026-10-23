@@ -336,6 +336,46 @@ export class AuthService {
   }
 
   /**
+   * Directly authenticates a student via their unique HAxxxx code.
+   */
+  public async studentCodeLogin(dto: { student_ha_code: string; deviceUuid?: string }) {
+    const code = (dto.student_ha_code || '').trim().toUpperCase();
+    const student = await UserModel.findOne({ student_code: code });
+
+    if (!student) {
+      throw new AppError(
+        `لم يتم العثور على طالب مسجل بالكود: ${code}`,
+        404,
+        ERROR_CODES.STUDENT_NOT_FOUND_404
+      );
+    }
+
+    const deviceUuid = dto.deviceUuid || 'browser_student_device';
+    const token = this.generateToken({
+      sub: student._id.toString(),
+      role: student.role,
+      deviceUuid,
+      studentCode: student.student_code
+    });
+
+    return {
+      token,
+      user: {
+        _id: student._id.toString(),
+        full_name: student.full_name,
+        email: student.email,
+        role: student.role,
+        student_ha_code: student.student_code,
+        curriculum: student.curriculum,
+        grade_level: student.grade_level,
+        academic_term: student.academic_term,
+        total_xp: student.total_xp,
+        has_active_subscription: student.has_active_subscription
+      }
+    };
+  }
+
+  /**
    * Matches parent phone + student HAxxxx code, links child, and signs parent token.
    */
   public async parentActivateLogin(dto: ParentActivateLoginDto, ipAddress?: string) {
