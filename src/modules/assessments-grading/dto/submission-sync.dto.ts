@@ -20,10 +20,10 @@ export const submissionSyncDtoSchema = z.object({
 
   mcq_answers: z.array(mcqAnswerItemDtoSchema).optional().default([]),
 
-  // Strictly maximum 2 photos per submission (RULES.md Section 5.2)
+  // Allow homework and question-level photo answers (WebP <= 150KB per photo)
   uploaded_solution_imgs: z
     .array(uploadedSolutionImgDtoSchema)
-    .max(2, 'Maximum 2 homework photos allowed per submission to protect storage budget')
+    .max(50, 'Maximum 50 photos allowed per submission')
     .optional()
     .default([]),
 
