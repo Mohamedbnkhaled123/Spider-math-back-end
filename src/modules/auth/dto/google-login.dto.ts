@@ -19,7 +19,10 @@ export const googleLoginDtoSchema = z.object({
   }).min(2, 'browserInfo cannot be empty').max(150),
 
   placementAttemptId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid placementAttemptId ObjectId').optional(),
-  phone: z.string().trim().optional()
+  phone: z.string().trim().optional(),
+  intent: z.enum(['login', 'signup']).default('login'),
+  email: z.string().email().optional(),
+  fullName: z.string().optional()
 });
 
 export type GoogleLoginDto = z.infer<typeof googleLoginDtoSchema>;

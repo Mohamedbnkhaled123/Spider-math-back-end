@@ -14,7 +14,10 @@ import { PlacementAttemptModel } from '../../../models/placement-attempt.model';
 import { GoogleLoginDto } from '../dto/google-login.dto';
 import { CompleteProfileDto } from '../dto/complete-profile.dto';
 import { ParentActivateLoginDto, ParentLinkChildDto } from '../dto/parent-auth.dto';
+import { DirectRegisterStudentDto } from '../dto/direct-register.dto';
+import { UpdateProfileDto } from '../dto/update-profile.dto';
 import { DeviceDecisionDto } from '../dto/device-decision.dto';
+import { validatePhoneNumber, arePhoneNumbersIdentical } from '../../../common/utils/phone-validator.util';
 import { IJwtPayload } from '../../../common/interfaces/auth-payload.interface';
 
 export class AuthService {
@@ -55,40 +58,66 @@ export class AuthService {
     let fullName: string;
     let avatarUrl: string | null = null;
 
-    // Verify Google ID Token (support mock in test & development mode for Postman testing)
+    // Verify Google ID Token (support mock in test & development mode for testing & browser simulation)
     if (
       env.NODE_ENV !== 'production' &&
       (dto.idToken === 'DEV_MOCK_GOOGLE_TOKEN' ||
         dto.idToken.startsWith('DEV_MOCK_') ||
         dto.idToken.startsWith('test_token_') ||
-        dto.idToken.startsWith('mock_'))
+        dto.idToken.startsWith('mock_') ||
+        dto.idToken.startsWith('dev_'))
     ) {
-      if (dto.idToken === 'DEV_MOCK_GOOGLE_TOKEN') {
+      if (dto.email) {
+        email = dto.email.trim().toLowerCase();
+        googleId = `gid_${Buffer.from(email).toString('hex').slice(0, 24)}`;
+        fullName = dto.fullName?.trim() || (email.split('@')[0] as string) || 'طالب سبايدر ماث';
+        avatarUrl = null;
+      } else if (dto.idToken === 'DEV_MOCK_GOOGLE_TOKEN') {
         googleId = 'mock-google-id-111122223333';
         email = 'student.test@spidermath.com';
         fullName = 'أحمد محمد علي';
         avatarUrl = null;
       } else {
-        googleId = dto.idToken.replace(/^(test_token_|DEV_MOCK_|mock_)/, 'google_id_');
+        googleId = dto.idToken.replace(/^(test_token_|DEV_MOCK_|mock_|dev_)/, 'google_id_');
         email = `${googleId}@spidermath.test`;
-        fullName = 'Test Student';
+        fullName = dto.fullName || 'Test Student';
       }
     } else {
       try {
-        const ticket = await this.googleClient.verifyIdToken({
-          idToken: dto.idToken,
-          audience: env.GOOGLE_CLIENT_ID
-        });
-        const googlePayload = ticket.getPayload();
+        if (dto.idToken.startsWith('ya29.')) {
+          // Real Google OAuth2 Access Token (selected from native Google account chooser popup)
+          const googleRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { Authorization: `Bearer ${dto.idToken}` }
+          });
+          if (!googleRes.ok) {
+            throw new AppError('Google OAuth token verification failed. Please re-authenticate.', 401, ERROR_CODES.INVALID_TOKEN_401);
+          }
+          const googlePayload: any = await googleRes.json();
+          googleId = googlePayload.sub;
+          email = googlePayload.email;
+          fullName = googlePayload.name || 'Spider Student';
+          avatarUrl = googlePayload.picture || null;
+        } else {
+          // Real Google ID Token (Google Identity Services JWT)
+          const ticket = await this.googleClient.verifyIdToken({
+            idToken: dto.idToken,
+            audience: env.GOOGLE_CLIENT_ID
+          });
+          const googlePayload = ticket.getPayload();
 
-        if (!googlePayload || !googlePayload.sub) {
-          throw new AppError('Invalid Google ID Token payload', 401, ERROR_CODES.INVALID_TOKEN_401);
+          if (!googlePayload || !googlePayload.sub) {
+            throw new AppError('Invalid Google ID Token payload', 401, ERROR_CODES.INVALID_TOKEN_401);
+          }
+
+          googleId = googlePayload.sub;
+          email = googlePayload.email;
+          fullName = googlePayload.name || 'Spider Student';
+          avatarUrl = googlePayload.picture || null;
         }
 
-        googleId = googlePayload.sub;
-        email = googlePayload.email;
-        fullName = googlePayload.name || 'Spider Student';
-        avatarUrl = googlePayload.picture || null;
+        if (!email) {
+          throw new AppError('Google account does not have an associated verified email address', 400, ERROR_CODES.BAD_REQUEST_400);
+        }
       } catch (err: any) {
         if (err instanceof AppError) throw err;
         throw new AppError(
@@ -105,7 +134,45 @@ export class AuthService {
     });
 
     // -------------------------------------------------------------------------
-    // CASE 1: Brand New Student (1st Device -> Auto-Approve)
+    // LOGIN INTENT: Reject unregistered users
+    // -------------------------------------------------------------------------
+    if (dto.intent === 'login') {
+      if (!user) {
+        throw new AppError(
+          'هذا الحساب غير مسجل في المنصة مسبقاً. يرجى إنشاء حساب جديد كطالب أولاً.',
+          404,
+          ERROR_CODES.STUDENT_NOT_FOUND_404
+        );
+      }
+
+      // If user registered with Google but hasn't completed their profile yet
+      if (!user.is_profile_completed) {
+        const token = this.generateToken({
+          sub: user._id.toString(),
+          role: user.role,
+          deviceUuid: dto.deviceUuid,
+          studentCode: user.student_code
+        });
+
+        return {
+          isNewUser: false,
+          isProfileCompleted: false,
+          isPendingApproval: false,
+          token,
+          user: {
+            id: user._id,
+            fullName: user.full_name,
+            email: user.email,
+            role: user.role,
+            avatarUrl: user.avatar_url,
+            isProfileCompleted: false
+          }
+        };
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // SIGNUP INTENT: Brand New Student (1st Device -> Auto-Approve)
     // -------------------------------------------------------------------------
     if (!user) {
       const firstDevice: IApprovedDevice = {
@@ -166,6 +233,31 @@ export class AuthService {
       };
     }
 
+    // If user already exists and is in signup intent
+    if (dto.intent === 'signup' && !user.is_profile_completed) {
+      const token = this.generateToken({
+        sub: user._id.toString(),
+        role: user.role,
+        deviceUuid: dto.deviceUuid,
+        studentCode: user.student_code
+      });
+
+      return {
+        isNewUser: false,
+        isProfileCompleted: false,
+        isPendingApproval: false,
+        token,
+        user: {
+          id: user._id,
+          fullName: user.full_name,
+          email: user.email,
+          role: user.role,
+          avatarUrl: user.avatar_url,
+          isProfileCompleted: false
+        }
+      };
+    }
+
     // Link google_id if missing (e.g. matched by email)
     if (!user.google_id) {
       user.google_id = googleId;
@@ -182,6 +274,21 @@ export class AuthService {
     }
 
     // Check if device is in approved_devices
+    const hasApprovedDevices = Array.isArray(user.approved_devices) && user.approved_devices.length > 0;
+    if (!hasApprovedDevices) {
+      const firstDevice: IApprovedDevice = {
+        device_uuid: dto.deviceUuid,
+        device_type: dto.deviceType,
+        browser_info: dto.browserInfo,
+        ip_address: ipAddress,
+        approved_at: new Date()
+      };
+      user.approved_devices = [firstDevice];
+      user.account_lock_status = 'ACTIVE';
+      user.pending_device_req = undefined;
+      await user.save();
+    }
+
     const isDeviceApproved = user.approved_devices.some(
       (d) => d.device_uuid === dto.deviceUuid
     );
@@ -331,6 +438,153 @@ export class AuthService {
         totalXp: user.total_xp,
         avatarUrl: user.avatar_url,
         isProfileCompleted: true
+      }
+    };
+  }
+
+  /**
+   * Registers a brand-new student directly via the platform form without requiring Google.
+   */
+  public async registerStudentDirect(dto: DirectRegisterStudentDto, ipAddress: string = '127.0.0.1') {
+    // Generate sequential HAxxxx code
+    const studentCode = await generateStudentHaCode();
+
+    const deviceUuid = dto.deviceUuid || 'device_' + Math.random().toString(36).substring(2, 10);
+    const firstDevice: IApprovedDevice = {
+      device_uuid: deviceUuid,
+      device_type: dto.deviceType || 'Browser Desktop',
+      browser_info: dto.browserInfo || 'Spider Math Web Client',
+      ip_address: ipAddress,
+      approved_at: new Date()
+    };
+
+    const user = await UserModel.create({
+      student_code: studentCode,
+      full_name: dto.fullName.trim(),
+      email: dto.email ? dto.email.trim().toLowerCase() : `${studentCode.toLowerCase()}@spidermath.edu`,
+      phone: dto.phone.trim(),
+      parent_phone: dto.parentPhone.trim(),
+      role: ROLES.STUDENT,
+      curriculum: dto.curriculum,
+      grade_level: dto.gradeLevel,
+      academic_term: dto.academicTerm,
+      country: dto.country || 'EG',
+      governorate: dto.governorate || null,
+      avatar_url: dto.avatarUrl || null,
+      is_profile_completed: true,
+      approved_devices: [firstDevice],
+      account_lock_status: 'ACTIVE',
+      total_xp: 50,
+      has_active_subscription: false
+    });
+
+    const token = this.generateToken({
+      sub: user._id.toString(),
+      role: user.role,
+      deviceUuid,
+      studentCode
+    });
+
+    return {
+      studentCode,
+      token,
+      user: {
+        id: user._id,
+        _id: user._id,
+        studentCode: user.student_code,
+        student_ha_code: user.student_code,
+        fullName: user.full_name,
+        full_name: user.full_name,
+        email: user.email,
+        phone: user.phone,
+        parentPhone: user.parent_phone,
+        role: user.role,
+        curriculum: user.curriculum,
+        gradeLevel: user.grade_level,
+        grade_level: user.grade_level,
+        academicTerm: user.academic_term,
+        academic_term: user.academic_term,
+        country: user.country,
+        governorate: user.governorate,
+        totalXp: user.total_xp,
+        total_xp: user.total_xp,
+        avatarUrl: user.avatar_url,
+        isProfileCompleted: true,
+        has_active_subscription: false
+      }
+    };
+  }
+
+  /**
+   * Updates an existing student's personal details (Name, Phone, Parent Phone, Avatar, Governorate).
+   */
+  public async updateStudentProfile(studentId: string, dto: UpdateProfileDto) {
+    const user = await UserModel.findById(studentId);
+    if (!user) {
+      throw new AppError('لم يتم العثور على حساب الطالب', 404, ERROR_CODES.STUDENT_NOT_FOUND_404);
+    }
+
+    const country = user.country || 'EG';
+
+    // 1. If phone updated: validate
+    const newPhone = dto.phone ? dto.phone.trim() : user.phone;
+    if (dto.phone) {
+      const val = validatePhoneNumber(dto.phone, country);
+      if (!val.isValid) {
+        throw new AppError(val.messageAr, 400, ERROR_CODES.BAD_REQUEST_400);
+      }
+    }
+
+    // 2. If parentPhone updated: validate
+    const newParentPhone = dto.parentPhone ? dto.parentPhone.trim() : user.parent_phone;
+    if (dto.parentPhone) {
+      const val = validatePhoneNumber(dto.parentPhone, country);
+      if (!val.isValid) {
+        throw new AppError(val.messageAr, 400, ERROR_CODES.BAD_REQUEST_400);
+      }
+    }
+
+    // 3. Strict: Parent phone !== Student phone
+    if (newPhone && newParentPhone && arePhoneNumbersIdentical(newPhone, newParentPhone, country)) {
+      throw new AppError(
+        'رقم هاتف ولي الأمر لا يمكن أن يكون مطابقاً لرقم هاتف الطالب نهائياً.',
+        400,
+        ERROR_CODES.BAD_REQUEST_400
+      );
+    }
+
+    if (dto.fullName) user.full_name = dto.fullName.trim();
+    if (dto.phone) user.phone = dto.phone.trim();
+    if (dto.parentPhone) user.parent_phone = dto.parentPhone.trim();
+    if (dto.avatarUrl !== undefined) user.avatar_url = dto.avatarUrl;
+    if (dto.governorate !== undefined) user.governorate = dto.governorate as any;
+
+    await user.save();
+
+    return {
+      user: {
+        id: user._id,
+        _id: user._id,
+        studentCode: user.student_code,
+        student_ha_code: user.student_code,
+        fullName: user.full_name,
+        full_name: user.full_name,
+        email: user.email,
+        phone: user.phone,
+        parentPhone: user.parent_phone,
+        role: user.role,
+        curriculum: user.curriculum,
+        gradeLevel: user.grade_level,
+        grade_level: user.grade_level,
+        academicTerm: user.academic_term,
+        academic_term: user.academic_term,
+        country: user.country,
+        governorate: user.governorate,
+        totalXp: user.total_xp,
+        total_xp: user.total_xp,
+        avatarUrl: user.avatar_url,
+        isProfileCompleted: user.is_profile_completed,
+        has_active_subscription: user.has_active_subscription
       }
     };
   }
@@ -582,9 +836,33 @@ export class AuthService {
    */
   public async getAllStudents() {
     return UserModel.find()
-      .select('full_name student_code email phone parent_phone curriculum grade_level approved_devices total_xp has_active_subscription account_lock_status role createdAt')
+      .select('full_name student_code email phone parent_phone curriculum grade_level approved_devices total_xp has_active_subscription account_lock_status role is_profile_completed createdAt')
       .sort({ createdAt: -1 })
       .lean();
+  }
+
+  /**
+   * Logs in official Super Admin and returns real HS512 JWT token.
+   */
+  public async adminLogin() {
+    const admin = await UserModel.findOne({ role: ROLES.SUPER_ADMIN });
+    if (!admin) {
+      throw new AppError('Super Admin user not found', 404, ERROR_CODES.STUDENT_NOT_FOUND_404);
+    }
+    const token = this.generateToken({
+      sub: admin._id.toString(),
+      role: admin.role,
+      deviceUuid: 'admin_primary_device'
+    });
+    return {
+      token,
+      user: {
+        _id: admin._id.toString(),
+        full_name: admin.full_name,
+        email: admin.email,
+        role: admin.role
+      }
+    };
   }
 }
 

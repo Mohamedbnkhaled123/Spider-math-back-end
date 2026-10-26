@@ -10,6 +10,7 @@ import {
   IMcqAnswer
 } from '../../../models/submission.model';
 import { SubscriptionModel } from '../../../models/subscription.model';
+import { UnitPackageModel } from '../../../models/unit-package.model';
 import { UserModel } from '../../../models/user.model';
 import { GamificationLogModel } from '../../../models/gamification-log.model';
 import {
@@ -73,8 +74,8 @@ export class AssessmentsService {
     }));
 
     const assessment = await AssessmentModel.create({
-      unit_package_id: dto.unit_package_id ? new Types.ObjectId(dto.unit_package_id) : null,
-      lecture_id: dto.lecture_id ? new Types.ObjectId(dto.lecture_id) : null,
+      unit_package_id: (dto.unit_package_id && Types.ObjectId.isValid(dto.unit_package_id)) ? new Types.ObjectId(dto.unit_package_id) : null,
+      lecture_id: (dto.lecture_id && Types.ObjectId.isValid(dto.lecture_id)) ? new Types.ObjectId(dto.lecture_id) : null,
       is_placement_test: dto.is_placement_test ?? false,
       curriculum: dto.curriculum,
       grade_level: dto.grade_level,
@@ -83,6 +84,7 @@ export class AssessmentsService {
       title_en: dto.title_en,
       assessment_type: dto.assessment_type,
       time_limit_minutes: dto.time_limit_minutes,
+      pass_percentage: dto.pass_percentage ?? 60,
       min_expected_solve_sec: dto.min_expected_solve_sec,
       max_attempts: dto.max_attempts,
       available_from: dto.available_from ? new Date(dto.available_from) : null,
@@ -94,6 +96,12 @@ export class AssessmentsService {
       is_published: dto.is_published,
       questions: sanitizedQuestions
     });
+
+    if (dto.unit_package_id) {
+      await UnitPackageModel.findByIdAndUpdate(dto.unit_package_id, {
+        $inc: { quizzes_count: 1 }
+      });
+    }
 
     if (dto.is_published) {
       publicCmsCache.clear();
@@ -120,16 +128,18 @@ export class AssessmentsService {
       // Scenario A: Zero submissions -> Full unrestricted edits
       if (dto.title_ar !== undefined) assessment.title_ar = dto.title_ar;
       if (dto.title_en !== undefined) assessment.title_en = dto.title_en;
-      if (dto.curriculum !== undefined) assessment.curriculum = dto.curriculum;
-      if (dto.grade_level !== undefined) assessment.grade_level = dto.grade_level;
-      if (dto.academic_term !== undefined) assessment.academic_term = dto.academic_term;
-      if (dto.assessment_type !== undefined) assessment.assessment_type = dto.assessment_type;
+      if (dto.curriculum !== undefined) assessment.curriculum = dto.curriculum as any;
+      if (dto.grade_level !== undefined) assessment.grade_level = dto.grade_level as any;
+      if (dto.academic_term !== undefined) assessment.academic_term = dto.academic_term as any;
+      if (dto.assessment_type !== undefined) assessment.assessment_type = dto.assessment_type as any;
       if (dto.time_limit_minutes !== undefined) assessment.time_limit_minutes = dto.time_limit_minutes;
+      if ((dto as any).pass_percentage !== undefined) assessment.pass_percentage = (dto as any).pass_percentage;
       if (dto.min_expected_solve_sec !== undefined) assessment.min_expected_solve_sec = dto.min_expected_solve_sec;
       if (dto.max_attempts !== undefined) assessment.max_attempts = dto.max_attempts;
       if (dto.available_from !== undefined) assessment.available_from = dto.available_from ? new Date(dto.available_from) : null;
       if (dto.available_until !== undefined) assessment.available_until = dto.available_until ? new Date(dto.available_until) : null;
-      if (dto.graph_calculator !== undefined) assessment.graph_calculator = dto.graph_calculator;
+      if (dto.graph_calculator !== undefined) assessment.graph_calculator = dto.graph_calculator as any;
+      if ((dto as any).is_placement_test !== undefined) assessment.is_placement_test = (dto as any).is_placement_test;
       if (dto.xp_reward !== undefined) assessment.xp_reward = dto.xp_reward;
       if (dto.is_published !== undefined) assessment.is_published = dto.is_published;
 
@@ -202,8 +212,11 @@ export class AssessmentsService {
     if (dto.title_ar !== undefined) assessment.title_ar = dto.title_ar;
     if (dto.title_en !== undefined) assessment.title_en = dto.title_en;
     if (dto.time_limit_minutes !== undefined) assessment.time_limit_minutes = dto.time_limit_minutes;
+    if ((dto as any).pass_percentage !== undefined) assessment.pass_percentage = (dto as any).pass_percentage;
+    if (dto.max_attempts !== undefined) assessment.max_attempts = dto.max_attempts;
     if (dto.available_from !== undefined) assessment.available_from = dto.available_from ? new Date(dto.available_from) : null;
     if (dto.available_until !== undefined) assessment.available_until = dto.available_until ? new Date(dto.available_until) : null;
+    if (dto.graph_calculator !== undefined) assessment.graph_calculator = dto.graph_calculator as any;
     if (dto.is_published !== undefined) assessment.is_published = dto.is_published;
 
     await assessment.save();
@@ -306,6 +319,18 @@ export class AssessmentsService {
       throw new AppError('This assessment is not currently available', 404, ERROR_CODES.ASSESSMENT_NOT_FOUND_404);
     }
 
+    // Strict Grade-Level Isolation: Student can ONLY access and start exams for their exact grade_level
+    if (userRole === ROLES.STUDENT) {
+      const student = await UserModel.findById(studentId).select('grade_level curriculum');
+      if (student && student.grade_level && assessment.grade_level && assessment.grade_level !== student.grade_level) {
+        throw new AppError(
+          'عذراً، هذا الاختبار مخصص لصف دراسي آخر فقط ولا يمكنك الوصول إليه.',
+          403,
+          ERROR_CODES.FORBIDDEN_403
+        );
+      }
+    }
+
     // Availability dates check
     const now = new Date();
     if (assessment.available_from && now < assessment.available_from) {
@@ -334,47 +359,65 @@ export class AssessmentsService {
       }
     }
 
-    // Check maximum attempts
-    const completedAttempts = await SubmissionModel.countDocuments({
+    // Check if an IN_PROGRESS submission already exists for this student & assessment
+    let submission = await SubmissionModel.findOne({
       assessment_id: assessment._id,
       student_id: new Types.ObjectId(studentId),
-      sync_queue_status: 'SYNCED_ONLINE'
+      sync_queue_status: 'IN_PROGRESS'
     });
 
-    if (completedAttempts >= assessment.max_attempts && userRole !== ROLES.SUPER_ADMIN) {
-      throw new AppError(
-        `Maximum attempts exceeded (${assessment.max_attempts} attempts allowed)`,
-        400,
-        ERROR_CODES.MAX_ATTEMPTS_EXCEEDED_400
-      );
-    }
-
-    // Create an IN_PROGRESS submission record with UUIDv4 idempotency key
-    const idempotencyKey = crypto.randomUUID();
     const serverStartedAt = new Date();
 
-    const submission = await SubmissionModel.create({
-      idempotency_key: idempotencyKey,
-      assessment_id: assessment._id,
-      student_id: new Types.ObjectId(studentId),
-      unit_package_id: assessment.unit_package_id ?? new Types.ObjectId(),
-      attempt_number: completedAttempts + 1,
-      is_offline_cached: false,
-      sync_queue_status: 'IN_PROGRESS',
-      offline_disconnect_count: 0,
-      server_started_at: serverStartedAt,
-      client_started_at: clientStartedAt ? new Date(clientStartedAt) : serverStartedAt,
-      elapsed_time_sec: 0,
-      is_suspicious_fast_solve: false,
-      clock_tamper_detected: false,
-      mcq_answers: [],
-      uploaded_solution_imgs: [],
-      result_visibility: 'HIDDEN_PENDING_TEACHER',
-      mcq_auto_score: 0,
-      essay_manual_score: 0,
-      final_total_score: 0,
-      custom_mistake_cases: []
-    });
+    if (!submission) {
+      // Check maximum attempts
+      const completedAttempts = await SubmissionModel.countDocuments({
+        assessment_id: assessment._id,
+        student_id: new Types.ObjectId(studentId),
+        sync_queue_status: 'SYNCED_ONLINE'
+      });
+
+      if (completedAttempts >= assessment.max_attempts && userRole !== ROLES.SUPER_ADMIN) {
+        throw new AppError(
+          `Maximum attempts exceeded (${assessment.max_attempts} attempts allowed)`,
+          400,
+          ERROR_CODES.MAX_ATTEMPTS_EXCEEDED_400
+        );
+      }
+
+      // Find the highest existing attempt number to prevent unique compound index collision
+      const lastAttempt = await SubmissionModel.findOne({
+        assessment_id: assessment._id,
+        student_id: new Types.ObjectId(studentId)
+      }).sort({ attempt_number: -1 }).lean();
+
+      const nextAttemptNumber = lastAttempt ? lastAttempt.attempt_number + 1 : 1;
+
+      // Create an IN_PROGRESS submission record with UUIDv4 idempotency key
+      const idempotencyKey = crypto.randomUUID();
+
+      submission = await SubmissionModel.create({
+        idempotency_key: idempotencyKey,
+        assessment_id: assessment._id,
+        student_id: new Types.ObjectId(studentId),
+        unit_package_id: assessment.unit_package_id ?? new Types.ObjectId(),
+        attempt_number: nextAttemptNumber,
+        is_offline_cached: false,
+        sync_queue_status: 'IN_PROGRESS',
+        offline_disconnect_count: 0,
+        server_started_at: serverStartedAt,
+        client_started_at: clientStartedAt ? new Date(clientStartedAt) : serverStartedAt,
+        elapsed_time_sec: 0,
+        is_suspicious_fast_solve: false,
+        clock_tamper_detected: false,
+        mcq_answers: [],
+        uploaded_solution_imgs: [],
+        result_visibility: 'HIDDEN_PENDING_TEACHER',
+        mcq_auto_score: 0,
+        essay_manual_score: 0,
+        final_total_score: 0,
+        custom_mistake_cases: []
+      });
+    }
 
     // Zero Answer Leakage Projection
     const sanitizedAssessment = await AssessmentModel.findById(assessmentId)
@@ -385,7 +428,7 @@ export class AssessmentsService {
       assessment: (sanitizedAssessment as unknown) as Partial<IAssessmentDocument>,
       idempotencyKey: submission.idempotency_key,
       attemptNumber: submission.attempt_number,
-      serverStartedAt
+      serverStartedAt: submission.server_started_at || serverStartedAt
     };
   }
 
@@ -436,6 +479,14 @@ export class AssessmentsService {
       idempotency_key: dto.idempotency_key,
       student_id: new Types.ObjectId(studentId)
     });
+
+    if (!submission) {
+      submission = await SubmissionModel.findOne({
+        student_id: new Types.ObjectId(studentId),
+        assessment_id: new Types.ObjectId(assessmentId),
+        sync_queue_status: 'IN_PROGRESS'
+      }).sort({ attempt_number: -1 });
+    }
 
     if (submission && submission.sync_queue_status === 'SYNCED_ONLINE') {
       // Idempotent terminal state: return existing results without double-grading or double-XP
@@ -553,17 +604,25 @@ export class AssessmentsService {
         size_kb: img.size_kb,
         rotation_deg: img.rotation_deg ?? 0
       }));
+      submission.idempotency_key = dto.idempotency_key || submission.idempotency_key;
       submission.result_visibility = resultVisibility;
       submission.mcq_auto_score = mcqAutoScore;
       submission.final_total_score = finalTotalScore;
       await submission.save();
     } else {
+      const lastAttempt = await SubmissionModel.findOne({
+        student_id: new Types.ObjectId(studentId),
+        assessment_id: new Types.ObjectId(assessmentId)
+      }).sort({ attempt_number: -1 });
+
+      const nextAttemptNumber = lastAttempt ? lastAttempt.attempt_number + 1 : 1;
+
       submission = await SubmissionModel.create({
         idempotency_key: dto.idempotency_key,
         assessment_id: new Types.ObjectId(assessmentId),
         student_id: new Types.ObjectId(studentId),
         unit_package_id: new Types.ObjectId(),
-        attempt_number: 1,
+        attempt_number: nextAttemptNumber,
         is_offline_cached: dto.is_offline_cached,
         sync_queue_status: 'SYNCED_ONLINE',
         reconnect_sync_at: dto.is_offline_cached ? new Date() : null,
@@ -601,4 +660,116 @@ export class AssessmentsService {
       xpAwarded
     };
   }
+
+  /**
+   * Deletes an assessment and decrements quizzes_count on parent unit package
+   */
+  async deleteAssessment(assessmentId: string): Promise<void> {
+    const assessment = await AssessmentModel.findByIdAndDelete(assessmentId);
+    if (!assessment) {
+      throw new AppError('Assessment not found', 404, ERROR_CODES.ASSESSMENT_NOT_FOUND_404);
+    }
+
+    if (assessment.unit_package_id) {
+      await UnitPackageModel.findByIdAndUpdate(assessment.unit_package_id, {
+        $inc: { quizzes_count: -1 }
+      });
+    }
+
+    assessmentAnswerKeyCache.delete(assessmentId);
+    publicCmsCache.clear();
+  }
+
+  /**
+   * Lists assessments with optional filters and strict grade-level isolation for students
+   */
+  async getAssessments(query: {
+    unitPackageId?: string;
+    curriculum?: string;
+    gradeLevel?: string;
+    academicTerm?: string;
+    isPublished?: boolean;
+    studentId?: string;
+  }, isSuperAdmin = false): Promise<Partial<IAssessmentDocument>[]> {
+    const filter: Record<string, any> = {};
+
+    if (query.studentId && !isSuperAdmin) {
+      if (Types.ObjectId.isValid(query.studentId)) {
+        const student = await UserModel.findById(query.studentId).select('grade_level curriculum');
+        if (student && student.grade_level) {
+          // Force the student's grade level and curriculum so they can NEVER see other grades' quizzes
+          filter.grade_level = student.grade_level;
+          if (student.curriculum) {
+            filter.curriculum = student.curriculum;
+          }
+        }
+      }
+    } else {
+      if (query.gradeLevel) filter.grade_level = query.gradeLevel;
+      if (query.curriculum) filter.curriculum = query.curriculum;
+    }
+
+    if (query.unitPackageId && Types.ObjectId.isValid(query.unitPackageId)) {
+      filter.unit_package_id = new Types.ObjectId(query.unitPackageId);
+    }
+    if (query.academicTerm) {
+      filter.$or = [
+        { academic_term: query.academicTerm },
+        { academic_term: { $exists: false } },
+        { academic_term: null },
+        { academic_term: 'ALL_TERMS' }
+      ];
+    }
+    if (!isSuperAdmin) filter.is_published = true;
+
+    const queryBuilder = AssessmentModel.find(filter).sort({ createdAt: -1 });
+
+    if (!isSuperAdmin) {
+      queryBuilder.select('-questions.correct_option_index -questions.model_answer_text -questions.youtube_solution_url');
+      return (await queryBuilder.lean()) as any;
+    }
+
+    const assessmentDocs = await queryBuilder.lean();
+    if (assessmentDocs.length === 0) return [];
+
+    const assessmentIds = assessmentDocs.map((a: any) => a._id);
+    const counts = await SubmissionModel.aggregate([
+      { $match: { assessment_id: { $in: assessmentIds } } },
+      { $group: { _id: '$assessment_id', count: { $sum: 1 } } }
+    ]);
+    const countMap = new Map(counts.map((c: any) => [c._id.toString(), c.count]));
+
+    return assessmentDocs.map((a: any) => ({
+      ...a,
+      submissions_count: countMap.get(a._id.toString()) || 0
+    })) as any;
+  }
+
+  /**
+   * Fetches single assessment by ID with answer key protection and grade isolation
+   */
+  async getAssessmentById(id: string, isSuperAdmin = false, studentId?: string): Promise<any> {
+    const queryBuilder = AssessmentModel.findById(id);
+
+    if (isSuperAdmin) {
+      queryBuilder.select('+questions.correct_option_index');
+    } else {
+      queryBuilder.select('-questions.correct_option_index -questions.model_answer_text -questions.youtube_solution_url');
+    }
+
+    const assessment = await queryBuilder.lean();
+    if (!assessment) {
+      throw new AppError('Assessment not found', 404, ERROR_CODES.ASSESSMENT_NOT_FOUND_404);
+    }
+
+    if (studentId && !isSuperAdmin) {
+      const student = await UserModel.findById(studentId).select('grade_level curriculum');
+      if (student && student.grade_level && assessment.grade_level && assessment.grade_level !== student.grade_level) {
+        throw new AppError('عذراً، هذا الاختبار مخصص لصف دراسي آخر فقط ولا يمكنك الوصول إليه.', 403, ERROR_CODES.FORBIDDEN_403);
+      }
+    }
+
+    return assessment as any;
+  }
 }
+

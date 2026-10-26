@@ -28,6 +28,14 @@ export const errorHandler: ErrorRequestHandler = (
     message = err.message;
     details = err.details;
   }
+  // 1.1 Zod Validation Errors
+  else if (err.name === 'ZodError' || ('issues' in err && Array.isArray((err as any).issues))) {
+    statusCode = 400;
+    errorCode = ERROR_CODES.VALIDATION_ERROR_400;
+    const firstIssue = (err as any).issues?.[0];
+    message = firstIssue?.message || 'Validation failed for request data';
+    details = (err as any).issues;
+  }
   // 2. Express JSON Parsing Syntax Error (Malformed Body)
   else if (err instanceof SyntaxError && 'status' in err && (err as { status?: number }).status === 400) {
     statusCode = 400;

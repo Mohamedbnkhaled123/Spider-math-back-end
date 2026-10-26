@@ -43,9 +43,10 @@ export function validateRequest(schemas: IRequestValidationSchema) {
           rule: err.code
         }));
 
+        const firstMsg = formattedErrors[0]?.message;
         next(
           new AppError(
-            'Request validation failed',
+            firstMsg || 'Request validation failed',
             400,
             ERROR_CODES.VALIDATION_ERROR_400,
             formattedErrors

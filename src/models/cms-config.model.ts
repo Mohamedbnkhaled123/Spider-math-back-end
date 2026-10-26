@@ -2,7 +2,6 @@ import { Schema, model, Document } from 'mongoose';
 import {
   CURRICULUMS,
   ALL_GRADE_LEVELS,
-  ACADEMIC_TERMS,
   CurriculumType,
   GradeLevelType,
   AcademicTermType
@@ -26,8 +25,10 @@ export interface IScheduleItem {
   grade_level: GradeLevelType;
   academic_term: AcademicTermType;
   days_ar: string;
-  days_en: string;
+  days_en?: string;
+  dayOfWeek?: string;
   time_slot: string;
+  lecture_subject?: string;
   is_active: boolean;
 }
 
@@ -56,14 +57,35 @@ export interface IAnalyticsSnapshot {
   last_computed_at: Date;
 }
 
+export interface IGradeItem {
+  code: string;
+  titleAr: string;
+  titleEn?: string;
+}
+
+export interface ICurriculumTrackItem {
+  code: CurriculumType;
+  nameAr: string;
+  grades: IGradeItem[];
+}
+
 export interface ICmsConfig {
   singleton_key: string; // Strictly 'MAIN_SITE_CONFIG'
+  hero_headline_ar: string;
+  hero_headline_en?: string;
+  hero_subheadline_ar: string;
+  hero_subheadline_en?: string;
+  announcement_banner_text: string;
+  is_announcement_active: boolean;
+  active_academic_year: string;
   teacher_profile: ITeacherProfile;
   schedules_table: IScheduleItem[];
   testimonials_items: ITestimonialItem[];
   contact_channels: IContactChannels;
   assessment_batch_trackers: Map<string, number>;
   analytics_snapshot: IAnalyticsSnapshot;
+  active_grades: string[];
+  curricula_tracks?: ICurriculumTrackItem[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -89,18 +111,18 @@ const ScheduleItemSchema = new Schema<IScheduleItem>(
     },
     grade_level: {
       type: String,
-      enum: ALL_GRADE_LEVELS,
       required: true
     },
     academic_term: {
       type: String,
-      enum: ACADEMIC_TERMS,
       required: true,
       default: 'TERM_1'
     },
-    days_ar: { type: String, required: true, trim: true },
-    days_en: { type: String, required: true, trim: true },
+    days_ar: { type: String, default: 'الأحد والثلاثاء', trim: true },
+    days_en: { type: String, default: 'Sun & Tue', trim: true },
+    dayOfWeek: { type: String, trim: true },
     time_slot: { type: String, required: true, trim: true },
+    lecture_subject: { type: String, default: 'رياضيات متقدمة', trim: true },
     is_active: { type: Boolean, default: true }
   },
   { _id: true }
@@ -142,6 +164,40 @@ const CmsConfigSchema = new Schema<ICmsConfigDocument>(
       required: true,
       trim: true
     },
+    hero_headline_ar: {
+      type: String,
+      default: 'تعلم الرياضيات بأعلى المعايير الهندسية مع المهندسة هبة عبد الوهاب',
+      trim: true
+    },
+    hero_headline_en: {
+      type: String,
+      default: 'Master Mathematics with Engineering Standards — Eng. Heba Abdel-Wahab',
+      trim: true
+    },
+    hero_subheadline_ar: {
+      type: String,
+      default: 'منصة تفاعلية مخصصة للثانوية العامة والأنظمة الدولية بنظام حماية متطور واستراتيجيات ديسموس البيانية.',
+      trim: true
+    },
+    hero_subheadline_en: {
+      type: String,
+      default: 'Interactive learning for Egyptian, Gulf, International, and American Curriculums with Desmos graphing strategies.',
+      trim: true
+    },
+    announcement_banner_text: {
+      type: String,
+      default: '✦ خصم 20% لفترة محدودة على اشتراك باقات الترم الأول بمناسبة تدشين المنصة ✦',
+      trim: true
+    },
+    is_announcement_active: {
+      type: Boolean,
+      default: true
+    },
+    active_academic_year: {
+      type: String,
+      default: '2026 / 2027',
+      trim: true
+    },
     teacher_profile: {
       bio_ar: { type: String, default: '', trim: true },
       bio_en: { type: String, default: '', trim: true },
@@ -173,6 +229,27 @@ const CmsConfigSchema = new Schema<ICmsConfigDocument>(
       total_leads_count: { type: Number, default: 0, min: 0 },
       avg_watch_completion_pct: { type: Number, default: 0, min: 0, max: 100 },
       last_computed_at: { type: Date, default: Date.now }
+    },
+    active_grades: {
+      type: [String],
+      default: ['SEC_3']
+    },
+    curricula_tracks: {
+      type: [
+        {
+          code: { type: String, required: true },
+          nameAr: { type: String, required: true },
+          grades: [
+            {
+              code: { type: String, required: true },
+              titleAr: { type: String, required: true },
+              titleEn: { type: String, default: '' },
+              nameAr: { type: String }
+            }
+          ]
+        }
+      ],
+      default: []
     }
   },
   {

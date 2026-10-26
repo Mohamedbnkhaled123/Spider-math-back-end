@@ -11,6 +11,8 @@ import {
   parentActivateLoginDtoSchema,
   parentLinkChildDtoSchema
 } from './dto/parent-auth.dto';
+import { directRegisterStudentDtoSchema } from './dto/direct-register.dto';
+import { updateProfileDtoSchema } from './dto/update-profile.dto';
 import { deviceDecisionDtoSchema } from './dto/device-decision.dto';
 
 // Router for /api/v1/auth
@@ -31,6 +33,28 @@ authRouter.post(
   '/google-login',
   validateBody(googleLoginDtoSchema),
   authController.googleLogin
+);
+
+/**
+ * POST /api/v1/auth/register-student-direct
+ * Direct registration endpoint: registers student without requiring Google.
+ */
+authRouter.post(
+  '/register-student-direct',
+  validateBody(directRegisterStudentDtoSchema),
+  authController.registerStudentDirect
+);
+
+/**
+ * PATCH /api/v1/auth/profile
+ * Allows authenticated students to update their personal information and avatar.
+ */
+authRouter.patch(
+  '/profile',
+  authenticateJwt,
+  requireRoles(ROLES.STUDENT),
+  validateBody(updateProfileDtoSchema),
+  authController.updateProfile
 );
 
 /**
@@ -77,6 +101,15 @@ authRouter.post(
   authController.parentLinkAdditionalChild
 );
 
+/**
+ * POST /api/v1/auth/admin-login
+ * Signs and issues real HS512 JWT token for official Super Admin.
+ */
+authRouter.post(
+  '/admin-login',
+  authController.adminLogin
+);
+
 // =============================================================================
 // Super Admin Device Management Endpoints (/api/v1/admin/device-requests)
 // =============================================================================
@@ -102,6 +135,26 @@ adminDeviceRouter.post(
   requireRoles(ROLES.SUPER_ADMIN),
   validateBody(deviceDecisionDtoSchema),
   authController.decideDeviceRequest
+);
+
+adminDeviceRouter.patch(
+  '/:studentId/approve',
+  authenticateJwt,
+  requireRoles(ROLES.SUPER_ADMIN),
+  (req, res, next) => {
+    req.body = { action: 'APPROVE' };
+    authController.decideDeviceRequest(req, res, next);
+  }
+);
+
+adminDeviceRouter.patch(
+  '/:studentId/reject',
+  authenticateJwt,
+  requireRoles(ROLES.SUPER_ADMIN),
+  (req, res, next) => {
+    req.body = { action: 'REJECT' };
+    authController.decideDeviceRequest(req, res, next);
+  }
 );
 
 // Router for /api/v1/admin/users

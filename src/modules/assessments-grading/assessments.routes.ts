@@ -44,8 +44,29 @@ assessmentsRouter.post(
   assessmentsController.syncSubmission
 );
 
+// List assessments with filters
+assessmentsRouter.get(
+  '/',
+  authenticateJwt,
+  assessmentsController.getAssessments
+);
+
+// Get single assessment details
+assessmentsRouter.get(
+  '/:id',
+  authenticateJwt,
+  assessmentsController.getAssessmentById
+);
+
 // 2. Admin Assessments Router (/api/v1/admin/assessments)
 export const adminAssessmentsRouter = Router();
+
+adminAssessmentsRouter.get(
+  '/',
+  authenticateJwt,
+  authorizeRoles(ROLES.SUPER_ADMIN),
+  assessmentsController.getAssessments
+);
 
 adminAssessmentsRouter.post(
   '/',
@@ -61,8 +82,22 @@ adminAssessmentsRouter.patch(
   assessmentsController.updateAssessment
 );
 
+adminAssessmentsRouter.delete(
+  '/:id',
+  authenticateJwt,
+  authorizeRoles(ROLES.SUPER_ADMIN),
+  assessmentsController.deleteAssessment
+);
+
 // 3. Admin Submissions Router (/api/v1/admin/submissions)
 export const adminSubmissionsRouter = Router();
+
+adminSubmissionsRouter.get(
+  '/',
+  authenticateJwt,
+  authorizeRoles(ROLES.SUPER_ADMIN),
+  gradingController.getAllSubmissions
+);
 
 adminSubmissionsRouter.get(
   '/pending-review',

@@ -147,9 +147,9 @@ export class ParentService {
     // 4. Graded Exams and Homework Submissions
     const submissions = await SubmissionModel.find({
       student_id: new Types.ObjectId(studentId),
-      result_visibility: 'PUBLISHED_TO_STUDENT_AND_PARENT'
+      sync_queue_status: { $in: ['SYNCED_ONLINE', 'IN_PROGRESS'] }
     })
-      .populate('assessment_id', 'title_ar title_en assessment_type total_points xp_reward')
+      .populate('assessment_id', 'title_ar title_en assessment_type total_points xp_reward questions')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -157,6 +157,9 @@ export class ParentService {
       const assessment = sub.assessment_id;
       const totalPoints = assessment ? assessment.total_points : 0;
       const percentage = totalPoints > 0 ? Math.round((sub.final_total_score / totalPoints) * 100) : 0;
+      const isPendingReview = sub.result_visibility === 'HIDDEN_PENDING_TEACHER';
+      const isInProgress = sub.sync_queue_status === 'IN_PROGRESS';
+      const status = isInProgress ? 'IN_PROGRESS' : (isPendingReview ? 'PENDING_REVIEW' : 'PUBLISHED');
 
       return {
         submissionId: sub._id.toString(),
@@ -169,6 +172,9 @@ export class ParentService {
         essayManualScore: sub.essay_manual_score,
         finalTotalScore: sub.final_total_score,
         percentage,
+        status,
+        isPendingReview,
+        isInProgress,
         teacherFeedbackNotes: sub.teacher_feedback_notes ?? null,
         // Clickable YouTube Solution URL feedback for teacher mistakes
         customMistakeCases: (sub.custom_mistake_cases ?? []).map((m: any) => ({
@@ -200,16 +206,17 @@ export class ParentService {
         unitTitleAr: s.unit_package_id ? s.unit_package_id.title_ar : '',
         unitTitleEn: s.unit_package_id ? s.unit_package_id.title_en : '',
         unitCode: s.unit_package_id ? s.unit_package_id.unit_code : '',
-        activatedAt: s.activated_at,
-        expiresAt: s.expires_at
+        expiresAt: s.expires_at,
+        daysRemaining: Math.max(0, Math.ceil((new Date(s.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
       })),
-      videoAttendanceMetrics: {
+      attendanceMetrics: {
         totalLecturesWatched,
         completedLecturesCount,
-        totalWatchDurationHours: +(totalWatchDurationSec / 3600).toFixed(1),
-        totalWatchDurationMinutes: Math.round(totalWatchDurationSec / 60)
+        totalWatchDurationSec,
+        overallWatchPercentage: totalLecturesWatched > 0 ? Math.round((completedLecturesCount / totalLecturesWatched) * 100) : 0
       },
-      gradedAssessments
+      gradedAssessments,
+      submissions: gradedAssessments
     };
   }
 }

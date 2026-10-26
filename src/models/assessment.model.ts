@@ -50,6 +50,7 @@ export interface IAssessment {
   title_en: string;
   assessment_type: AssessmentType;
   time_limit_minutes: number;
+  pass_percentage?: number;
   min_expected_solve_sec: number; // Anti-cheat baseline timing
   max_attempts: number;
   available_from?: Date | null;
@@ -77,7 +78,8 @@ const QuestionItemSchema = new Schema<IQuestionItem>(
     },
     question_text: {
       type: String,
-      required: true,
+      required: false,
+      default: '',
       trim: true
     },
     question_image_url: {
@@ -122,9 +124,7 @@ const AssessmentSchema = new Schema<IAssessmentDocument>(
     unit_package_id: {
       type: Schema.Types.ObjectId,
       ref: 'UnitPackage',
-      required: function (this: IAssessmentDocument) {
-        return !this.is_placement_test;
-      },
+      required: false,
       default: null,
       index: true
     },
@@ -183,6 +183,12 @@ const AssessmentSchema = new Schema<IAssessmentDocument>(
       default: 30,
       min: 1
     },
+    pass_percentage: {
+      type: Number,
+      default: 60,
+      min: 0,
+      max: 100
+    },
     min_expected_solve_sec: {
       type: Number,
       default: 120, // Anti-cheat solve threshold
@@ -214,7 +220,8 @@ const AssessmentSchema = new Schema<IAssessmentDocument>(
     total_points: {
       type: Number,
       required: true,
-      min: 1
+      default: 0,
+      min: 0
     },
     xp_reward: {
       type: Number,

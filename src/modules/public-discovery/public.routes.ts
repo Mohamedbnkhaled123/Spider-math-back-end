@@ -4,8 +4,22 @@ import { validateRequest, validateBody } from '../../middlewares/validate.middle
 import { placementQueryDtoSchema } from '../leads-placement/dto/placement-query.dto';
 import { submitPlacementDtoSchema } from '../leads-placement/dto/submit-placement.dto';
 import { unlockPlacementDtoSchema } from '../leads-placement/dto/unlock-placement.dto';
+import { cmsService } from '../admin-cms/services/cms.service';
 
 export const publicRouter = Router();
+
+/**
+ * GET /api/v1/public/active-grades
+ * Returns array of active grade level codes configured by Eng. Heba
+ */
+publicRouter.get('/active-grades', async (_req, res, next) => {
+  try {
+    const data = await cmsService.getActiveGrades();
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+});
 
 /**
  * GET /api/v1/public/curriculum-tree

@@ -6,6 +6,39 @@ export class GradingController {
   constructor(private gradingService: GradingService) {}
 
   /**
+   * Retrieves all quiz submissions with filters and analytics
+   * GET /api/v1/admin/submissions
+   */
+  getAllSubmissions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const assessmentId = req.query.assessmentId as string | undefined;
+      const curriculum = req.query.curriculum as string | undefined;
+      const gradeLevel = req.query.gradeLevel as string | undefined;
+      const status = req.query.status as string | undefined;
+      const search = req.query.search as string | undefined;
+      const page = req.query.page ? parseInt(req.query.page as string, 10) : undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+
+      const result = await this.gradingService.getAllSubmissions({
+        assessmentId,
+        curriculum,
+        gradeLevel,
+        status,
+        search,
+        page,
+        limit
+      });
+
+      res.status(200).json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
    * Retrieves submissions pending manual grading review
    * GET /api/v1/admin/submissions/pending-review
    */

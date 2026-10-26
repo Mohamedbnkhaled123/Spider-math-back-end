@@ -4,6 +4,7 @@ import { LectureMaterialModel } from '../../../models/lecture-material.model';
 import { AssessmentModel } from '../../../models/assessment.model';
 import { SubscriptionModel } from '../../../models/subscription.model';
 import { WatchProgressModel } from '../../../models/watch-progress.model';
+import { UserModel } from '../../../models/user.model';
 import { publicCmsCache } from '../../../config/cache.config';
 import { AppError } from '../../../common/utils/app-error.util';
 import { ERROR_CODES } from '../../../common/constants/error-codes.constant';
@@ -18,11 +19,20 @@ export class UnitsService {
   public async getUnitsCatalog(query: UnitsQueryDto, studentId?: string) {
     const filter: Record<string, unknown> = { is_published: true };
 
-    if (query.curriculum) {
-      filter.curriculum = query.curriculum;
-    }
-    if (query.gradeLevel) {
-      filter.grade_level = query.gradeLevel;
+    if (studentId && Types.ObjectId.isValid(studentId)) {
+      const student = await UserModel.findById(studentId).select('grade_level curriculum');
+      if (student && student.grade_level) {
+        filter.grade_level = student.grade_level;
+        if (student.curriculum) {
+          filter.curriculum = student.curriculum;
+        }
+      } else {
+        if (query.curriculum) filter.curriculum = query.curriculum;
+        if (query.gradeLevel) filter.grade_level = query.gradeLevel;
+      }
+    } else {
+      if (query.curriculum) filter.curriculum = query.curriculum;
+      if (query.gradeLevel) filter.grade_level = query.gradeLevel;
     }
     if (query.term) {
       filter.academic_term = query.term;
@@ -71,6 +81,13 @@ export class UnitsService {
     const unit = await UnitPackageModel.findById(unitId).lean();
     if (!unit) {
       throw new AppError('Unit package not found', 404, ERROR_CODES.RESOURCE_NOT_FOUND_404);
+    }
+
+    if (!isSuperAdmin && studentId && Types.ObjectId.isValid(studentId)) {
+      const student = await UserModel.findById(studentId).select('grade_level curriculum');
+      if (student && student.grade_level && unit.grade_level && unit.grade_level !== student.grade_level) {
+        throw new AppError('عذراً، هذه الوحدة التعليمية مخصصة لصف دراسي آخر فقط.', 403, ERROR_CODES.FORBIDDEN_403);
+      }
     }
 
     // Check subscription status

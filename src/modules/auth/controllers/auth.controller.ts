@@ -47,6 +47,31 @@ export class AuthController {
   }
 
   /**
+   * POST /api/v1/auth/register-student-direct
+   */
+  public async registerStudentDirect(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await authService.registerStudentDirect(req.body, req.ip);
+      res.status(201).json(createSuccessResponse(result));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/v1/auth/profile
+   */
+  public async updateProfile(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const studentId = req.user!.sub;
+      const result = await authService.updateStudentProfile(studentId, req.body);
+      res.status(200).json(createSuccessResponse(result));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * POST /api/v1/auth/student-code-login
    */
   public async studentCodeLogin(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -118,6 +143,18 @@ export class AuthController {
     try {
       const students = await authService.getAllStudents();
       res.status(200).json(createSuccessResponse(students, { totalCount: students.length }));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/auth/admin-login
+   */
+  public async adminLogin(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await authService.adminLogin();
+      res.status(200).json(createSuccessResponse(result));
     } catch (error) {
       next(error);
     }

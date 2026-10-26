@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { cmsController } from './controllers/cms.controller';
+import { cmsService } from './services/cms.service';
 import { authenticateJwt } from '../../middlewares/auth.middleware';
 import { requireRoles } from '../../middlewares/role.middleware';
 import { validateBody } from '../../middlewares/validate.middleware';
@@ -22,3 +23,18 @@ cmsRouter.get('/', cmsController.getCmsConfig);
  * Update CMS config and invalidate cache
  */
 cmsRouter.put('/', validateBody(updateCmsDtoSchema), cmsController.updateCmsConfig);
+
+/**
+ * PUT /api/v1/admin/cms-config/active-grades
+ * Update active grades list
+ */
+cmsRouter.put('/active-grades', async (req, res, next) => {
+  try {
+    const grades = req.body.activeGrades || req.body.active_grades || [];
+    const curriculaTracks = req.body.curriculaTracks || req.body.curricula_tracks;
+    const result = await cmsService.updateActiveGrades(grades, curriculaTracks);
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});

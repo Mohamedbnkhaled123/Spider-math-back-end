@@ -6,6 +6,7 @@ import { updateAssessmentDtoSchema } from '../dto/assessment-update.dto';
 import { submissionSyncDtoSchema } from '../dto/submission-sync.dto';
 import { AppError } from '../../../common/utils/app-error.util';
 import { ERROR_CODES } from '../../../common/constants/error-codes.constant';
+import { ROLES } from '../../../common/constants/roles.constant';
 
 export class AssessmentsController {
   constructor(private assessmentsService: AssessmentsService) {}
@@ -115,4 +116,69 @@ export class AssessmentsController {
       next(error);
     }
   };
+
+  /**
+   * Deletes an assessment in Admin Studio
+   * DELETE /api/v1/admin/assessments/:id
+   */
+  deleteAssessment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      await this.assessmentsService.deleteAssessment(req.params.id as string);
+      res.status(200).json({
+        success: true,
+        message: 'Assessment deleted successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * Lists assessments with optional filters
+   * GET /api/v1/assessments
+   */
+  getAssessments = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const isSuperAdmin = req.user?.role === ROLES.SUPER_ADMIN;
+      const assessments = await this.assessmentsService.getAssessments(
+        {
+          unitPackageId: (req.query.unitPackageId || req.query.unit_package_id) as string,
+          curriculum: req.query.curriculum as string,
+          gradeLevel: (req.query.gradeLevel || req.query.grade_level) as string,
+          academicTerm: (req.query.academicTerm || req.query.academic_term || req.query.term) as string,
+          isPublished: req.query.isPublished ? req.query.isPublished === 'true' : undefined,
+          studentId: req.user?.sub
+        },
+        isSuperAdmin
+      );
+      res.status(200).json({
+        success: true,
+        data: assessments
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * Gets a single assessment by ID
+   * GET /api/v1/assessments/:id
+   */
+  getAssessmentById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const isSuperAdmin = req.user?.role === ROLES.SUPER_ADMIN;
+      const assessment = await this.assessmentsService.getAssessmentById(
+        req.params.id as string,
+        isSuperAdmin,
+        req.user?.sub
+      );
+      res.status(200).json({
+        success: true,
+        data: assessment
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
+

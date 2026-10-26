@@ -18,7 +18,101 @@ export interface IPendingSubmissionsQuery {
   limit?: number;
 }
 
+export interface IAllSubmissionsQuery {
+  assessmentId?: string;
+  curriculum?: string;
+  gradeLevel?: string;
+  status?: string; // 'ALL' | 'PENDING' | 'PUBLISHED' | 'IN_PROGRESS'
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
 export class GradingService {
+  /**
+   * Lists all submissions with comprehensive filtering (GET /api/v1/admin/submissions).
+   * Supports filtering by assessment, curriculum, grade, status, search, and returns analytics.
+   */
+  async getAllSubmissions(query: IAllSubmissionsQuery) {
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    const filter: Record<string, unknown> = {};
+
+    if (query.assessmentId) {
+      filter.assessment_id = new Types.ObjectId(query.assessmentId);
+    }
+
+    if (query.status === 'PENDING') {
+      filter.result_visibility = 'HIDDEN_PENDING_TEACHER';
+      filter.sync_queue_status = 'SYNCED_ONLINE';
+    } else if (query.status === 'PUBLISHED') {
+      filter.result_visibility = 'PUBLISHED_TO_STUDENT_AND_PARENT';
+      filter.sync_queue_status = 'SYNCED_ONLINE';
+    } else if (query.status === 'IN_PROGRESS') {
+      filter.sync_queue_status = 'IN_PROGRESS';
+    }
+
+    // Filter by student properties (curriculum, gradeLevel, search)
+    const studentFilter: Record<string, unknown> = { role: ROLES.STUDENT };
+    let needsStudentFilter = false;
+
+    if (query.curriculum) {
+      studentFilter.curriculum = query.curriculum;
+      needsStudentFilter = true;
+    }
+    if (query.gradeLevel) {
+      studentFilter.grade_level = query.gradeLevel;
+      needsStudentFilter = true;
+    }
+    if (query.search && query.search.trim()) {
+      const s = query.search.trim();
+      studentFilter.$or = [
+        { full_name: { $regex: s, $options: 'i' } },
+        { student_code: { $regex: s, $options: 'i' } },
+        { phone_number: { $regex: s, $options: 'i' } }
+      ];
+      needsStudentFilter = true;
+    }
+
+    if (needsStudentFilter) {
+      const matchingStudents = await UserModel.find(studentFilter).select('_id').lean();
+      const studentIds = matchingStudents.map((s) => s._id);
+      filter.student_id = { $in: studentIds };
+    }
+
+    const [submissions, total, totalPending, totalPublished, totalInProgress] = await Promise.all([
+      SubmissionModel.find(filter)
+        .populate<{ student_id: IUserDocument }>('student_id', 'full_name student_code phone_number parent_phone curriculum grade_level email')
+        .populate<{ assessment_id: IAssessmentDocument }>('assessment_id', 'title_ar title_en total_points assessment_type questions has_essay_questions xp_reward')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      SubmissionModel.countDocuments(filter),
+      SubmissionModel.countDocuments({ result_visibility: 'HIDDEN_PENDING_TEACHER', sync_queue_status: 'SYNCED_ONLINE' }),
+      SubmissionModel.countDocuments({ result_visibility: 'PUBLISHED_TO_STUDENT_AND_PARENT', sync_queue_status: 'SYNCED_ONLINE' }),
+      SubmissionModel.countDocuments({ sync_queue_status: 'IN_PROGRESS' })
+    ]);
+
+    return {
+      submissions,
+      stats: {
+        totalSubmissions: total,
+        pendingReviewCount: totalPending,
+        publishedCount: totalPublished,
+        inProgressCount: totalInProgress
+      },
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
+    };
+  }
+
   /**
    * Lists submissions pending manual teacher review (GET /api/v1/admin/submissions/pending-review).
    * Populates student demographic identity and assessment questions.

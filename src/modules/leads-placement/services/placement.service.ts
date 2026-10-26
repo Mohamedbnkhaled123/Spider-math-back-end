@@ -58,22 +58,40 @@ export class PlacementService {
 
     return {
       hasTest: true,
-      curriculum: assessment.curriculum,
-      gradeLevel: assessment.grade_level,
-      academicTerm: assessment.academic_term,
-      assessmentId: assessment._id,
+      assessment_id: assessment._id.toString(),
+      assessmentId: assessment._id.toString(),
+      title: assessment.title_ar,
       titleAr: assessment.title_ar,
       titleEn: assessment.title_en,
+      curriculum: assessment.curriculum,
+      grade_level: assessment.grade_level,
+      gradeLevel: assessment.grade_level,
+      academic_term: assessment.academic_term,
+      academicTerm: assessment.academic_term,
+      time_limit_minutes: assessment.time_limit_minutes,
       timeLimitMinutes: assessment.time_limit_minutes,
       graphCalculator: assessment.graph_calculator,
-      questions: assessment.questions.map((q: any) => ({
-        id: q._id.toString(),
+      total_questions: assessment.questions.length,
+      questions: assessment.questions.map((q: any, qIdx: number) => ({
+        id: q._id ? q._id.toString() : `q_${qIdx}`,
+        question_id: q._id ? q._id.toString() : `q_${qIdx}`,
         questionType: q.question_type,
         questionText: q.question_text,
+        question_text: q.question_text,
         questionImageUrl: q.question_image_url || null,
+        question_image_url: q.question_image_url || null,
         questionImageSizeKb: q.question_image_size_kb || null,
-        options: q.options || [],
-        points: q.points
+        has_desmos_calculator: assessment.graph_calculator === 'DESMOS',
+        points: q.points || 5,
+        options: (q.options || []).map((opt: any, optIdx: number) => {
+          if (typeof opt === 'string') {
+            return { option_id: `opt_${optIdx}`, option_text: opt };
+          }
+          return {
+            option_id: opt?.option_id || `opt_${optIdx}`,
+            option_text: opt?.option_text || opt?.text || String(opt)
+          };
+        })
       }))
     };
   }
