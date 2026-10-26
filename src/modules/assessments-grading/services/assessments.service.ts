@@ -95,7 +95,7 @@ export class AssessmentsService {
       has_essay_questions: hasEssayQuestions,
       total_points: totalPoints,
       xp_reward: dto.xp_reward,
-      is_published: dto.is_published,
+      is_published: (dto.is_published ?? true) && sanitizedQuestions.length > 0,
       questions: sanitizedQuestions
     });
 
@@ -125,6 +125,25 @@ export class AssessmentsService {
     }
 
     const submissionsCount = await SubmissionModel.countDocuments({ assessment_id: assessment._id });
+
+    if (dto.questions !== undefined && dto.questions.length === 0) {
+      throw new AppError(
+        'لا يمكن حفظ الكويز بدون إضافة سؤال واحد على الأقل!',
+        400,
+        ERROR_CODES.VALIDATION_ERROR_400
+      );
+    }
+
+    if (dto.is_published === true) {
+      const qCount = dto.questions !== undefined ? dto.questions.length : (assessment.questions?.length || 0);
+      if (qCount === 0) {
+        throw new AppError(
+          'لا يمكن تفعيل ونشر كويز فارغ! يرجى إضافة سؤال واحد على الأقل قبل النشر.',
+          400,
+          ERROR_CODES.VALIDATION_ERROR_400
+        );
+      }
+    }
 
     if (submissionsCount === 0) {
       // Scenario A: Zero submissions -> Full unrestricted edits
@@ -393,10 +412,21 @@ export class AssessmentsService {
       });
 
       if (completedAttempts >= assessment.max_attempts && userRole !== ROLES.SUPER_ADMIN) {
+        const lastCompleted = await SubmissionModel.findOne({
+          assessment_id: assessment._id,
+          student_id: new Types.ObjectId(studentId),
+          sync_queue_status: 'SYNCED_ONLINE'
+        }).sort({ attempt_number: -1, createdAt: -1 }).lean();
+
         throw new AppError(
           `Maximum attempts exceeded (${assessment.max_attempts} attempts allowed)`,
           403,
-          ERROR_CODES.MAX_ATTEMPTS_EXCEEDED
+          ERROR_CODES.MAX_ATTEMPTS_EXCEEDED,
+          {
+            completedAttempts,
+            maxAttempts: assessment.max_attempts,
+            latestSubmissionId: lastCompleted ? lastCompleted._id.toString() : null
+          }
         );
       }
 

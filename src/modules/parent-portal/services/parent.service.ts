@@ -151,7 +151,7 @@ export class ParentService {
     })
       .populate({
         path: 'assessment_id',
-        select: 'title_ar title_en assessment_type total_points xp_reward questions +questions.correct_option_index +questions.youtube_solution_url'
+        select: '+questions.correct_option_index +questions.youtube_solution_url'
       })
       .sort({ createdAt: -1 })
       .lean();
