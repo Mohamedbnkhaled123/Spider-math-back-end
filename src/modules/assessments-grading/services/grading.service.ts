@@ -225,7 +225,7 @@ export class GradingService {
     // Pick first YouTube solution URL if available for notification
     const firstSolutionUrl = sanitizedMistakes.find((m) => m.youtube_solution_url)?.youtube_solution_url ?? null;
 
-    // Dispatch instant notification to Student
+    // Dispatch instant notification to Student with feedback viewer link
     const studentAlert = NotificationFactory.createHomeworkGradedAlert({
       recipientId: student._id as Types.ObjectId,
       recipientRole: ROLES.STUDENT,
@@ -233,7 +233,8 @@ export class GradingService {
       assessmentTitleEn: assessment.title_en,
       score: finalTotalScore,
       totalPoints: assessment.total_points,
-      youtubeSolutionUrl: firstSolutionUrl
+      youtubeSolutionUrl: firstSolutionUrl,
+      submissionId: submission._id
     });
     await NotificationModel.create(studentAlert);
 
@@ -252,7 +253,8 @@ export class GradingService {
           assessmentTitleEn: assessment.title_en,
           score: finalTotalScore,
           totalPoints: assessment.total_points,
-          youtubeSolutionUrl: firstSolutionUrl
+          youtubeSolutionUrl: firstSolutionUrl,
+          submissionId: submission._id
         });
         await NotificationModel.create(parentAlert);
       }

@@ -29,7 +29,8 @@ export const questionItemDtoSchema = z
     points: z.coerce.number().positive().default(1),
     model_answer_text: z.string().trim().optional(),
     explanationAr: z.string().trim().optional(),
-    youtube_solution_url: z.string().trim().nullable().optional()
+    youtube_solution_url: z.string().trim().nullable().optional(),
+    youtubeSolutionUrl: z.string().trim().nullable().optional()
   })
   .passthrough()
   .superRefine((data, ctx) => {
@@ -109,7 +110,7 @@ export const questionItemDtoSchema = z
       correct_option_index: correctIdx,
       points: data.points || 1,
       model_answer_text: modelAns,
-      youtube_solution_url: data.youtube_solution_url || null
+      youtube_solution_url: data.youtube_solution_url || data.youtubeSolutionUrl || null
     };
   });
 
@@ -175,6 +176,10 @@ export const createAssessmentDtoSchema = createAssessmentBaseSchema.transform((d
   const isPublished = data.is_published ?? data.isPublished ?? true;
   const unitId = data.unit_package_id || data.unitPackageId || null;
 
+  const questions = data.questions || [];
+  const totalPoints = questions.reduce((sum, q) => sum + (q.points || 1), 0);
+  const hasEssayQuestions = questions.some((q) => q.question_type === 'ESSAY_PHOTO');
+
   return {
     ...data,
     curriculum,
@@ -189,10 +194,12 @@ export const createAssessmentDtoSchema = createAssessmentBaseSchema.transform((d
     available_from: availableFrom,
     available_until: availableUntil,
     graph_calculator: calc,
+    has_essay_questions: hasEssayQuestions,
+    total_points: totalPoints,
     is_placement_test: isPlacement,
     is_published: isPublished,
     unit_package_id: unitId && /^[0-9a-fA-F]{24}$/.test(unitId) ? unitId : null,
-    questions: data.questions || []
+    questions
   };
 });
 

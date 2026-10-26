@@ -49,7 +49,11 @@ export const updateAssessmentDtoSchema = createAssessmentBaseSchema
       ...(isPublished !== undefined ? { is_published: isPublished } : {}),
       ...(assessmentType ? { assessment_type: assessmentType as any } : {}),
       ...(isPlacement !== undefined ? { is_placement_test: isPlacement } : {}),
-      ...(data.questions ? { questions: data.questions } : {})
+      ...(data.questions ? {
+        questions: data.questions,
+        total_points: data.questions.reduce((sum, q) => sum + (q.points || 1), 0),
+        has_essay_questions: data.questions.some((q) => q.question_type === 'ESSAY_PHOTO')
+      } : {})
     };
   });
 

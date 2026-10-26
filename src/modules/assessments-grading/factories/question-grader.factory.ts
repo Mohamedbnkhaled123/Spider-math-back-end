@@ -32,8 +32,11 @@ export class McqQuestionGrader implements IQuestionGrader {
     if (
       answer !== undefined &&
       answer.selectedOptionIndex !== undefined &&
+      answer.selectedOptionIndex !== null &&
       question.correctOptionIndex !== undefined &&
-      answer.selectedOptionIndex === question.correctOptionIndex
+      question.correctOptionIndex !== null &&
+      !isNaN(Number(answer.selectedOptionIndex)) &&
+      Number(answer.selectedOptionIndex) === Number(question.correctOptionIndex)
     ) {
       return {
         isCorrect: true,

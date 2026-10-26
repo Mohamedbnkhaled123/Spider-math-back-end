@@ -44,6 +44,13 @@ assessmentsRouter.post(
   assessmentsController.syncSubmission
 );
 
+// Get submission feedback and mistake breakdown
+assessmentsRouter.get(
+  '/submissions/:id/feedback',
+  authenticateJwt,
+  assessmentsController.getSubmissionFeedback
+);
+
 // List assessments with filters
 assessmentsRouter.get(
   '/',

@@ -149,7 +149,10 @@ export class ParentService {
       student_id: new Types.ObjectId(studentId),
       sync_queue_status: { $in: ['SYNCED_ONLINE', 'IN_PROGRESS'] }
     })
-      .populate('assessment_id', 'title_ar title_en assessment_type total_points xp_reward questions')
+      .populate({
+        path: 'assessment_id',
+        select: 'title_ar title_en assessment_type total_points xp_reward questions +questions.correct_option_index +questions.youtube_solution_url'
+      })
       .sort({ createdAt: -1 })
       .lean();
 
@@ -159,7 +162,60 @@ export class ParentService {
       const percentage = totalPoints > 0 ? Math.round((sub.final_total_score / totalPoints) * 100) : 0;
       const isPendingReview = sub.result_visibility === 'HIDDEN_PENDING_TEACHER';
       const isInProgress = sub.sync_queue_status === 'IN_PROGRESS';
+      const isPublished = sub.result_visibility === 'PUBLISHED_TO_STUDENT_AND_PARENT';
       const status = isInProgress ? 'IN_PROGRESS' : (isPendingReview ? 'PENDING_REVIEW' : 'PUBLISHED');
+
+      const questions: any[] = assessment?.questions || [];
+      const questionMap = new Map(questions.map((q: any) => [q._id.toString(), q]));
+      const mcqAnswersMap = new Map<string, any>(
+        (sub.mcq_answers || []).map((ans: any) => [ans.question_id.toString(), ans])
+      );
+
+      const combinedMistakes: any[] = [];
+
+      if (isPublished) {
+        // 1. Check all MCQ questions for errors
+        questions.forEach((q: any, idx: number) => {
+          if (q.question_type === 'MCQ') {
+            const studentAns: any = mcqAnswersMap.get(q._id.toString());
+            const isCorrect = studentAns ? studentAns.is_correct : false;
+
+            if (!isCorrect) {
+              const selectedIdx = studentAns ? studentAns.selected_option_index : null;
+              const selectedText = selectedIdx !== null && selectedIdx !== undefined && q.options[selectedIdx]
+                ? q.options[selectedIdx]
+                : 'لم تتم الإجابة';
+              const correctText = q.correct_option_index !== undefined && q.options[q.correct_option_index]
+                ? q.options[q.correct_option_index]
+                : '';
+
+              combinedMistakes.push({
+                questionId: q._id.toString(),
+                questionOrder: idx + 1,
+                questionPromptText: q.question_text || `السؤال رقم ${idx + 1}`,
+                studentAnswerText: selectedText,
+                correctAnswerText: correctText,
+                errorNote: `إجابة الطالب: "${selectedText}" — الإجابة الصحيحة: "${correctText}"`,
+                youtubeSolutionUrl: q.youtube_solution_url || null
+              });
+            }
+          }
+        });
+
+        // 2. Add teacher's custom mistake cases (for essay or specific questions)
+        (sub.custom_mistake_cases ?? []).forEach((m: any, mIdx: number) => {
+          const q = m.question_id ? questionMap.get(m.question_id.toString()) : null;
+          combinedMistakes.push({
+            questionId: m.question_id ? m.question_id.toString() : null,
+            questionOrder: q ? questions.findIndex((x: any) => x._id.toString() === m.question_id.toString()) + 1 : (questions.length + mIdx + 1),
+            questionPromptText: q ? q.question_text : 'ملاحظة تصحيح المعلمة',
+            studentAnswerText: '',
+            correctAnswerText: '',
+            errorNote: m.error_note,
+            youtubeSolutionUrl: m.youtube_solution_url || (q ? q.youtube_solution_url : null)
+          });
+        });
+      }
 
       return {
         submissionId: sub._id.toString(),
@@ -176,12 +232,8 @@ export class ParentService {
         isPendingReview,
         isInProgress,
         teacherFeedbackNotes: sub.teacher_feedback_notes ?? null,
-        // Clickable YouTube Solution URL feedback for teacher mistakes
-        customMistakeCases: (sub.custom_mistake_cases ?? []).map((m: any) => ({
-          questionId: m.question_id ? m.question_id.toString() : null,
-          errorNote: m.error_note,
-          youtubeSolutionUrl: m.youtube_solution_url ?? null
-        })),
+        customMistakeCases: combinedMistakes,
+        mistakeCases: combinedMistakes,
         submittedAt: sub.client_submitted_at ?? sub.createdAt,
         gradedAt: sub.graded_at
       };

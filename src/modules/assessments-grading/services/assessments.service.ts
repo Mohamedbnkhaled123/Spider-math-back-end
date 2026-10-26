@@ -38,6 +38,7 @@ export interface IStartAssessmentResponse {
 }
 
 export interface ISyncSubmissionResponse {
+  submissionId: string;
   idempotencyKey: string;
   syncQueueStatus: string;
   resultVisibility: string;
@@ -49,10 +50,11 @@ export interface ISyncSubmissionResponse {
 }
 
 /**
- * Extended cache payload to include hasEssayQuestions and localized titles for batch alerts.
+ * Extended cache payload to include hasEssayQuestions, timeLimitMinutes and localized titles for batch alerts.
  */
 interface IExtendedAssessmentPayload extends IAssessmentAnswerKeyPayload {
   hasEssayQuestions: boolean;
+  timeLimitMinutes: number;
   titleAr: string;
   titleEn: string;
 }
@@ -331,13 +333,13 @@ export class AssessmentsService {
       }
     }
 
-    // Availability dates check
+    // Availability dates check (Strict Window Enforcement - 403 Forbidden)
     const now = new Date();
     if (assessment.available_from && now < assessment.available_from) {
-      throw new AppError('This assessment is not open yet', 400, ERROR_CODES.BAD_REQUEST_400);
+      throw new AppError('This assessment is not open yet', 403, ERROR_CODES.ASSESSMENT_NOT_STARTED_YET);
     }
     if (assessment.available_until && now > assessment.available_until) {
-      throw new AppError('This assessment deadline has passed', 400, ERROR_CODES.BAD_REQUEST_400);
+      throw new AppError('This assessment deadline has passed', 403, ERROR_CODES.ASSESSMENT_EXPIRED);
     }
 
     // Subscription authorization check for curriculum units
@@ -366,10 +368,24 @@ export class AssessmentsService {
       sync_queue_status: 'IN_PROGRESS'
     });
 
+    const timeLimitSec = (assessment.time_limit_minutes || 30) * 60 + 120; // 120s grace period
+
+    if (submission) {
+      const elapsedSec = (now.getTime() - submission.server_started_at.getTime()) / 1000;
+      if (elapsedSec > timeLimitSec) {
+        // Expired in-progress attempt -> finalize to SYNCED_ONLINE
+        submission.sync_queue_status = 'SYNCED_ONLINE';
+        submission.server_received_at = now;
+        submission.elapsed_time_sec = timeLimitSec;
+        await submission.save();
+        submission = null;
+      }
+    }
+
     const serverStartedAt = new Date();
 
     if (!submission) {
-      // Check maximum attempts
+      // Check maximum attempts (Strict Max Attempts Guard - 403 Forbidden)
       const completedAttempts = await SubmissionModel.countDocuments({
         assessment_id: assessment._id,
         student_id: new Types.ObjectId(studentId),
@@ -379,8 +395,8 @@ export class AssessmentsService {
       if (completedAttempts >= assessment.max_attempts && userRole !== ROLES.SUPER_ADMIN) {
         throw new AppError(
           `Maximum attempts exceeded (${assessment.max_attempts} attempts allowed)`,
-          400,
-          ERROR_CODES.MAX_ATTEMPTS_EXCEEDED_400
+          403,
+          ERROR_CODES.MAX_ATTEMPTS_EXCEEDED
         );
       }
 
@@ -458,6 +474,7 @@ export class AssessmentsService {
         assessmentId: assessment._id.toString(),
         assessmentType: assessment.assessment_type,
         minExpectedSolveSec: assessment.min_expected_solve_sec,
+        timeLimitMinutes: assessment.time_limit_minutes || 30,
         totalPoints: assessment.total_points,
         xpReward: assessment.xp_reward,
         hasEssayQuestions: assessment.has_essay_questions,
@@ -491,6 +508,7 @@ export class AssessmentsService {
     if (submission && submission.sync_queue_status === 'SYNCED_ONLINE') {
       // Idempotent terminal state: return existing results without double-grading or double-XP
       return {
+        submissionId: submission._id.toString(),
         idempotencyKey: submission.idempotency_key,
         syncQueueStatus: 'SYNCED_ONLINE',
         resultVisibility: submission.result_visibility,
@@ -650,6 +668,7 @@ export class AssessmentsService {
     }
 
     return {
+      submissionId: submission._id.toString(),
       idempotencyKey: submission.idempotency_key,
       syncQueueStatus: 'SYNCED_ONLINE',
       resultVisibility: submission.result_visibility,
@@ -770,6 +789,143 @@ export class AssessmentsService {
     }
 
     return assessment as any;
+  }
+
+  /**
+   * Retrieves full submission feedback for student or parent.
+   * Resolves by submission._id OR latest submission for assessment_id.
+   * If result is published, includes full question details, student answer, correct answer,
+   * YouTube solution URLs, teacher notes, and custom mistake cases.
+   */
+  async getSubmissionFeedback(userId: string, userRole: string, id: string) {
+    let submission: any = null;
+
+    if (Types.ObjectId.isValid(id)) {
+      submission = await SubmissionModel.findById(id)
+        .populate('assessment_id')
+        .populate('unit_package_id', 'title_ar title_en');
+    }
+
+    if (!submission && Types.ObjectId.isValid(id)) {
+      // Fallback: check if id is assessmentId
+      submission = await SubmissionModel.findOne({
+        student_id: new Types.ObjectId(userId),
+        assessment_id: new Types.ObjectId(id)
+      })
+        .sort({ attempt_number: -1, createdAt: -1 })
+        .populate('assessment_id')
+        .populate('unit_package_id', 'title_ar title_en');
+    }
+
+    if (!submission) {
+      throw new AppError('Submission not found', 404, ERROR_CODES.NOT_FOUND_404);
+    }
+
+    // Role check: Student can only view their own; Parent can only view their child's; Super Admin can view all
+    if (userRole === ROLES.STUDENT && submission.student_id.toString() !== userId) {
+      throw new AppError('Unauthorized to view this submission', 403, ERROR_CODES.FORBIDDEN_403);
+    }
+    if (userRole === ROLES.PARENT) {
+      const parentUser = await UserModel.findById(userId).lean();
+      const studentUser = await UserModel.findById(submission.student_id).lean();
+      const parentPhone = parentUser?.phone || (parentUser as any)?.phone_number;
+      if (!parentUser || !studentUser || studentUser.parent_phone !== parentPhone) {
+        throw new AppError('Unauthorized to view this child submission', 403, ERROR_CODES.FORBIDDEN_403);
+      }
+    }
+
+    const assessment = submission.assessment_id;
+    const unitPackage = submission.unit_package_id;
+    const totalPoints = assessment ? assessment.total_points : 0;
+    const isPublished = submission.result_visibility === 'PUBLISHED_TO_STUDENT_AND_PARENT';
+    const scorePercentage = totalPoints > 0 ? Math.round((submission.final_total_score / totalPoints) * 100) : 0;
+
+    if (!isPublished) {
+      return {
+        submissionId: submission._id.toString(),
+        assessmentTitleAr: assessment ? assessment.title_ar : 'تقييم تدريبي',
+        assessmentTitleEn: assessment ? assessment.title_en : 'Assessment',
+        unitTitleAr: unitPackage ? unitPackage.title_ar : 'الوحدة الدراسية',
+        resultVisibility: submission.result_visibility,
+        mcqAutoScore: 0,
+        essayManualScore: 0,
+        finalTotalScore: 0,
+        maxScore: totalPoints,
+        scorePercentage: 0,
+        gradedAt: null,
+        teacherFeedbackNotes: '',
+        customMistakeCases: []
+      };
+    }
+
+    // Published Report: build full mistake cases including wrong MCQs and custom teacher notes
+    const fullAssessment = await AssessmentModel.findById(assessment._id).select('+questions.correct_option_index +questions.youtube_solution_url').lean();
+    const questions = fullAssessment?.questions || [];
+    const questionMap = new Map(questions.map((q: any) => [q._id.toString(), q]));
+
+    const mcqAnswersMap = new Map<string, any>(
+      (submission.mcq_answers || []).map((ans: any) => [ans.question_id.toString(), ans])
+    );
+
+    const mistakeCases: any[] = [];
+
+    // 1. Check all MCQ questions for mistakes or unanswered
+    questions.forEach((q: any, idx: number) => {
+      if (q.question_type === 'MCQ') {
+        const studentAns: any = mcqAnswersMap.get(q._id.toString());
+        const isCorrect = studentAns ? studentAns.is_correct : false;
+
+        if (!isCorrect) {
+          const selectedIdx = studentAns ? studentAns.selected_option_index : null;
+          const selectedText = selectedIdx !== null && selectedIdx !== undefined && q.options[selectedIdx]
+            ? q.options[selectedIdx]
+            : 'لم تتم الإجابة';
+          const correctText = q.correct_option_index !== undefined && q.options[q.correct_option_index]
+            ? q.options[q.correct_option_index]
+            : '';
+
+          mistakeCases.push({
+            questionId: q._id.toString(),
+            questionOrder: idx + 1,
+            questionPromptText: q.question_text || `السؤال رقم ${idx + 1}`,
+            studentAnswerText: selectedText,
+            correctAnswerText: correctText,
+            errorNote: `إجابة غير صحيحة. الإجابة الصحيحة هي: "${correctText}"`,
+            youtubeSolutionUrl: q.youtube_solution_url || null
+          });
+        }
+      }
+    });
+
+    // 2. Add teacher's custom mistake cases (for essay or specific questions)
+    (submission.custom_mistake_cases || []).forEach((c: any, cIdx: number) => {
+      const q = c.question_id ? questionMap.get(c.question_id.toString()) : null;
+      mistakeCases.push({
+        questionId: c.question_id ? c.question_id.toString() : undefined,
+        questionOrder: q ? questions.findIndex((x: any) => x._id.toString() === c.question_id.toString()) + 1 : (c.question_order || questions.length + cIdx + 1),
+        questionPromptText: q ? q.question_text : (c.question_prompt_text || 'ملاحظة تصحيح مسألة مقالية'),
+        studentAnswerText: '',
+        correctAnswerText: '',
+        errorNote: c.error_note,
+        youtubeSolutionUrl: c.youtube_solution_url || (q ? q.youtube_solution_url : null)
+      });
+    });
+
+    return {
+      submissionId: submission._id.toString(),
+      assessmentTitleAr: assessment ? assessment.title_ar : 'تقييم تدريبي',
+      assessmentTitleEn: assessment ? assessment.title_en : 'Assessment',
+      unitTitleAr: unitPackage ? unitPackage.title_ar : 'الوحدة الدراسية',
+      resultVisibility: submission.result_visibility,
+      mcqAutoScore: submission.mcq_auto_score,
+      essayManualScore: submission.essay_manual_score,
+      finalTotalScore: submission.final_total_score,
+      maxScore: totalPoints,
+      scorePercentage,
+      gradedAt: submission.graded_at ? submission.graded_at.toISOString() : (submission.createdAt ? submission.createdAt.toISOString() : ''),
+      teacherFeedbackNotes: submission.teacher_feedback_notes || '',
+      customMistakeCases: mistakeCases
+    };
   }
 }
 

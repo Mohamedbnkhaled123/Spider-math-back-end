@@ -69,6 +69,7 @@ export class NotificationFactory {
     score: number;
     totalPoints: number;
     youtubeSolutionUrl?: string | null;
+    submissionId?: Types.ObjectId | string | null;
   }): Omit<INotification, 'created_at'> {
     return {
       recipient_id: params.recipientId,
@@ -78,6 +79,7 @@ export class NotificationFactory {
       title_en: `Homework Graded: ${params.assessmentTitleEn}`,
       body_ar: `الدرجة النهائية: ${params.score}/${params.totalPoints}. اضغط لعرض ملاحظات المهندسة هبة عبدالوهاب ورابط فيديو الحل على يوتيوب.`,
       body_en: `Final Score: ${params.score}/${params.totalPoints}. Click to view Eng. Heba Abdel-Wahab's feedback and YouTube solution link.`,
+      action_url: params.submissionId ? `/student/submissions/${params.submissionId}/feedback` : null,
       youtube_solution_url: params.youtubeSolutionUrl ?? null,
       batch_counter: 1,
       is_read: false

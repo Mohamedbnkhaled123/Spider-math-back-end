@@ -180,5 +180,25 @@ export class AssessmentsController {
       next(error);
     }
   };
+
+  /**
+   * Retrieves full submission feedback for student or parent
+   * GET /api/v1/assessments/submissions/:id/feedback
+   */
+  getSubmissionFeedback = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const feedback = await this.assessmentsService.getSubmissionFeedback(
+        req.user!.sub,
+        req.user!.role,
+        req.params.id as string
+      );
+      res.status(200).json({
+        success: true,
+        data: feedback
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 

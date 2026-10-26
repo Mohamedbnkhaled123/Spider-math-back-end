@@ -2,6 +2,7 @@ import { Types } from 'mongoose';
 import { UnitPackageModel, IUnitPackage } from '../../../models/unit-package.model';
 import { LectureMaterialModel } from '../../../models/lecture-material.model';
 import { AssessmentModel } from '../../../models/assessment.model';
+import { SubmissionModel } from '../../../models/submission.model';
 import { SubscriptionModel } from '../../../models/subscription.model';
 import { WatchProgressModel } from '../../../models/watch-progress.model';
 import { UserModel } from '../../../models/user.model';
@@ -148,16 +149,61 @@ export class UnitsService {
       };
     });
 
+    // Hydrate student assessment attempt statuses
+    let submissionsByAssessment = new Map<string, any[]>();
+    if (studentId && Types.ObjectId.isValid(studentId) && assessments.length > 0) {
+      const assessmentIds = assessments.map((a) => a._id);
+      const studentSubmissions = await SubmissionModel.find({
+        student_id: new Types.ObjectId(studentId),
+        assessment_id: { $in: assessmentIds }
+      })
+        .sort({ attempt_number: -1, createdAt: -1 })
+        .lean();
+
+      studentSubmissions.forEach((sub: any) => {
+        const key = sub.assessment_id.toString();
+        const list = submissionsByAssessment.get(key) || [];
+        list.push(sub);
+        submissionsByAssessment.set(key, list);
+      });
+    }
+
+    const now = new Date();
+
+    const hydratedAssessments = assessments.map((ass) => {
+      const subs = submissionsByAssessment.get(ass._id.toString()) || [];
+      const completedAttemptsCount = subs.filter((s: any) => s.sync_queue_status === 'SYNCED_ONLINE').length;
+      const inProgressSub = subs.find((s: any) => s.sync_queue_status === 'IN_PROGRESS');
+      const latestSub = subs[0] || null;
+
+      let timeWindowState: 'UPCOMING' | 'EXPIRED' | 'OPEN' = 'OPEN';
+      if (ass.available_from && now < new Date(ass.available_from)) {
+        timeWindowState = 'UPCOMING';
+      } else if (ass.available_until && now > new Date(ass.available_until)) {
+        timeWindowState = 'EXPIRED';
+      }
+
+      return {
+        ...ass,
+        isAccessible: isSubscribed,
+        studentAttemptStatus: {
+          completedAttemptsCount,
+          inProgressSubmissionId: inProgressSub ? inProgressSub._id.toString() : null,
+          latestSubmissionId: latestSub ? latestSub._id.toString() : null,
+          resultVisibility: latestSub ? latestSub.result_visibility : null,
+          finalTotalScore: latestSub ? latestSub.final_total_score : null,
+          timeWindowState
+        }
+      };
+    });
+
     return {
       unit,
       isSubscribed,
       lecturesCount: hydratedLectures.length,
       assessmentsCount: assessments.length,
       lectures: hydratedLectures,
-      assessments: assessments.map((ass) => ({
-        ...ass,
-        isAccessible: isSubscribed
-      }))
+      assessments: hydratedAssessments
     };
   }
 
