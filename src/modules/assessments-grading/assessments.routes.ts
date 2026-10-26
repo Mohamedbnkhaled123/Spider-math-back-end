@@ -51,6 +51,13 @@ assessmentsRouter.get(
   assessmentsController.getSubmissionFeedback
 );
 
+// Get all submissions of current authenticated student
+assessmentsRouter.get(
+  '/my-submissions',
+  authenticateJwt,
+  assessmentsController.getMySubmissions
+);
+
 // List assessments with filters
 assessmentsRouter.get(
   '/',

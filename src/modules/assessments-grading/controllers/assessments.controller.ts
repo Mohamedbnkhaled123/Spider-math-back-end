@@ -200,5 +200,21 @@ export class AssessmentsController {
       next(error);
     }
   };
+
+  /**
+   * Retrieves all submissions for the logged in student
+   * GET /api/v1/assessments/my-submissions
+   */
+  getMySubmissions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const submissions = await this.assessmentsService.getMySubmissions(req.user!.sub);
+      res.status(200).json({
+        success: true,
+        data: submissions
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 

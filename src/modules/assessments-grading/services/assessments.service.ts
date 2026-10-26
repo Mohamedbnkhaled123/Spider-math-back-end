@@ -869,26 +869,7 @@ export class AssessmentsService {
     const totalPoints = assessment ? assessment.total_points : 0;
     const isPublished = submission.result_visibility === 'PUBLISHED_TO_STUDENT_AND_PARENT';
     const scorePercentage = totalPoints > 0 ? Math.round((submission.final_total_score / totalPoints) * 100) : 0;
-
-    if (!isPublished) {
-      return {
-        submissionId: submission._id.toString(),
-        assessmentTitleAr: assessment ? assessment.title_ar : 'تقييم تدريبي',
-        assessmentTitleEn: assessment ? assessment.title_en : 'Assessment',
-        unitTitleAr: unitPackage ? unitPackage.title_ar : 'الوحدة الدراسية',
-        resultVisibility: submission.result_visibility,
-        mcqAutoScore: 0,
-        essayManualScore: 0,
-        finalTotalScore: 0,
-        maxScore: totalPoints,
-        scorePercentage: 0,
-        gradedAt: null,
-        teacherFeedbackNotes: '',
-        customMistakeCases: []
-      };
-    }
-
-    // Published Report: build full mistake cases including wrong MCQs and custom teacher notes
+    // Fetch full assessment with correct options and solution URLs
     const fullAssessment = await AssessmentModel.findById(assessment._id).select('+questions.correct_option_index +questions.youtube_solution_url').lean();
     const questions = fullAssessment?.questions || [];
     const questionMap = new Map(questions.map((q: any) => [q._id.toString(), q]));
@@ -941,8 +922,52 @@ export class AssessmentsService {
       });
     });
 
+    // 3. Build full review of ALL questions (correct and incorrect) for student review
+    const questionsReview: any[] = [];
+    questions.forEach((q: any, idx: number) => {
+      const isMcq = q.question_type === 'MCQ';
+      const studentAns: any = isMcq ? mcqAnswersMap.get(q._id.toString()) : null;
+      const isCorrect = isMcq ? (studentAns ? !!studentAns.is_correct : false) : false;
+      const selectedIdx = studentAns ? studentAns.selected_option_index : null;
+      const selectedText = selectedIdx !== null && selectedIdx !== undefined && q.options && q.options[selectedIdx]
+        ? q.options[selectedIdx]
+        : (isMcq ? 'لم تتم الإجابة' : '');
+      const correctText = isPublished && q.correct_option_index !== undefined && q.options && q.options[q.correct_option_index]
+        ? q.options[q.correct_option_index]
+        : '';
+
+      const customNote = (submission.custom_mistake_cases || []).find(
+        (c: any) => c.question_id && c.question_id.toString() === q._id.toString()
+      );
+
+      questionsReview.push({
+        questionId: q._id.toString(),
+        questionOrder: idx + 1,
+        questionType: q.question_type,
+        questionText: q.question_text || `السؤال رقم ${idx + 1}`,
+        questionImageUrl: q.question_image_url || null,
+        options: q.options || [],
+        studentSelectedOptionIndex: selectedIdx,
+        studentAnswerText: selectedText,
+        correctOptionIndex: isPublished ? q.correct_option_index : undefined,
+        correctAnswerText: correctText,
+        isCorrect: isMcq ? isCorrect : undefined,
+        points: q.points || 1,
+        awardedPoints: isMcq ? (isCorrect ? (q.points || 1) : 0) : undefined,
+        youtubeSolutionUrl: isPublished ? (q.youtube_solution_url || customNote?.youtube_solution_url || null) : null,
+        teacherNote: customNote ? customNote.error_note : null
+      });
+    });
+
+    const essaySolutionImages = (submission.uploaded_solution_imgs || []).map((img: any) => ({
+      imageUrl: img.image_url,
+      rotationDeg: img.rotation_deg || 0,
+      sizeKb: img.size_kb
+    }));
+
     return {
       submissionId: submission._id.toString(),
+      assessmentId: assessment ? assessment._id.toString() : '',
       assessmentTitleAr: assessment ? assessment.title_ar : 'تقييم تدريبي',
       assessmentTitleEn: assessment ? assessment.title_en : 'Assessment',
       unitTitleAr: unitPackage ? unitPackage.title_ar : 'الوحدة الدراسية',
@@ -954,8 +979,63 @@ export class AssessmentsService {
       scorePercentage,
       gradedAt: submission.graded_at ? submission.graded_at.toISOString() : (submission.createdAt ? submission.createdAt.toISOString() : ''),
       teacherFeedbackNotes: submission.teacher_feedback_notes || '',
-      customMistakeCases: mistakeCases
+      customMistakeCases: mistakeCases,
+      questionsReview,
+      essaySolutionImages
     };
+  }
+
+  /**
+   * Retrieves all completed / in-progress submissions for the authenticated student
+   * GET /api/v1/assessments/my-submissions
+   */
+  async getMySubmissions(studentId: string) {
+    const submissions = await SubmissionModel.find({
+      student_id: new Types.ObjectId(studentId),
+      sync_queue_status: { $in: ['SYNCED_ONLINE', 'IN_PROGRESS'] }
+    })
+      .populate('assessment_id')
+      .populate('unit_package_id', 'title_ar title_en')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return submissions.map((sub: any) => {
+      const assessment = sub.assessment_id;
+      const unit = sub.unit_package_id;
+      const totalPoints = assessment ? assessment.total_points : 0;
+      const isPublished = sub.result_visibility === 'PUBLISHED_TO_STUDENT_AND_PARENT';
+      const score = isPublished ? sub.final_total_score : 0;
+      const percentage = (totalPoints > 0 && isPublished) ? Math.round((sub.final_total_score / totalPoints) * 100) : 0;
+      const isPending = sub.result_visibility === 'HIDDEN_PENDING_TEACHER';
+
+      let gradeLabelAr = 'قيد التصحيح';
+      if (isPublished) {
+        if (percentage >= 85) gradeLabelAr = 'ممتاز (Mastery)';
+        else if (percentage >= 65) gradeLabelAr = 'جيد جداً (Proficient)';
+        else if (percentage >= 50) gradeLabelAr = 'جيد (Developing)';
+        else gradeLabelAr = 'يحتاج لمراجعة';
+      }
+
+      const formattedDate = sub.graded_at
+        ? new Date(sub.graded_at).toLocaleDateString('ar-EG', { dateStyle: 'medium' })
+        : (sub.createdAt ? new Date(sub.createdAt).toLocaleDateString('ar-EG', { dateStyle: 'medium' }) : '');
+
+      return {
+        id: sub._id.toString(),
+        submissionId: sub._id.toString(),
+        assessmentId: assessment ? assessment._id.toString() : '',
+        titleAr: assessment ? assessment.title_ar : 'تقييم دراسي',
+        unitTitleAr: unit ? unit.title_ar : (assessment?.title_ar || 'الوحدة الدراسية'),
+        score,
+        maxScore: totalPoints,
+        percentage,
+        gradeLabelAr,
+        status: isPending ? 'PENDING_REVIEW' : (isPublished ? 'PUBLISHED' : sub.result_visibility),
+        gradedBy: 'م/ هبة عبدالوهاب',
+        gradedDateAr: formattedDate,
+        feedbackUrl: `/student/submissions/${sub._id}/feedback`
+      };
+    });
   }
 }
 
