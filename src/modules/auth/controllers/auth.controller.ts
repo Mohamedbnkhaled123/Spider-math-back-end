@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { authService } from '../services/auth.service';
 import { createSuccessResponse, createErrorResponse } from '../../../common/interfaces/api-response.interface';
 import { ERROR_CODES } from '../../../common/constants/error-codes.constant';
+import { AppError } from '../../../common/utils/app-error.util';
 
 export class AuthController {
   /**
@@ -154,6 +155,27 @@ export class AuthController {
   public async adminLogin(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await authService.adminLogin();
+      res.status(200).json(createSuccessResponse(result));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/auth/device-status
+   * POST /api/v1/auth/check-device-status
+   */
+  public async checkDeviceStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const studentId = req.user?.sub;
+      if (!studentId) {
+        throw new AppError('Unauthorized', 401, ERROR_CODES.UNAUTHORIZED_401);
+      }
+      const deviceUuid = req.deviceUuid || req.header('X-Device-UUID') || (req.body && req.body.deviceUuid);
+      if (!deviceUuid) {
+        throw new AppError('Missing device UUID', 400, ERROR_CODES.INVALID_DEVICE_HEADER_400);
+      }
+      const result = await authService.checkDeviceStatus(studentId, deviceUuid);
       res.status(200).json(createSuccessResponse(result));
     } catch (error) {
       next(error);

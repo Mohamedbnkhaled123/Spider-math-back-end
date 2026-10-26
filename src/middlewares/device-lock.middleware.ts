@@ -60,7 +60,22 @@ export async function deviceLockGuard(req: Request, _res: Response, next: NextFu
       return next();
     }
 
-    // Device not found in student's approved list -> Return HTTP 423 Locked
+    // Device not found in student's approved list -> Automatically persist pending_device_req in DB so it appears in Admin Dashboard
+    await UserModel.findByIdAndUpdate(studentId, {
+      $set: {
+        pending_device_req: {
+          device_uuid: deviceUuid,
+          device_type: req.header('User-Agent')?.includes('Mobile') ? 'Mobile Device' : 'Desktop Browser',
+          browser_info: req.header('User-Agent') || 'Web Browser',
+          ip_address: req.ip || req.socket.remoteAddress || '127.0.0.1',
+          requested_at: new Date(),
+          status: 'PENDING'
+        },
+        account_lock_status: 'PENDING_DEVICE_APPROVAL'
+      }
+    });
+
+    // Return HTTP 423 Locked
     return next(
       new AppError(
         'Waiting for Eng. Heba Abdel-Wahab approval for this device',

@@ -842,6 +842,70 @@ export class AuthService {
   }
 
   /**
+   * Checks whether a specific device UUID is approved for the student.
+   * If approved, returns isApproved: true and refreshed token.
+   */
+  public async checkDeviceStatus(studentId: string, deviceUuid: string) {
+    const user = await UserModel.findById(studentId);
+    if (!user) {
+      throw new AppError('Student not found', 404, ERROR_CODES.STUDENT_NOT_FOUND_404);
+    }
+
+    const isApproved = (user.approved_devices || []).some(
+      (d: IApprovedDevice) => d.device_uuid === deviceUuid
+    );
+
+    const pendingStatus = user.pending_device_req?.device_uuid === deviceUuid
+      ? user.pending_device_req.status
+      : (isApproved ? 'APPROVED' : 'NONE');
+
+    if (isApproved) {
+      // Refresh cache so next calls succeed immediately
+      deviceWhitelistCache.set(
+        `device_whitelist:${user._id}`,
+        new Set(user.approved_devices.map((d) => d.device_uuid))
+      );
+
+      const token = this.generateToken({
+        sub: user._id.toString(),
+        role: user.role,
+        deviceUuid
+      });
+
+      return {
+        isApproved: true,
+        status: 'APPROVED',
+        token,
+        user: {
+          _id: user._id.toString(),
+          student_ha_code: user.student_code,
+          full_name: user.full_name,
+          email: user.email,
+          phone: user.phone,
+          parent_phone: user.parent_phone,
+          role: user.role,
+          curriculum: user.curriculum,
+          grade_level: user.grade_level,
+          academic_term: user.academic_term,
+          total_xp: user.total_xp,
+          avatar_url: user.avatar_url,
+          has_active_subscription: user.has_active_subscription,
+          account_lock_status: 'ACTIVE'
+        }
+      };
+    }
+
+    return {
+      isApproved: false,
+      status: pendingStatus,
+      deviceUuid,
+      message: pendingStatus === 'REJECTED'
+        ? 'تم رفض هذا الجهاز من قبل المعلمة.'
+        : 'الجهاز قيد انتظار موافقة المهندسة هبة عبدالوهاب.'
+    };
+  }
+
+  /**
    * Logs in official Super Admin and returns real HS512 JWT token.
    */
   public async adminLogin() {

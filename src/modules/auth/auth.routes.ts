@@ -110,6 +110,23 @@ authRouter.post(
   authController.adminLogin
 );
 
+/**
+ * GET /api/v1/auth/device-status
+ * POST /api/v1/auth/check-device-status
+ * Checks if the calling device has been approved by Eng. Heba Abdel-Wahab.
+ */
+authRouter.get(
+  '/device-status',
+  authenticateJwt,
+  authController.checkDeviceStatus
+);
+
+authRouter.post(
+  '/check-device-status',
+  authenticateJwt,
+  authController.checkDeviceStatus
+);
+
 // =============================================================================
 // Super Admin Device Management Endpoints (/api/v1/admin/device-requests)
 // =============================================================================
