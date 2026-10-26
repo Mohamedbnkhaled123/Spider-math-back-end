@@ -26,7 +26,6 @@ import { UpdateAssessmentDto } from '../dto/assessment-update.dto';
 import { SubmissionSyncDto } from '../dto/submission-sync.dto';
 import { QuestionGraderFactory } from '../factories/question-grader.factory';
 import { MonotonicTimingAuditStrategy } from '../strategies/monotonic-timing-audit.strategy';
-import { QuizPassedXpStrategy } from '../strategies/xp-calculation.strategy';
 import { BatchAlertService } from './batch-alert.service';
 import { validateAndNormalizeYouTubeUrl } from '../utils/youtube-url.util';
 
@@ -591,47 +590,17 @@ export class AssessmentsService {
     });
 
     // 5. Result Visibility & Gamification Logic
-    const hasEssayPhotos = dto.uploaded_solution_imgs && dto.uploaded_solution_imgs.length > 0;
-    const requiresTeacherReview = cachedPayload.hasEssayQuestions || hasEssayPhotos;
+    // In accordance with Teacher Approval Policy, submissions ALWAYS default to HIDDEN_PENDING_TEACHER.
+    // Teacher must explicitly click the approval button in the grading studio to publish results and award XP.
+    const resultVisibility: 'HIDDEN_PENDING_TEACHER' | 'PUBLISHED_TO_STUDENT_AND_PARENT' = 'HIDDEN_PENDING_TEACHER';
+    const xpAwarded = 0;
 
-    let resultVisibility: 'HIDDEN_PENDING_TEACHER' | 'PUBLISHED_TO_STUDENT_AND_PARENT';
-    let xpAwarded = 0;
-
-    if (requiresTeacherReview) {
-      resultVisibility = 'HIDDEN_PENDING_TEACHER';
-      // Record submission in BatchAlertService to aggregate teacher alerts (every 5 submissions)
-      await BatchAlertService.recordSubmissionForGrading({
-        assessmentId: new Types.ObjectId(assessmentId),
-        assessmentTitleAr: cachedPayload.titleAr,
-        assessmentTitleEn: cachedPayload.titleEn
-      });
-    } else {
-      resultVisibility = 'PUBLISHED_TO_STUDENT_AND_PARENT';
-
-      // Pure MCQ Quiz -> Instant XP Award with anti-cheat guard
-      const scorePercentage = cachedPayload.totalPoints > 0 ? (mcqAutoScore / cachedPayload.totalPoints) * 100 : 0;
-      const xpStrategy = new QuizPassedXpStrategy();
-      xpAwarded = xpStrategy.calculateDelta({
-        baseXpReward: cachedPayload.xpReward,
-        scorePercentage,
-        isSuspiciousFastSolve: auditResult.isSuspiciousFastSolve,
-        clockTamperDetected: auditResult.clockTamperDetected
-      });
-
-      if (xpAwarded > 0) {
-        await UserModel.findByIdAndUpdate(studentId, {
-          $inc: { total_xp: xpAwarded }
-        });
-
-        await GamificationLogModel.create({
-          student_id: new Types.ObjectId(studentId),
-          xp_delta: xpAwarded,
-          action_type: 'QUIZ_PASSED',
-          reference_id: new Types.ObjectId(assessmentId),
-          reason_note: `Completed quiz "${cachedPayload.titleAr}"`
-        });
-      }
-    }
+    // Record submission in BatchAlertService to aggregate teacher alerts
+    await BatchAlertService.recordSubmissionForGrading({
+      assessmentId: new Types.ObjectId(assessmentId),
+      assessmentTitleAr: cachedPayload.titleAr,
+      assessmentTitleEn: cachedPayload.titleEn
+    });
 
     const finalTotalScore = mcqAutoScore; // essay_manual_score = 0 until reviewed
 
@@ -869,6 +838,24 @@ export class AssessmentsService {
     const totalPoints = assessment ? assessment.total_points : 0;
     const isPublished = submission.result_visibility === 'PUBLISHED_TO_STUDENT_AND_PARENT';
     const scorePercentage = totalPoints > 0 ? Math.round((submission.final_total_score / totalPoints) * 100) : 0;
+    const hasEssayQuestions = !!assessment?.has_essay_questions || (submission.uploaded_solution_imgs && submission.uploaded_solution_imgs.length > 0);
+
+    // 3-Day Review Window Policy for Essay Quizzes:
+    // Students can review full essay questions & handwritten solution steps for 3 days only after grading/publishing.
+    const REVIEW_WINDOW_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+    let isReviewExpired = false;
+    let reviewExpiresAt: Date | null = null;
+
+    if (hasEssayQuestions && isPublished) {
+      const referenceTime = submission.graded_at || submission.client_submitted_at || submission.createdAt;
+      if (referenceTime) {
+        reviewExpiresAt = new Date(new Date(referenceTime).getTime() + REVIEW_WINDOW_MS);
+        if (Date.now() > reviewExpiresAt.getTime() && userRole === ROLES.STUDENT) {
+          isReviewExpired = true;
+        }
+      }
+    }
+
     // Fetch full assessment with correct options and solution URLs
     const fullAssessment = await AssessmentModel.findById(assessment._id).select('+questions.correct_option_index +questions.youtube_solution_url').lean();
     const questions = fullAssessment?.questions || [];
@@ -899,6 +886,7 @@ export class AssessmentsService {
             questionId: q._id.toString(),
             questionOrder: idx + 1,
             questionPromptText: q.question_text || `السؤال رقم ${idx + 1}`,
+            questionImageUrl: q.question_image_url || null,
             studentAnswerText: selectedText,
             correctAnswerText: correctText,
             errorNote: `إجابة غير صحيحة. الإجابة الصحيحة هي: "${correctText}"`,
@@ -915,6 +903,7 @@ export class AssessmentsService {
         questionId: c.question_id ? c.question_id.toString() : undefined,
         questionOrder: q ? questions.findIndex((x: any) => x._id.toString() === c.question_id.toString()) + 1 : (c.question_order || questions.length + cIdx + 1),
         questionPromptText: q ? q.question_text : (c.question_prompt_text || 'ملاحظة تصحيح مسألة مقالية'),
+        questionImageUrl: q ? (q.question_image_url || null) : null,
         studentAnswerText: '',
         correctAnswerText: '',
         errorNote: c.error_note,
@@ -979,9 +968,12 @@ export class AssessmentsService {
       scorePercentage,
       gradedAt: submission.graded_at ? submission.graded_at.toISOString() : (submission.createdAt ? submission.createdAt.toISOString() : ''),
       teacherFeedbackNotes: submission.teacher_feedback_notes || '',
-      customMistakeCases: mistakeCases,
-      questionsReview,
-      essaySolutionImages
+      hasEssayQuestions,
+      isReviewExpired,
+      reviewExpiresAt: reviewExpiresAt ? reviewExpiresAt.toISOString() : null,
+      customMistakeCases: isReviewExpired ? [] : mistakeCases,
+      questionsReview: isReviewExpired ? [] : questionsReview,
+      essaySolutionImages: isReviewExpired ? [] : essaySolutionImages
     };
   }
 

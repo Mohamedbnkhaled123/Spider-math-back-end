@@ -10,7 +10,7 @@ import { ERROR_CODES } from '../../../common/constants/error-codes.constant';
 import { ROLES } from '../../../common/constants/roles.constant';
 import { GradeSubmissionDto } from '../dto/grade-submission.dto';
 import { validateAndNormalizeYouTubeUrl } from '../utils/youtube-url.util';
-import { HomeworkGradedXpStrategy } from '../strategies/xp-calculation.strategy';
+import { HomeworkGradedXpStrategy, QuizPassedXpStrategy } from '../strategies/xp-calculation.strategy';
 
 export interface IPendingSubmissionsQuery {
   assessmentId?: string;
@@ -258,6 +258,102 @@ export class GradingService {
         });
         await NotificationModel.create(parentAlert);
       }
+    }
+
+    return submission;
+  }
+
+  /**
+   * Approves and publishes any pending submission with a single click.
+   */
+  async approveSubmission(_adminId: string, submissionId: string): Promise<ISubmissionDocument> {
+    const submission = await SubmissionModel.findById(submissionId);
+    if (!submission) {
+      throw new AppError('Submission not found', 404, ERROR_CODES.NOT_FOUND_404);
+    }
+
+    const assessment = await AssessmentModel.findById(submission.assessment_id);
+    if (!assessment) {
+      throw new AppError('Associated assessment not found', 404, ERROR_CODES.ASSESSMENT_NOT_FOUND_404);
+    }
+
+    const student = await UserModel.findById(submission.student_id);
+    if (!student) {
+      throw new AppError('Student account not found', 404, ERROR_CODES.STUDENT_NOT_FOUND_404);
+    }
+
+    const finalTotalScore = (submission.mcq_auto_score || 0) + (submission.essay_manual_score || 0);
+    submission.final_total_score = finalTotalScore;
+    submission.result_visibility = 'PUBLISHED_TO_STUDENT_AND_PARENT';
+    submission.graded_at = new Date();
+    await submission.save();
+
+    // Award XP if not already awarded
+    const existingXpLog = await GamificationLogModel.findOne({
+      student_id: student._id,
+      reference_id: submission._id
+    });
+
+    if (!existingXpLog) {
+      const scorePercentage = assessment.total_points > 0 ? (finalTotalScore / assessment.total_points) * 100 : 0;
+      const xpStrategy = new QuizPassedXpStrategy();
+      const xpToAward = xpStrategy.calculateDelta({
+        baseXpReward: assessment.xp_reward,
+        scorePercentage,
+        isSuspiciousFastSolve: submission.is_suspicious_fast_solve,
+        clockTamperDetected: submission.clock_tamper_detected
+      });
+
+      if (xpToAward > 0) {
+        await UserModel.findByIdAndUpdate(student._id, {
+          $inc: { total_xp: xpToAward }
+        });
+
+        await GamificationLogModel.create({
+          student_id: student._id,
+          xp_delta: xpToAward,
+          action_type: 'QUIZ_PASSED',
+          reference_id: submission._id,
+          reason_note: `Approved assessment "${assessment.title_ar}"`
+        });
+      }
+    }
+
+    try {
+      const studentAlert = NotificationFactory.createHomeworkGradedAlert({
+        recipientId: student._id as Types.ObjectId,
+        recipientRole: ROLES.STUDENT,
+        assessmentTitleAr: assessment.title_ar,
+        assessmentTitleEn: assessment.title_en,
+        score: finalTotalScore,
+        totalPoints: assessment.total_points,
+        youtubeSolutionUrl: null,
+        submissionId: submission._id
+      });
+      await NotificationModel.create(studentAlert);
+
+      if (student.parent_phone) {
+        const parentUser = await UserModel.findOne({
+          phone_number: student.parent_phone,
+          role: ROLES.PARENT
+        }).select('_id').lean();
+
+        if (parentUser) {
+          const parentAlert = NotificationFactory.createHomeworkGradedAlert({
+            recipientId: parentUser._id as Types.ObjectId,
+            recipientRole: ROLES.PARENT,
+            assessmentTitleAr: assessment.title_ar,
+            assessmentTitleEn: assessment.title_en,
+            score: finalTotalScore,
+            totalPoints: assessment.total_points,
+            youtubeSolutionUrl: null,
+            submissionId: submission._id
+          });
+          await NotificationModel.create(parentAlert);
+        }
+      }
+    } catch (notifErr) {
+      console.warn('Failed to dispatch notifications on approval:', notifErr);
     }
 
     return submission;

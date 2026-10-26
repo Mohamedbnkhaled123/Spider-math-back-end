@@ -126,3 +126,10 @@ adminSubmissionsRouter.post(
   authorizeRoles(ROLES.SUPER_ADMIN),
   gradingController.gradeSubmission
 );
+
+adminSubmissionsRouter.post(
+  '/:id/approve',
+  authenticateJwt,
+  authorizeRoles(ROLES.SUPER_ADMIN),
+  gradingController.approveSubmission
+);

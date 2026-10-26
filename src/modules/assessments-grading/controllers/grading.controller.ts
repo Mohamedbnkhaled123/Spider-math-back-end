@@ -84,4 +84,24 @@ export class GradingController {
       next(error);
     }
   };
+
+  /**
+   * Approves and publishes a submission with one click
+   * POST /api/v1/admin/submissions/:id/approve
+   */
+  approveSubmission = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const submission = await this.gradingService.approveSubmission(
+        req.user!.sub,
+        req.params.id as string
+      );
+
+      res.status(200).json({
+        success: true,
+        data: submission
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
