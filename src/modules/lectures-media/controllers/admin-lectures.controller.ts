@@ -70,6 +70,8 @@ export class AdminLecturesController {
         description: '',
         order_index: existingCount + 1,
         youtube_encrypted_id: encryptedYoutube,
+        youtube_video_id: cleanVideoId,
+        youtube_url: rawYoutube,
         video_duration_sec: (durationMinutes || 45) * 60,
         completion_threshold_pct: 85,
         xp_reward_on_complete: 50,
@@ -124,6 +126,8 @@ export class AdminLecturesController {
       if (youtubeUrl) {
         const cleanVideoId = CryptoProxyService.extractYoutubeId(youtubeUrl.trim());
         lecture.youtube_encrypted_id = CryptoProxyService.encrypt(cleanVideoId);
+        lecture.youtube_video_id = cleanVideoId;
+        lecture.youtube_url = youtubeUrl.trim();
       }
 
       if (googleDrivePdfFileId !== undefined) {

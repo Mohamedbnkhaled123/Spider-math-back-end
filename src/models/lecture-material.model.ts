@@ -31,6 +31,8 @@ export interface ILectureMaterial {
 
   // DRM & Playback Protection (AES-256-GCM cipher string for Paid Lectures)
   youtube_encrypted_id: string;
+  youtube_video_id?: string;
+  youtube_url?: string;
   video_duration_sec: number;
   completion_threshold_pct: number;
   xp_reward_on_complete: number;
@@ -106,6 +108,16 @@ const LectureMaterialSchema = new Schema<ILectureMaterialDocument>(
     youtube_encrypted_id: {
       type: String,
       required: true,
+      trim: true
+    },
+    youtube_video_id: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    youtube_url: {
+      type: String,
+      default: '',
       trim: true
     },
     video_duration_sec: {

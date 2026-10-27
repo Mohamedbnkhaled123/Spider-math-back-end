@@ -138,14 +138,17 @@ export class UnitsService {
       });
     }
 
-    const hydratedLectures = lectures.map((lec) => {
+    const hydratedLectures = lectures.map((lec: any) => {
       const prog = progressMap.get(lec._id.toString());
+      const isAcc = isSubscribed || lec.is_free_trial;
       return {
         ...lec,
         isCompleted: prog?.isCompleted || false,
         watchPercentage: prog?.watchPercentage || 0,
         lastPlaybackPositionSec: prog?.lastPlaybackPositionSec || 0,
-        isAccessible: isSubscribed || lec.is_free_trial
+        isAccessible: isAcc,
+        youtube_video_id: lec.youtube_video_id || '',
+        youtube_url: lec.youtube_url || ''
       };
     });
 
