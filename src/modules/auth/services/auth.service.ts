@@ -9,6 +9,7 @@ import { deviceWhitelistCache } from '../../../config/cache.config';
 import { generateStudentHaCode } from '../../../common/utils/ha-code-generator.util';
 import { NotificationFactory } from '../../../common/factories/notification.factory';
 import { UserModel, IApprovedDevice } from '../../../models/user.model';
+import { SubscriptionModel } from '../../../models/subscription.model';
 import { NotificationModel } from '../../../models/notification.model';
 import { PlacementAttemptModel } from '../../../models/placement-attempt.model';
 import { GoogleLoginDto } from '../dto/google-login.dto';
@@ -835,10 +836,24 @@ export class AuthService {
    * Fetches all registered users/students from Atlas for Super Admin overview.
    */
   public async getAllStudents() {
-    return UserModel.find()
+    const students = await UserModel.find()
       .select('full_name student_code email phone parent_phone curriculum grade_level approved_devices total_xp has_active_subscription account_lock_status role is_profile_completed createdAt')
       .sort({ createdAt: -1 })
       .lean();
+
+    const studentIds = students.map((s) => s._id);
+    const activeSubs = await SubscriptionModel.find({
+      student_id: { $in: studentIds },
+      subscription_status: 'ACTIVE',
+      expires_at: { $gt: new Date() }
+    }).select('student_id').lean();
+
+    const activeSet = new Set(activeSubs.map((sub) => sub.student_id.toString()));
+
+    return students.map((s) => ({
+      ...s,
+      has_active_subscription: activeSet.has(s._id.toString()) || !!s.has_active_subscription
+    }));
   }
 
   /**

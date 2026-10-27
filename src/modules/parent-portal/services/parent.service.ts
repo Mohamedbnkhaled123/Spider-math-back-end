@@ -3,6 +3,8 @@ import { UserModel } from '../../../models/user.model';
 import { SubscriptionModel } from '../../../models/subscription.model';
 import { WatchProgressModel } from '../../../models/watch-progress.model';
 import { SubmissionModel } from '../../../models/submission.model';
+import { LectureMaterialModel } from '../../../models/lecture-material.model';
+import { UnitPackageModel } from '../../../models/unit-package.model';
 import { ROLES, UserRole } from '../../../common/constants/roles.constant';
 import { AppError } from '../../../common/utils/app-error.util';
 import { ERROR_CODES } from '../../../common/constants/error-codes.constant';
@@ -20,6 +22,7 @@ export interface IChildSummaryItem {
   totalXp: number;
   badgeLevel: string;
   hasActiveSubscription: boolean;
+  activeUnitsCount?: number;
   presence: IPresenceStatusResponse;
 }
 
@@ -65,25 +68,33 @@ export class ParentService {
       .select('full_name student_code curriculum grade_level academic_term avatar_url total_xp has_active_subscription')
       .lean();
 
-    const children: IChildSummaryItem[] = students.map((student) => {
-      const studentIdStr = (student._id as Types.ObjectId).toString();
-      const presence = PresenceTrackerService.getPresence(studentIdStr);
-      const badgeLevel = GamificationService.calculateBadgeLevel(student.total_xp);
+    const children: IChildSummaryItem[] = await Promise.all(
+      students.map(async (student) => {
+        const studentIdStr = (student._id as Types.ObjectId).toString();
+        const presence = PresenceTrackerService.getPresence(studentIdStr);
+        const badgeLevel = GamificationService.calculateBadgeLevel(student.total_xp);
+        const activeUnitsCount = await SubscriptionModel.countDocuments({
+          student_id: student._id,
+          subscription_status: 'ACTIVE',
+          expires_at: { $gt: new Date() }
+        });
 
-      return {
-        studentId: studentIdStr,
-        fullName: student.full_name,
-        studentCode: student.student_code,
-        curriculum: student.curriculum,
-        gradeLevel: student.grade_level,
-        academicTerm: student.academic_term,
-        avatarUrl: student.avatar_url,
-        totalXp: student.total_xp,
-        badgeLevel,
-        hasActiveSubscription: student.has_active_subscription,
-        presence
-      };
-    });
+        return {
+          studentId: studentIdStr,
+          fullName: student.full_name,
+          studentCode: student.student_code,
+          curriculum: student.curriculum,
+          gradeLevel: student.grade_level,
+          academicTerm: student.academic_term,
+          avatarUrl: student.avatar_url,
+          totalXp: student.total_xp,
+          badgeLevel,
+          hasActiveSubscription: student.has_active_subscription || activeUnitsCount > 0,
+          activeUnitsCount,
+          presence
+        };
+      })
+    );
 
     return {
       children,
@@ -239,6 +250,76 @@ export class ParentService {
       };
     });
 
+    const activeSubscriptions = await Promise.all(
+      subscriptions.map(async (s: any) => {
+        const uId = (typeof s.unit_package_id === 'object' && s.unit_package_id !== null && s.unit_package_id._id)
+          ? s.unit_package_id._id
+          : s.unit_package_id;
+
+        let unitPackageObj = (typeof s.unit_package_id === 'object' && s.unit_package_id !== null && s.unit_package_id.title_ar)
+          ? s.unit_package_id
+          : null;
+
+        if (!unitPackageObj && uId) {
+          unitPackageObj = await UnitPackageModel.findById(uId).lean();
+        }
+
+        let totalLectures = 0;
+        let completedLectures = 0;
+        let unitWatchPercentage = 0;
+        let lecturesList: any[] = [];
+
+        if (uId) {
+          const lectures = await LectureMaterialModel.find({
+            unit_package_id: uId,
+            is_published: true
+          })
+            .sort({ order_index: 1 })
+            .select('lecture_title_ar lecture_title_en video_duration_sec order_index is_free_trial')
+            .lean();
+
+          totalLectures = lectures.length;
+          const lectureIds = lectures.map((l) => l._id.toString());
+
+          const progresses = watchProgressRecords.filter((w: any) =>
+            lectureIds.includes(w.lecture_id?._id?.toString() || w.lecture_id?.toString())
+          );
+
+          completedLectures = progresses.filter((p: any) => p.is_completed).length;
+          unitWatchPercentage = totalLectures > 0 ? Math.round((completedLectures / totalLectures) * 100) : 0;
+
+          lecturesList = lectures.map((l: any) => {
+            const prog = progresses.find((p: any) =>
+              (p.lecture_id?._id?.toString() || p.lecture_id?.toString()) === l._id.toString()
+            );
+            return {
+              lectureId: l._id.toString(),
+              order: l.order_index,
+              titleAr: l.lecture_title_ar,
+              titleEn: l.lecture_title_en,
+              durationMinutes: Math.round((l.video_duration_sec || 2700) / 60),
+              isCompleted: prog?.is_completed || false,
+              watchPercentage: prog?.watch_percentage || 0
+            };
+          });
+        }
+
+        return {
+          subscriptionId: s._id.toString(),
+          unitPackageId: uId ? uId.toString() : null,
+          unitTitleAr: unitPackageObj ? unitPackageObj.title_ar : (s.title_ar || 'الوحدة الدراسية'),
+          unitTitleEn: unitPackageObj ? unitPackageObj.title_en : (s.title_en || ''),
+          unitCode: unitPackageObj ? unitPackageObj.unit_code : '',
+          expiresAt: s.expires_at,
+          daysRemaining: Math.max(0, Math.ceil((new Date(s.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24))),
+          watchPercentage: unitWatchPercentage,
+          completedLectures,
+          totalLectures,
+          lectures: lecturesList
+        };
+      })
+    );
+
     return {
       student: {
         studentId: student._id.toString(),
@@ -252,15 +333,7 @@ export class ParentService {
         badgeLevel: GamificationService.calculateBadgeLevel(student.total_xp)
       },
       presence,
-      activeSubscriptions: subscriptions.map((s: any) => ({
-        subscriptionId: s._id.toString(),
-        unitPackageId: s.unit_package_id ? s.unit_package_id._id.toString() : null,
-        unitTitleAr: s.unit_package_id ? s.unit_package_id.title_ar : '',
-        unitTitleEn: s.unit_package_id ? s.unit_package_id.title_en : '',
-        unitCode: s.unit_package_id ? s.unit_package_id.unit_code : '',
-        expiresAt: s.expires_at,
-        daysRemaining: Math.max(0, Math.ceil((new Date(s.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-      })),
+      activeSubscriptions,
       attendanceMetrics: {
         totalLecturesWatched,
         completedLecturesCount,

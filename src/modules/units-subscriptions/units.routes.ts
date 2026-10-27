@@ -41,6 +41,11 @@ unitsRouter.get(
 
 adminUnitsRouter.use(authenticateJwt, requireRoles(ROLES.SUPER_ADMIN));
 
+adminUnitsRouter.get(
+  '/',
+  unitsController.getAllUnitsAdmin
+);
+
 adminUnitsRouter.post(
   '/',
   validateBody(createUnitPackageDtoSchema),

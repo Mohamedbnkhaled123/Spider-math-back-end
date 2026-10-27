@@ -14,6 +14,15 @@ import { CreateUnitPackageDto, UpdateUnitPackageDto } from '../dto/unit-crud.dto
 
 export class UnitsService {
   /**
+   * Retrieves all unit packages in the platform for Super Admin management.
+   */
+  public async getAllUnitsAdmin() {
+    return UnitPackageModel.find({})
+      .sort({ curriculum: 1, grade_level: 1, order_index: 1, createdAt: 1 })
+      .lean();
+  }
+
+  /**
    * Retrieves published educational units and revision packages.
    * Scoped by the 5-level compound index and optionally hydrated with isSubscribed flag.
    */

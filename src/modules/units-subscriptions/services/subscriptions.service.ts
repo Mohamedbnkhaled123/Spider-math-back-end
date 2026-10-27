@@ -57,26 +57,48 @@ export class SubscriptionsService {
   /**
    * Super Admin: One-Click Subscription Activation.
    */
-  public async activateSubscription(adminId: string, dto: ActivateSubscriptionDto) {
+  public async activateSubscription(adminId: string, dto: ActivateSubscriptionDto | any) {
+    const sId = dto.studentId || dto.student_id;
+    const sCode = dto.studentCode || dto.student_code;
+    const uId = dto.unitPackageId || dto.unit_package_id || dto.unitId || dto.unit_id;
+
     let student = null;
-    if (dto.studentId && Types.ObjectId.isValid(dto.studentId)) {
-      student = await UserModel.findById(dto.studentId);
-    } else if (dto.studentCode) {
-      student = await UserModel.findOne({ student_code: dto.studentCode.trim() });
+    if (sId && Types.ObjectId.isValid(sId)) {
+      student = await UserModel.findById(sId);
+    }
+    if (!student && (sCode || sId)) {
+      const code = (sCode || sId).toString().trim();
+      student = await UserModel.findOne({ student_code: code });
     }
 
     if (!student) {
       throw new AppError('Student not found for subscription activation', 404, ERROR_CODES.STUDENT_NOT_FOUND_404);
     }
 
-    const unit = await UnitPackageModel.findById(dto.unitPackageId);
+    let unit = null;
+    if (uId && Types.ObjectId.isValid(uId)) {
+      unit = await UnitPackageModel.findById(uId);
+    }
+    if (!unit && uId) {
+      unit = await UnitPackageModel.findOne({
+        $or: [
+          { unit_code: uId.toString().trim() },
+          { title_ar: uId.toString().trim() }
+        ]
+      });
+    }
+
     if (!unit) {
       throw new AppError('Unit package not found', 404, ERROR_CODES.RESOURCE_NOT_FOUND_404);
     }
 
+    // Mark student as having active subscription
+    student.has_active_subscription = true;
+    await student.save();
+
     const validityDays = dto.validityDays || unit.validity_days || 90;
     const expiresAt = new Date(Date.now() + validityDays * 24 * 60 * 60 * 1000);
-    const pricePaid = dto.pricePaidEgp !== undefined ? dto.pricePaidEgp : unit.price_egp;
+    const pricePaid = (dto.pricePaidEgp !== undefined ? dto.pricePaidEgp : dto.price_paid_egp) ?? unit.price_egp;
 
     const subscription = await SubscriptionModel.findOneAndUpdate(
       { student_id: student._id, unit_package_id: unit._id },

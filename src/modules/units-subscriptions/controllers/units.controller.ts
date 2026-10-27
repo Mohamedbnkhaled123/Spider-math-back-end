@@ -37,6 +37,18 @@ export class UnitsController {
   }
 
   /**
+   * GET /api/v1/admin/units
+   */
+  public async getAllUnitsAdmin(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const units = await unitsService.getAllUnitsAdmin();
+      res.status(200).json(createSuccessResponse(units));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * POST /api/v1/admin/units
    */
   public async createUnitPackage(req: Request, res: Response, next: NextFunction): Promise<void> {
