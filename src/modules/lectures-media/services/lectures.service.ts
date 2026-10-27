@@ -38,8 +38,9 @@ export class LecturesService {
       throw new AppError('Student profile not found', 404, ERROR_CODES.STUDENT_NOT_FOUND_404);
     }
 
-    // Decrypt the raw YouTube video ID using master cipher secret
-    const rawVideoId = CryptoProxyService.decrypt(lecture.youtube_encrypted_id);
+    // Decrypt the raw YouTube video ID using master cipher secret and extract 11-char ID
+    const decryptedString = CryptoProxyService.decrypt(lecture.youtube_encrypted_id);
+    const rawVideoId = CryptoProxyService.extractYoutubeId(decryptedString);
 
     // Create a short-lived session-encrypted token bound to this student & device (expires in 5 minutes)
     const sessionVideoToken = CryptoProxyService.createSessionPlaybackToken({
@@ -63,6 +64,7 @@ export class LecturesService {
       lectureId: lecture._id,
       lectureTitleAr: lecture.lecture_title_ar,
       lectureTitleEn: lecture.lecture_title_en,
+      videoId: rawVideoId,
       sessionVideoToken,
       dynamicWatermarkText,
       videoDurationSec: lecture.video_duration_sec,

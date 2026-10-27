@@ -4,6 +4,7 @@ import { LectureMaterialModel } from '../../../models/lecture-material.model';
 import { UnitPackageModel } from '../../../models/unit-package.model';
 import { AppError } from '../../../common/utils/app-error.util';
 import { ERROR_CODES } from '../../../common/constants/error-codes.constant';
+import { CryptoProxyService } from '../../../common/utils/crypto.util';
 import { createSuccessResponse } from '../../../common/interfaces/api-response.interface';
 
 export class AdminLecturesController {
@@ -53,7 +54,8 @@ export class AdminLecturesController {
       }
 
       const rawYoutube = youtubeUrl ? youtubeUrl.trim() : 'demo_video';
-      const encryptedYoutube = 'U2FsdGVkX1_' + Buffer.from(rawYoutube).toString('base64');
+      const cleanVideoId = CryptoProxyService.extractYoutubeId(rawYoutube);
+      const encryptedYoutube = CryptoProxyService.encrypt(cleanVideoId);
 
       const lecture = await LectureMaterialModel.create({
         unit_package_id: unit._id,
@@ -117,7 +119,8 @@ export class AdminLecturesController {
       if (isPublished !== undefined) lecture.is_published = isPublished;
 
       if (youtubeUrl) {
-        lecture.youtube_encrypted_id = 'U2FsdGVkX1_' + Buffer.from(youtubeUrl.trim()).toString('base64');
+        const cleanVideoId = CryptoProxyService.extractYoutubeId(youtubeUrl.trim());
+        lecture.youtube_encrypted_id = CryptoProxyService.encrypt(cleanVideoId);
       }
 
       if (googleDrivePdfFileId !== undefined) {

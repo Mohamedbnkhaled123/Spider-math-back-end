@@ -45,9 +45,43 @@ export class CryptoProxyService {
   }
 
   /**
+   * Extracts clean 11-character YouTube video ID from URL or raw ID string.
+   */
+  public static extractYoutubeId(urlOrId: string): string {
+    if (!urlOrId) return 'dQw4w9WgXcQ';
+    const clean = urlOrId.trim();
+    if (clean.length === 11 && !clean.includes('/') && !clean.includes('?') && !clean.includes('.')) {
+      return clean;
+    }
+    const match = clean.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+    if (match && match[1]) {
+      return match[1];
+    }
+    return clean;
+  }
+
+  /**
    * Decrypts AES-256-GCM cipher string verifying cryptographic authenticity.
+   * Seamlessly handles legacy base64-encoded strings (prefixed with U2FsdGVkX1_) or raw IDs.
    */
   public static decrypt(cipherString: string): string {
+    if (!cipherString) return '';
+
+    // Handle legacy base64 format safely
+    if (cipherString.startsWith('U2FsdGVkX1_')) {
+      try {
+        const rawBase64 = cipherString.replace('U2FsdGVkX1_', '');
+        return Buffer.from(rawBase64, 'base64').toString('utf8');
+      } catch {
+        return cipherString;
+      }
+    }
+
+    // If not in iv:authTag:cipher format, return string as-is
+    if (!cipherString.includes(':')) {
+      return cipherString;
+    }
+
     try {
       const parts = cipherString.split(':');
       if (parts.length !== 3) {
