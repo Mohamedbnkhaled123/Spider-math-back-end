@@ -53,8 +53,11 @@ export class AdminLecturesController {
         });
       }
 
-      const rawYoutube = youtubeUrl ? youtubeUrl.trim() : 'demo_video';
+      const rawYoutube = youtubeUrl ? youtubeUrl.trim() : '';
       const cleanVideoId = CryptoProxyService.extractYoutubeId(rawYoutube);
+      if (!cleanVideoId) {
+        throw new AppError('يرجى إدخال رابط يوتيوب صالح للشرح (YouTube Video URL is required)', 400, ERROR_CODES.BAD_REQUEST_400);
+      }
       const encryptedYoutube = CryptoProxyService.encrypt(cleanVideoId);
 
       const lecture = await LectureMaterialModel.create({

@@ -48,7 +48,7 @@ export class CryptoProxyService {
    * Extracts clean 11-character YouTube video ID from URL or raw ID string.
    */
   public static extractYoutubeId(urlOrId: string): string {
-    if (!urlOrId) return 'dQw4w9WgXcQ';
+    if (!urlOrId) return '';
     const clean = urlOrId.trim();
     if (clean.length === 11 && !clean.includes('/') && !clean.includes('?') && !clean.includes('.')) {
       return clean;
@@ -57,7 +57,7 @@ export class CryptoProxyService {
     if (match && match[1]) {
       return match[1];
     }
-    return clean;
+    return clean.length === 11 ? clean : '';
   }
 
   /**
