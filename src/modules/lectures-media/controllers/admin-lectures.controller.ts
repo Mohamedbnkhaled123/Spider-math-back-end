@@ -6,6 +6,7 @@ import { AppError } from '../../../common/utils/app-error.util';
 import { ERROR_CODES } from '../../../common/constants/error-codes.constant';
 import { CryptoProxyService } from '../../../common/utils/crypto.util';
 import { createSuccessResponse } from '../../../common/interfaces/api-response.interface';
+import { fetchYouTubeVideoDurationSec } from '../utils/youtube-duration.util';
 
 export class AdminLecturesController {
   /**
@@ -60,6 +61,12 @@ export class AdminLecturesController {
       }
       const encryptedYoutube = CryptoProxyService.encrypt(cleanVideoId);
 
+      let durationSec = durationMinutes ? Math.max(1, Math.round(Number(durationMinutes) * 60)) : 300;
+      const ytDuration = await fetchYouTubeVideoDurationSec(cleanVideoId);
+      if (ytDuration && ytDuration > 0) {
+        durationSec = ytDuration;
+      }
+
       const lecture = await LectureMaterialModel.create({
         unit_package_id: unit._id,
         curriculum: unit.curriculum,
@@ -72,7 +79,7 @@ export class AdminLecturesController {
         youtube_encrypted_id: encryptedYoutube,
         youtube_video_id: cleanVideoId,
         youtube_url: rawYoutube,
-        video_duration_sec: durationMinutes ? Math.max(1, Math.round(Number(durationMinutes) * 60)) : 300,
+        video_duration_sec: durationSec,
         completion_threshold_pct: 85,
         xp_reward_on_complete: 50,
         pdf_materials: pdfMaterials,
@@ -121,7 +128,6 @@ export class AdminLecturesController {
 
       if (titleAr) lecture.lecture_title_ar = titleAr.trim();
       if (titleEn) lecture.lecture_title_en = titleEn.trim();
-      if (durationMinutes) lecture.video_duration_sec = durationMinutes * 60;
       if (isFreeTrial !== undefined) lecture.is_free_trial = isFreeTrial;
       if (isPublished !== undefined) lecture.is_published = isPublished;
 
@@ -130,6 +136,14 @@ export class AdminLecturesController {
         lecture.youtube_encrypted_id = CryptoProxyService.encrypt(cleanVideoId);
         lecture.youtube_video_id = cleanVideoId;
         lecture.youtube_url = youtubeUrl.trim();
+        const ytDuration = await fetchYouTubeVideoDurationSec(cleanVideoId);
+        if (ytDuration && ytDuration > 0) {
+          lecture.video_duration_sec = ytDuration;
+        } else if (durationMinutes) {
+          lecture.video_duration_sec = durationMinutes * 60;
+        }
+      } else if (durationMinutes) {
+        lecture.video_duration_sec = durationMinutes * 60;
       }
 
       if (googleDrivePdfFileId !== undefined) {

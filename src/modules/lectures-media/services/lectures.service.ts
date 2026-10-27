@@ -237,10 +237,24 @@ export class LecturesService {
       bitmap = bitmap.substring(0, totalChunks);
     }
 
-    // Set bit '1' at chunkIndex if within totalChunks
-    if (params.dto.chunkIndex >= 0 && params.dto.chunkIndex < totalChunks) {
+    // Set bit '1' at all watched chunk indices
+    const chunksToMark = new Set<number>();
+    if (params.dto.chunkIndex !== undefined && params.dto.chunkIndex >= 0) {
+      chunksToMark.add(params.dto.chunkIndex);
+    }
+    if (Array.isArray(params.dto.watchedChunks)) {
+      params.dto.watchedChunks.forEach(c => {
+        if (typeof c === 'number' && c >= 0) chunksToMark.add(c);
+      });
+    }
+
+    if (chunksToMark.size > 0) {
       const bitmapArr = bitmap.split('');
-      bitmapArr[params.dto.chunkIndex] = '1';
+      chunksToMark.forEach(idx => {
+        if (idx < totalChunks) {
+          bitmapArr[idx] = '1';
+        }
+      });
       bitmap = bitmapArr.join('');
     }
 

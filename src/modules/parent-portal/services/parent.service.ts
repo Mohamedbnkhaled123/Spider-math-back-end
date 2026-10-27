@@ -298,6 +298,7 @@ export class ParentService {
               titleAr: l.lecture_title_ar,
               titleEn: l.lecture_title_en,
               durationMinutes: l.video_duration_sec ? Math.max(1, Math.round(l.video_duration_sec / 60)) : 5,
+              video_duration_sec: l.video_duration_sec || 105,
               isCompleted: prog?.is_completed || false,
               watchPercentage: prog?.watch_percentage || 0
             };
