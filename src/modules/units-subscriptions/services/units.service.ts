@@ -211,14 +211,19 @@ export class UnitsService {
    * Super Admin: Creates new educational UnitPackage.
    */
   public async createUnitPackage(dto: CreateUnitPackageDto): Promise<IUnitPackage> {
-    const existingSlug = await UnitPackageModel.findOne({ slug: dto.slug.toLowerCase().trim() });
+    let slug = (dto.slug || '').toLowerCase().trim();
+    if (!slug) {
+      slug = `unit-${Date.now().toString(36)}`;
+    }
+
+    const existingSlug = await UnitPackageModel.findOne({ slug });
     if (existingSlug) {
-      throw new AppError(`Unit package slug '${dto.slug}' already exists`, 409, ERROR_CODES.CONFLICT_409);
+      slug = `${slug}-${Date.now().toString(36)}`;
     }
 
     const unit = await UnitPackageModel.create({
       ...dto,
-      slug: dto.slug.toLowerCase().trim()
+      slug
     });
 
     publicCmsCache.clear();

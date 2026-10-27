@@ -27,7 +27,7 @@ export class AdminLecturesController {
 
       const targetUnitId = unitId || unitPackageId;
       if (!targetUnitId || !Types.ObjectId.isValid(targetUnitId)) {
-        throw new AppError('Valid unitId is required', 400, ERROR_CODES.BAD_REQUEST_400);
+        throw new AppError('يرجى تحديد وحدة دراسية صالحة ومحفوظة بقاعدة البيانات (Valid unitId is required)', 400, ERROR_CODES.BAD_REQUEST_400);
       }
 
       if (!titleAr || !titleAr.trim()) {
