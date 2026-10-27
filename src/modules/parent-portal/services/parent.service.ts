@@ -297,7 +297,7 @@ export class ParentService {
               order: l.order_index,
               titleAr: l.lecture_title_ar,
               titleEn: l.lecture_title_en,
-              durationMinutes: Math.round((l.video_duration_sec || 2700) / 60),
+              durationMinutes: l.video_duration_sec ? Math.max(1, Math.round(l.video_duration_sec / 60)) : 5,
               isCompleted: prog?.is_completed || false,
               watchPercentage: prog?.watch_percentage || 0
             };

@@ -195,7 +195,19 @@ export class LecturesService {
       throw new AppError('Student profile not found', 404, ERROR_CODES.STUDENT_NOT_FOUND_404);
     }
 
-    const totalChunks = Math.max(1, Math.ceil(lecture.video_duration_sec / 5));
+    const reportedDuration = params.dto.actualDurationSec || params.dto.videoDurationSec;
+    let effectiveDurationSec = lecture.video_duration_sec;
+    if (reportedDuration && reportedDuration > 0) {
+      const rounded = Math.round(reportedDuration);
+      if (!effectiveDurationSec || Math.abs(effectiveDurationSec - rounded) > 3) {
+        effectiveDurationSec = rounded;
+        await LectureMaterialModel.findByIdAndUpdate(lecture._id, {
+          video_duration_sec: rounded
+        });
+      }
+    }
+
+    const totalChunks = Math.max(1, Math.ceil(effectiveDurationSec / 5));
 
     // Find or create watch progress document
     let progress = await WatchProgressModel.findOne({
@@ -221,6 +233,8 @@ export class LecturesService {
     let bitmap = progress.watched_chunks_bitmap || '';
     if (bitmap.length < totalChunks) {
       bitmap = bitmap.padEnd(totalChunks, '0');
+    } else if (bitmap.length > totalChunks) {
+      bitmap = bitmap.substring(0, totalChunks);
     }
 
     // Set bit '1' at chunkIndex if within totalChunks

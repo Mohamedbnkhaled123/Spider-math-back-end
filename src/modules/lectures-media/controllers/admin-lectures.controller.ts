@@ -72,7 +72,7 @@ export class AdminLecturesController {
         youtube_encrypted_id: encryptedYoutube,
         youtube_video_id: cleanVideoId,
         youtube_url: rawYoutube,
-        video_duration_sec: (durationMinutes || 45) * 60,
+        video_duration_sec: durationMinutes ? Math.max(1, Math.round(Number(durationMinutes) * 60)) : 300,
         completion_threshold_pct: 85,
         xp_reward_on_complete: 50,
         pdf_materials: pdfMaterials,

@@ -102,14 +102,25 @@ export class UnitsService {
 
     // Check subscription status
     let isSubscribed = !!isSuperAdmin;
+    let subscriptionExpiresAt: string | null = null;
+    let isExpired = false;
+
     if (!isSubscribed && studentId && Types.ObjectId.isValid(studentId)) {
-      const activeSub = await SubscriptionModel.findOne({
+      const latestSub = await SubscriptionModel.findOne({
         student_id: studentId,
-        unit_package_id: unitId,
-        subscription_status: 'ACTIVE',
-        expires_at: { $gt: new Date() }
-      }).lean();
-      isSubscribed = !!activeSub;
+        unit_package_id: unitId
+      }).sort({ createdAt: -1 }).lean();
+
+      if (latestSub) {
+        subscriptionExpiresAt = latestSub.expires_at ? new Date(latestSub.expires_at).toISOString() : null;
+        if (latestSub.subscription_status === 'ACTIVE' && (!latestSub.expires_at || new Date(latestSub.expires_at) > new Date())) {
+          isSubscribed = true;
+          isExpired = false;
+        } else {
+          isSubscribed = false;
+          isExpired = true;
+        }
+      }
     }
 
     // Fetch ordered lectures (excluding raw cipher details if not authorized, but keeping metadata)
@@ -215,6 +226,8 @@ export class UnitsService {
     return {
       unit,
       isSubscribed,
+      subscriptionExpiresAt,
+      isExpired,
       lecturesCount: hydratedLectures.length,
       assessmentsCount: assessments.length,
       lectures: hydratedLectures,
