@@ -22,11 +22,11 @@ lecturesRouter.get(
 );
 
 /**
- * GET /api/v1/lectures/:id/pdf/:fileId/stream
+ * GET /api/v1/lectures/:id/pdf/:fileId/stream or /api/v1/lectures/:id/pdf/stream
  * Streams private Google Drive study handout with X-Print-Allowed header.
  */
 lecturesRouter.get(
-  '/:id/pdf/:fileId/stream',
+  ['/:id/pdf/:fileId/stream', '/:id/pdf/stream'],
   requireActiveSubscription,
   lecturesController.streamGoogleDrivePdf
 );

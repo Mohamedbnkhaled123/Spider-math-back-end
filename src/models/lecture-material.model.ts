@@ -38,6 +38,8 @@ export interface ILectureMaterial {
   xp_reward_on_complete: number;
 
   pdf_materials: IPdfMaterialItem[];
+  google_drive_pdf_id?: string;
+  is_print_allowed?: boolean;
   is_free_trial: boolean;
   is_published: boolean;
   createdAt: Date;
@@ -139,6 +141,15 @@ const LectureMaterialSchema = new Schema<ILectureMaterialDocument>(
     pdf_materials: {
       type: [PdfMaterialItemSchema],
       default: []
+    },
+    google_drive_pdf_id: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    is_print_allowed: {
+      type: Boolean,
+      default: false
     },
     is_free_trial: {
       type: Boolean,

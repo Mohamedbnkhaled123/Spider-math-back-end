@@ -141,6 +141,7 @@ export class UnitsService {
     const hydratedLectures = lectures.map((lec: any) => {
       const prog = progressMap.get(lec._id.toString());
       const isAcc = isSubscribed || lec.is_free_trial;
+      const primaryPdf = (lec.pdf_materials && lec.pdf_materials.length > 0) ? lec.pdf_materials[0] : null;
       return {
         ...lec,
         isCompleted: prog?.isCompleted || false,
@@ -148,7 +149,9 @@ export class UnitsService {
         lastPlaybackPositionSec: prog?.lastPlaybackPositionSec || 0,
         isAccessible: isAcc,
         youtube_video_id: lec.youtube_video_id || '',
-        youtube_url: lec.youtube_url || ''
+        youtube_url: lec.youtube_url || '',
+        google_drive_pdf_id: primaryPdf ? (primaryPdf.storage_file_id || primaryPdf._id?.toString() || '') : (lec.google_drive_pdf_id || ''),
+        is_print_allowed: primaryPdf ? !!primaryPdf.is_print_allowed : false
       };
     });
 

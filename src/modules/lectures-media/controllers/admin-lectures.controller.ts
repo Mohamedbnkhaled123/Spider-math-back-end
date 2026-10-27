@@ -76,6 +76,8 @@ export class AdminLecturesController {
         completion_threshold_pct: 85,
         xp_reward_on_complete: 50,
         pdf_materials: pdfMaterials,
+        google_drive_pdf_id: googleDrivePdfFileId ? googleDrivePdfFileId.trim() : '',
+        is_print_allowed: !!isPrintAllowed,
         is_free_trial: !!isFreeTrial,
         is_published: true
       });
@@ -131,6 +133,8 @@ export class AdminLecturesController {
       }
 
       if (googleDrivePdfFileId !== undefined) {
+        lecture.google_drive_pdf_id = googleDrivePdfFileId ? googleDrivePdfFileId.trim() : '';
+        if (isPrintAllowed !== undefined) lecture.is_print_allowed = !!isPrintAllowed;
         if (googleDrivePdfFileId && googleDrivePdfFileId.trim()) {
           lecture.pdf_materials = [
             {

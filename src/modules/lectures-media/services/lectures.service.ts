@@ -1,4 +1,5 @@
 import https from 'https';
+import http from 'http';
 import { Response } from 'express';
 import { Types } from 'mongoose';
 import { LectureMaterialModel } from '../../../models/lecture-material.model';
@@ -100,10 +101,16 @@ export class LecturesService {
       throw new AppError('Lecture material not found', 404, ERROR_CODES.LECTURE_NOT_FOUND_404);
     }
 
-    // Match PDF handout by storage_file_id or subdocument _id
-    const pdfItem = (lecture.pdf_materials || []).find(
-      (p: any) => p.storage_file_id === params.fileId || p._id?.toString() === params.fileId
-    );
+    // Match PDF handout by storage_file_id or subdocument _id, or fallback to first handout
+    let pdfItem = null;
+    if (params.fileId && params.fileId.trim() && params.fileId !== 'stream') {
+      pdfItem = (lecture.pdf_materials || []).find(
+        (p: any) => p.storage_file_id === params.fileId || p._id?.toString() === params.fileId
+      );
+    }
+    if (!pdfItem && lecture.pdf_materials && lecture.pdf_materials.length > 0) {
+      pdfItem = lecture.pdf_materials[0];
+    }
 
     if (!pdfItem) {
       throw new AppError('Requested PDF study handout not found in this lecture', 404, ERROR_CODES.RESOURCE_NOT_FOUND_404);
@@ -117,31 +124,49 @@ export class LecturesService {
     params.res.setHeader('X-Print-Allowed', pdfItem.is_print_allowed ? 'true' : 'false');
     params.res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
 
-    // Google Drive direct stream URL
-    const driveUrl = `https://drive.google.com/uc?export=download&id=${googleDriveFileId}`;
+    // Helper to pipe stream following up to 5 redirects
+    const pipeDriveStream = (streamUrl: string, maxRedirects = 5): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        if (maxRedirects <= 0) {
+          return reject(new AppError('Too many redirects fetching Google Drive PDF', 502, ERROR_CODES.INTERNAL_SERVER_ERROR_500));
+        }
 
-    return new Promise((resolve, reject) => {
-      https
-        .get(driveUrl, (driveRes) => {
-          // Follow redirect if Google Drive responds with 302/303
-          if (driveRes.statusCode && driveRes.statusCode >= 300 && driveRes.statusCode < 400 && driveRes.headers.location) {
-            https
-              .get(driveRes.headers.location, (redirectedRes) => {
-                redirectedRes.pipe(params.res);
-                redirectedRes.on('end', resolve);
-                redirectedRes.on('error', reject);
-              })
-              .on('error', reject);
-          } else {
-            driveRes.pipe(params.res);
-            driveRes.on('end', resolve);
-            driveRes.on('error', reject);
-          }
-        })
-        .on('error', (err) => {
-          reject(new AppError(`Failed to stream PDF handout: ${err.message}`, 502, ERROR_CODES.INTERNAL_SERVER_ERROR_500));
-        });
-    });
+        const client = streamUrl.startsWith('https') ? https : http;
+        client
+          .get(
+            streamUrl,
+            {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+              }
+            },
+            (driveRes: any) => {
+              if (driveRes.statusCode && driveRes.statusCode >= 300 && driveRes.statusCode < 400 && driveRes.headers.location) {
+                let loc = driveRes.headers.location;
+                if (!loc.startsWith('http')) {
+                  const parsed = new URL(streamUrl);
+                  loc = `${parsed.protocol}//${parsed.host}${loc}`;
+                }
+                return resolve(pipeDriveStream(loc, maxRedirects - 1));
+              }
+
+              if (driveRes.statusCode && driveRes.statusCode >= 400) {
+                return reject(new AppError(`Google Drive responded with status ${driveRes.statusCode}`, 502, ERROR_CODES.INTERNAL_SERVER_ERROR_500));
+              }
+
+              driveRes.pipe(params.res);
+              driveRes.on('end', resolve);
+              driveRes.on('error', reject);
+            }
+          )
+          .on('error', (err: any) => {
+            reject(new AppError(`Failed to stream PDF handout: ${err.message}`, 502, ERROR_CODES.INTERNAL_SERVER_ERROR_500));
+          });
+      });
+    };
+
+    const initialDriveUrl = `https://drive.google.com/uc?export=download&id=${googleDriveFileId}`;
+    return pipeDriveStream(initialDriveUrl);
   }
 
   /**
