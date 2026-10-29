@@ -59,9 +59,17 @@ export function createApp(): Application {
   );
 
   // 3. Cross-Origin Resource Sharing (CORS)
+  const allowedOrigins = env.CLIENT_ORIGIN.split(',').map((o) => o.trim());
   app.use(
     cors({
-      origin: env.CLIENT_ORIGIN,
+      origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps, curl, server-to-server)
+        if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+          callback(null, true);
+        } else {
+          callback(null, false);
+        }
+      },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowedHeaders: [

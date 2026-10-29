@@ -25,7 +25,7 @@ const envSchema = z.object({
   CLIENT_ORIGIN: z
     .string()
     .min(1, 'CLIENT_ORIGIN is required')
-    .default('http://localhost:4200'),
+    .default('http://localhost:4200,http://localhost:4000'),
 
   MONGODB_URI: z
     .string({
