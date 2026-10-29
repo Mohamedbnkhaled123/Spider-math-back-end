@@ -75,6 +75,7 @@ export interface ICmsConfig {
   hero_headline_en?: string;
   hero_subheadline_ar: string;
   hero_subheadline_en?: string;
+  hero_video_url?: string;
   announcement_banner_text: string;
   is_announcement_active: boolean;
   active_academic_year: string;
@@ -182,6 +183,11 @@ const CmsConfigSchema = new Schema<ICmsConfigDocument>(
     hero_subheadline_en: {
       type: String,
       default: 'Interactive learning for Egyptian, Gulf, International, and American Curriculums with Desmos graphing strategies.',
+      trim: true
+    },
+    hero_video_url: {
+      type: String,
+      default: '',
       trim: true
     },
     announcement_banner_text: {

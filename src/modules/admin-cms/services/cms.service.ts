@@ -77,6 +77,8 @@ export class CmsService {
       heroHeadlineEn: config.hero_headline_en || 'Master Mathematics with Engineering Standards — Eng. Heba Abdel-Wahab',
       heroSubheadlineAr: config.hero_subheadline_ar || 'منصة تفاعلية مخصصة للثانوية العامة والأنظمة الدولية بنظام حماية متطور واستراتيجيات ديسموس البيانية.',
       heroSubheadlineEn: config.hero_subheadline_en || 'Interactive learning for Egyptian, Gulf, International, and American Curriculums with Desmos graphing strategies.',
+      heroVideoUrl: config.hero_video_url || config.teacher_profile?.hero_video_youtube_id || '',
+      hero_video_url: config.hero_video_url || config.teacher_profile?.hero_video_youtube_id || '',
       announcementBannerText: config.announcement_banner_text || '✦ خصم 20% لفترة محدودة على اشتراك باقات الترم الأول بمناسبة تدشين المنصة ✦',
       isAnnouncementActive: config.is_announcement_active ?? true,
       activeAcademicYear: config.active_academic_year || '2026 / 2027',
@@ -117,6 +119,12 @@ export class CmsService {
 
     const subEn = dto.hero_subheadline_en ?? dto.heroSubheadlineEn;
     if (subEn !== undefined) updatePayload.hero_subheadline_en = subEn;
+
+    const heroVid = dto.hero_video_url ?? dto.heroVideoUrl;
+    if (heroVid !== undefined) {
+      updatePayload.hero_video_url = heroVid.trim();
+      updatePayload['teacher_profile.hero_video_youtube_id'] = heroVid.trim();
+    }
 
     const banner = dto.announcement_banner_text ?? dto.announcementBannerText;
     if (banner !== undefined) updatePayload.announcement_banner_text = banner;

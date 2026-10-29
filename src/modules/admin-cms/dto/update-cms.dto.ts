@@ -53,6 +53,8 @@ export const updateCmsDtoSchema = z.object({
   heroSubheadlineAr: z.string().optional(),
   hero_subheadline_en: z.string().optional(),
   heroSubheadlineEn: z.string().optional(),
+  hero_video_url: z.string().optional(),
+  heroVideoUrl: z.string().optional(),
   announcement_banner_text: z.string().optional(),
   announcementBannerText: z.string().optional(),
   is_announcement_active: z.boolean().optional(),
