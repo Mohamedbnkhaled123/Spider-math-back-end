@@ -124,7 +124,9 @@ export class LecturesService {
     params.res.setHeader('X-Print-Allowed', pdfItem.is_print_allowed ? 'true' : 'false');
     params.res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
 
-    // Helper to pipe stream following up to 5 redirects
+    // Helper to pipe stream following up to 5 redirects while preserving cookies and handling Google Drive confirmations
+    const cookieJar: string[] = [];
+
     const pipeDriveStream = (streamUrl: string, maxRedirects = 5): Promise<void> => {
       return new Promise((resolve, reject) => {
         if (maxRedirects <= 0) {
@@ -132,17 +134,38 @@ export class LecturesService {
         }
 
         const client = streamUrl.startsWith('https') ? https : http;
+        const reqHeaders: Record<string, string> = {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        };
+        if (cookieJar.length > 0) {
+          reqHeaders['Cookie'] = cookieJar.join('; ');
+        }
+
         client
           .get(
             streamUrl,
-            {
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-              }
-            },
+            { headers: reqHeaders },
             (driveRes: any) => {
+              // Store cookies from Google Drive
+              if (driveRes.headers['set-cookie']) {
+                const newCookies = driveRes.headers['set-cookie'].map((c: string) => c.split(';')[0]);
+                cookieJar.push(...newCookies);
+              }
+
+              // Handle HTTP 3xx Redirects
               if (driveRes.statusCode && driveRes.statusCode >= 300 && driveRes.statusCode < 400 && driveRes.headers.location) {
                 let loc = driveRes.headers.location;
+                // Detect Google login redirect -> file is restricted/private!
+                if (loc.includes('accounts.google.com') || loc.includes('ServiceLogin')) {
+                  return reject(
+                    new AppError(
+                      'ملف الـ PDF على Google Drive مقفل أو خاص (Restricted). يجب على المعلمة فتح ملف الـ PDF في Google Drive وتغيير إعداد المشاركة إلى "أي شخص لديه الرابط (Anyone with the link can view)" حتى يتمكن الطلاب من عرضه.',
+                      403,
+                      ERROR_CODES.FORBIDDEN_403
+                    )
+                  );
+                }
+
                 if (!loc.startsWith('http')) {
                   const parsed = new URL(streamUrl);
                   loc = `${parsed.protocol}//${parsed.host}${loc}`;
@@ -154,6 +177,56 @@ export class LecturesService {
                 return reject(new AppError(`Google Drive responded with status ${driveRes.statusCode}`, 502, ERROR_CODES.INTERNAL_SERVER_ERROR_500));
               }
 
+              const upstreamContentType = (driveRes.headers['content-type'] || '').toLowerCase();
+
+              // If Google Drive returned an HTML page (e.g. virus confirmation for large files or sign-in)
+              if (upstreamContentType.includes('text/html')) {
+                let htmlBuffer = '';
+                driveRes.on('data', (chunk: any) => {
+                  if (htmlBuffer.length < 50000) {
+                    htmlBuffer += chunk.toString();
+                  }
+                });
+
+                driveRes.on('end', () => {
+                  // Check if it's asking for sign-in
+                  if (htmlBuffer.includes('accounts.google.com') || htmlBuffer.includes('Sign in') || htmlBuffer.includes('ServiceLogin')) {
+                    return reject(
+                      new AppError(
+                        'ملف الـ PDF على Google Drive مقفل أو خاص (Restricted). يجب على المعلمة فتح ملف الـ PDF في Google Drive وتغيير إعداد المشاركة إلى "أي شخص لديه الرابط (Anyone with the link can view)" حتى يتمكن الطلاب من عرضه.',
+                        403,
+                        ERROR_CODES.FORBIDDEN_403
+                      )
+                    );
+                  }
+
+                  // Check if it's Google Drive large-file virus scan confirmation
+                  const matchHref = htmlBuffer.match(/href="(\/uc\?export=download[^"]+)"/i) ||
+                                    htmlBuffer.match(/href="(https:\/\/drive\.usercontent\.google\.com\/download[^"]+)"/i);
+                  const matchConfirm = htmlBuffer.match(/confirm=([0-9a-zA-Z_-]+)/);
+
+                  if (matchHref && matchHref[1]) {
+                    const confirmUrl = matchHref[1].startsWith('http')
+                      ? matchHref[1]
+                      : `https://drive.google.com${matchHref[1]}`;
+                    return resolve(pipeDriveStream(confirmUrl, maxRedirects - 1));
+                  } else if (matchConfirm && matchConfirm[1]) {
+                    const confirmUrl = `https://drive.usercontent.google.com/download?id=${googleDriveFileId}&export=download&confirm=${matchConfirm[1]}`;
+                    return resolve(pipeDriveStream(confirmUrl, maxRedirects - 1));
+                  }
+
+                  return reject(
+                    new AppError(
+                      'الملف المطلوب ليس مستند PDF صالح أو تعذر جلب محتواه من Google Drive. يرجى التأكد من معرّف الملف.',
+                      400,
+                      ERROR_CODES.BAD_REQUEST_400
+                    )
+                  );
+                });
+                return;
+              }
+
+              // Normal stream: pipe directly
               driveRes.pipe(params.res);
               driveRes.on('end', resolve);
               driveRes.on('error', reject);
@@ -165,7 +238,7 @@ export class LecturesService {
       });
     };
 
-    const initialDriveUrl = `https://drive.google.com/uc?export=download&id=${googleDriveFileId}`;
+    const initialDriveUrl = `https://drive.google.com/uc?export=download&id=${encodeURIComponent(googleDriveFileId)}&confirm=t`;
     return pipeDriveStream(initialDriveUrl);
   }
 

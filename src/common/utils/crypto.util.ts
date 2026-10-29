@@ -46,18 +46,34 @@ export class CryptoProxyService {
 
   /**
    * Extracts clean 11-character YouTube video ID from URL or raw ID string.
+   * Fully supports all YouTube link formats: /live/, /shorts/, /embed/, /v/, watch?v=, youtu.be/, and raw IDs.
    */
   public static extractYoutubeId(urlOrId: string): string {
     if (!urlOrId) return '';
     const clean = urlOrId.trim();
-    if (clean.length === 11 && !clean.includes('/') && !clean.includes('?') && !clean.includes('.')) {
+    if (clean.length === 11 && /^[a-zA-Z0-9_-]{11}$/.test(clean)) {
       return clean;
     }
-    const match = clean.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-    if (match && match[1]) {
-      return match[1];
+
+    // Check standard paths: /embed/, /v/, /live/, /shorts/, youtu.be/
+    const pathMatch = clean.match(/(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:embed\/|v\/|live\/|shorts\/))([a-zA-Z0-9_-]{11})/i);
+    if (pathMatch && pathMatch[1]) {
+      return pathMatch[1];
     }
-    return clean.length === 11 ? clean : '';
+
+    // Check query params ?v= or &v=
+    const queryMatch = clean.match(/[?&]v=([a-zA-Z0-9_-]{11})/i);
+    if (queryMatch && queryMatch[1]) {
+      return queryMatch[1];
+    }
+
+    // Fallback: any standalone 11-character token matching youtube ID pattern
+    const generalMatch = clean.match(/([a-zA-Z0-9_-]{11})/);
+    if (generalMatch && generalMatch[1] && !clean.includes('drive.google')) {
+      return generalMatch[1];
+    }
+
+    return '';
   }
 
   /**

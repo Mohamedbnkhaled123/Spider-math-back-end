@@ -238,12 +238,16 @@ export class GradingService {
     });
     await NotificationModel.create(studentAlert);
 
-    // If student has a parent, also notify parent
+    // If student has a linked parent or parent phone, notify parent
+    const parentQuery: any[] = [{ linked_children: student._id }];
     if (student.parent_phone) {
-      const parentUser = await UserModel.findOne({
-        phone_number: student.parent_phone,
-        role: ROLES.PARENT
-      }).select('_id').lean();
+      parentQuery.push({ phone: student.parent_phone });
+      parentQuery.push({ phone_number: student.parent_phone });
+    }
+    const parentUser = await UserModel.findOne({
+      role: ROLES.PARENT,
+      $or: parentQuery
+    }).select('_id').lean();
 
       if (parentUser) {
         const parentAlert = NotificationFactory.createHomeworkGradedAlert({
@@ -258,7 +262,6 @@ export class GradingService {
         });
         await NotificationModel.create(parentAlert);
       }
-    }
 
     return submission;
   }
@@ -332,11 +335,15 @@ export class GradingService {
       });
       await NotificationModel.create(studentAlert);
 
+      const parentQuery: any[] = [{ linked_children: student._id }];
       if (student.parent_phone) {
-        const parentUser = await UserModel.findOne({
-          phone_number: student.parent_phone,
-          role: ROLES.PARENT
-        }).select('_id').lean();
+        parentQuery.push({ phone: student.parent_phone });
+        parentQuery.push({ phone_number: student.parent_phone });
+      }
+      const parentUser = await UserModel.findOne({
+        role: ROLES.PARENT,
+        $or: parentQuery
+      }).select('_id').lean();
 
         if (parentUser) {
           const parentAlert = NotificationFactory.createHomeworkGradedAlert({
@@ -351,7 +358,6 @@ export class GradingService {
           });
           await NotificationModel.create(parentAlert);
         }
-      }
     } catch (notifErr) {
       console.warn('Failed to dispatch notifications on approval:', notifErr);
     }

@@ -13,6 +13,7 @@ import { SubscriptionModel } from '../../../models/subscription.model';
 import { UnitPackageModel } from '../../../models/unit-package.model';
 import { UserModel } from '../../../models/user.model';
 import { GamificationLogModel } from '../../../models/gamification-log.model';
+import { NotificationModel } from '../../../models/notification.model';
 import {
   assessmentAnswerKeyCache,
   publicCmsCache,
@@ -179,53 +180,33 @@ export class AssessmentsService {
       return assessment;
     }
 
-    // Scenario B: submissionsCount > 0 -> Students have already entered or submitted!
+    // Scenario B: submissionsCount > 0 -> Teacher is allowed to add/update questions, with auto-regrade if MCQ keys change
     let correctOptionIndexChanged = false;
 
     if (dto.questions) {
-      // Guard against structural changes (adding or deleting questions)
-      if (dto.questions.length !== assessment.questions.length) {
-        throw new AppError(
-          'Cannot add or remove questions because students have already entered or submitted this assessment',
-          400,
-          ERROR_CODES.ASSESSMENT_LOCKED_STRUCTURAL_CHANGE
-        );
-      }
-
-      // Check per-question modifications
-      for (let i = 0; i < dto.questions.length; i++) {
+      // Check if any existing MCQ question had its answer key changed
+      for (let i = 0; i < Math.min(dto.questions.length, assessment.questions.length); i++) {
         const incomingQ = dto.questions[i];
         const currentQ = assessment.questions[i];
-        if (!incomingQ || !currentQ) continue;
-
-        if (incomingQ.question_type !== currentQ.question_type) {
-          throw new AppError(
-            'Cannot alter question type after student submissions have commenced',
-            400,
-            ERROR_CODES.ASSESSMENT_LOCKED_STRUCTURAL_CHANGE
-          );
-        }
-
-        // Check if correct_option_index changed on MCQ
         if (
+          incomingQ &&
+          currentQ &&
           incomingQ.question_type === 'MCQ' &&
           incomingQ.correct_option_index !== undefined &&
           incomingQ.correct_option_index !== currentQ.correct_option_index
         ) {
           correctOptionIndexChanged = true;
-          currentQ.correct_option_index = incomingQ.correct_option_index;
-        }
-
-        // Allow non-breaking updates: typo fixes, image URLs, solution URLs, model answer
-        if (incomingQ.question_text !== undefined) currentQ.question_text = incomingQ.question_text;
-        if (incomingQ.question_image_url !== undefined) currentQ.question_image_url = incomingQ.question_image_url;
-        if (incomingQ.question_image_size_kb !== undefined) currentQ.question_image_size_kb = incomingQ.question_image_size_kb;
-        if (incomingQ.options !== undefined) currentQ.options = incomingQ.options;
-        if (incomingQ.model_answer_text !== undefined) currentQ.model_answer_text = incomingQ.model_answer_text;
-        if (incomingQ.youtube_solution_url !== undefined) {
-          currentQ.youtube_solution_url = validateAndNormalizeYouTubeUrl(incomingQ.youtube_solution_url);
         }
       }
+
+      // Update questions array with normalized items
+      const sanitizedQuestions = dto.questions.map((q) => ({
+        ...q,
+        youtube_solution_url: validateAndNormalizeYouTubeUrl(q.youtube_solution_url)
+      }));
+      assessment.questions = sanitizedQuestions as unknown as IQuestionItem[];
+      assessment.total_points = sanitizedQuestions.reduce((sum, q) => sum + (q.points || 1), 0);
+      assessment.has_essay_questions = sanitizedQuestions.some((q) => q.question_type === 'ESSAY_PHOTO');
     }
 
     // Apply allowed metadata changes
@@ -237,6 +218,7 @@ export class AssessmentsService {
     if (dto.available_from !== undefined) assessment.available_from = dto.available_from ? new Date(dto.available_from) : null;
     if (dto.available_until !== undefined) assessment.available_until = dto.available_until ? new Date(dto.available_until) : null;
     if (dto.graph_calculator !== undefined) assessment.graph_calculator = dto.graph_calculator as any;
+    if (dto.xp_reward !== undefined) assessment.xp_reward = dto.xp_reward;
     if (dto.is_published !== undefined) assessment.is_published = dto.is_published;
 
     await assessment.save();
@@ -331,6 +313,16 @@ export class AssessmentsService {
     clientStartedAt?: string
   ): Promise<IStartAssessmentResponse> {
     const assessment = await AssessmentModel.findById(assessmentId);
+    if (!assessment) {
+      throw new AppError('Assessment not found', 404, ERROR_CODES.ASSESSMENT_NOT_FOUND_404);
+    }
+    if (!assessment.questions || assessment.questions.length === 0) {
+      throw new AppError(
+        'عذراً، هذا التقييم قيد الإعداد والمراجعة حالياً من قِبل المعلمة ولا توجد أسئلة مضافة بعد.',
+        400,
+        ERROR_CODES.VALIDATION_ERROR_400
+      );
+    }
     if (!assessment) {
       throw new AppError('Assessment not found', 404, ERROR_CODES.ASSESSMENT_NOT_FOUND_404);
     }
@@ -553,6 +545,20 @@ export class AssessmentsService {
     const serverStartedAt = submission ? submission.server_started_at : new Date(dto.client_started_at);
 
     // 3. Monotonic Timing & Anti-Cheat Audit
+    // 3.5 Enforce all questions answered (either MCQ choice or uploaded solution image)
+    const answeredIds = new Set([
+      ...(dto.mcq_answers || []).map((a) => a.question_id.toString()),
+      ...(dto.uploaded_solution_imgs || []).map((img) => (img.question_id ? img.question_id.toString() : ''))
+    ]);
+    const missingQuestions = cachedPayload.questions.filter((q) => !answeredIds.has(q.questionId));
+    if (missingQuestions.length > 0) {
+      throw new AppError(
+        'لا يمكن تسليم الامتحان أو الواجب بوجود أسئلة غير مجاب عنها! يرجى حل كافة الأسئلة قبل التسليم.',
+        400,
+        ERROR_CODES.VALIDATION_ERROR_400
+      );
+    }
+
     const timingAuditStrategy = new MonotonicTimingAuditStrategy();
     const auditResult = timingAuditStrategy.audit({
       elapsedTimeSec: dto.elapsed_time_sec,
@@ -601,6 +607,59 @@ export class AssessmentsService {
       assessmentTitleAr: cachedPayload.titleAr,
       assessmentTitleEn: cachedPayload.titleEn
     });
+    // 5b. Instant Submission Notification to Teacher (Eng. Heba Abdel-Wahab) & Parent
+    try {
+      const studentUser = await UserModel.findById(studentId).select('full_name student_code parent_phone').lean();
+      const sName = studentUser?.full_name || 'طالب';
+      const sCode = studentUser?.student_code ? ' (' + studentUser.student_code + ')' : '';
+
+      // Notify Teacher immediately
+      const adminUser = await UserModel.findOne({ role: ROLES.SUPER_ADMIN }).select('_id').lean();
+      if (adminUser) {
+        await NotificationModel.create({
+          recipient_id: adminUser._id as Types.ObjectId,
+          recipient_role: ROLES.SUPER_ADMIN,
+          alert_category: 'ADMIN_BATCHED_SUBMISSIONS',
+          title_ar: `تسليم واجب جديد: ${cachedPayload.titleAr}`,
+          title_en: `New Submission: ${cachedPayload.titleEn}`,
+          body_ar: `قام الطالب ${sName}${sCode} بتسليم إجاباته بنجاح وهو الآن بانتظار التصحيح والاعتماد.`,
+          body_en: `Student ${sName} has submitted ${cachedPayload.titleEn}.`,
+          action_url: '/admin',
+          is_read: false,
+          created_at: new Date()
+        });
+      }
+
+      // Notify Parent immediately
+      if (studentUser) {
+        const parentQuery: any[] = [{ linked_children: studentUser._id }];
+        if (studentUser.parent_phone) {
+          parentQuery.push({ phone: studentUser.parent_phone });
+          parentQuery.push({ phone_number: studentUser.parent_phone });
+        }
+        const parentUser = await UserModel.findOne({
+          role: ROLES.PARENT,
+          $or: parentQuery
+        }).select('_id').lean();
+
+        if (parentUser) {
+          await NotificationModel.create({
+            recipient_id: parentUser._id as Types.ObjectId,
+            recipient_role: ROLES.PARENT,
+            alert_category: 'STUDENT_NEW_ASSESSMENT',
+            title_ar: `تسليم واجب: ${cachedPayload.titleAr}`,
+            title_en: `Homework Submitted: ${cachedPayload.titleEn}`,
+            body_ar: `قام ابنكم ${sName} بتسليم إجابات ${cachedPayload.titleAr} بنجاح، وسيتم إشعاركم فور تصحيح الواجب واعتماد النتيجة.`,
+            body_en: `Your child ${sName} has submitted ${cachedPayload.titleEn}.`,
+            action_url: '/parent',
+            is_read: false,
+            created_at: new Date()
+          });
+        }
+      }
+    } catch (alertErr) {
+      console.warn('Failed to dispatch instant submission alert:', alertErr);
+    }
 
     const finalTotalScore = mcqAutoScore; // essay_manual_score = 0 until reviewed
 
@@ -738,7 +797,10 @@ export class AssessmentsService {
         { academic_term: 'ALL_TERMS' }
       ];
     }
-    if (!isSuperAdmin) filter.is_published = true;
+    if (!isSuperAdmin) {
+      filter.is_published = true;
+      filter['questions.0'] = { $exists: true };
+    }
 
     const queryBuilder = AssessmentModel.find(filter).sort({ createdAt: -1 });
 

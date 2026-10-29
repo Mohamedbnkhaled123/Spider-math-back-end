@@ -24,7 +24,8 @@ export class AdminLecturesController {
         googleDrivePdfFileId,
         isPrintAllowed,
         durationMinutes,
-        isFreeTrial
+        isFreeTrial,
+        xpReward
       } = req.body;
 
       const targetUnitId = unitId || unitPackageId;
@@ -81,7 +82,7 @@ export class AdminLecturesController {
         youtube_url: rawYoutube,
         video_duration_sec: durationSec,
         completion_threshold_pct: 85,
-        xp_reward_on_complete: 50,
+        xp_reward_on_complete: xpReward !== undefined ? Number(xpReward) : 50,
         pdf_materials: pdfMaterials,
         google_drive_pdf_id: googleDrivePdfFileId ? googleDrivePdfFileId.trim() : '',
         is_print_allowed: !!isPrintAllowed,
@@ -118,7 +119,8 @@ export class AdminLecturesController {
         isPrintAllowed,
         durationMinutes,
         isFreeTrial,
-        isPublished
+        isPublished,
+        xpReward
       } = req.body;
 
       const lecture = await LectureMaterialModel.findById(lectureId);
@@ -130,9 +132,13 @@ export class AdminLecturesController {
       if (titleEn) lecture.lecture_title_en = titleEn.trim();
       if (isFreeTrial !== undefined) lecture.is_free_trial = isFreeTrial;
       if (isPublished !== undefined) lecture.is_published = isPublished;
+      if (xpReward !== undefined) lecture.xp_reward_on_complete = Number(xpReward);
 
       if (youtubeUrl) {
         const cleanVideoId = CryptoProxyService.extractYoutubeId(youtubeUrl.trim());
+        if (!cleanVideoId) {
+          throw new AppError('يرجى إدخال رابط يوتيوب صالح للشرح (YouTube Video URL is invalid or ID could not be extracted)', 400, ERROR_CODES.BAD_REQUEST_400);
+        }
         lecture.youtube_encrypted_id = CryptoProxyService.encrypt(cleanVideoId);
         lecture.youtube_video_id = cleanVideoId;
         lecture.youtube_url = youtubeUrl.trim();

@@ -132,14 +132,19 @@ export class UnitsService {
       .select('-youtube_encrypted_id')
       .lean();
 
-    // Fetch ordered assessments with sanitized answer keys
-    const assessments = await AssessmentModel.find({
+    // Fetch ordered assessments with sanitized answer keys (hide empty assessments from students)
+    const assessmentsFilter: Record<string, any> = {
       unit_package_id: unitId,
       is_published: true
-    })
-      .sort({ createdAt: 1 })
-      .select('-questions.correct_option_index -questions.model_answer_text -questions.youtube_solution_url')
-      .lean();
+    };
+    if (!isSuperAdmin) {
+      assessmentsFilter['questions.0'] = { $exists: true };
+    }
+    const assessmentQuery = AssessmentModel.find(assessmentsFilter).sort({ createdAt: 1 });
+    if (!isSuperAdmin) {
+      assessmentQuery.select('-questions.correct_option_index -questions.model_answer_text -questions.youtube_solution_url');
+    }
+    const assessments = await assessmentQuery.lean();
 
     // Hydrate student progress if authenticated
     let progressMap = new Map<string, any>();
@@ -194,9 +199,21 @@ export class UnitsService {
       });
     }
 
+    // Calculate total submissions count per assessment
+    const assessmentIdsForCount = assessments.map((a) => a._id);
+    const totalSubmissionsCountMap = new Map<string, number>();
+    if (assessmentIdsForCount.length > 0) {
+      const allCounts = await SubmissionModel.aggregate([
+        { $match: { assessment_id: { $in: assessmentIdsForCount } } },
+        { $group: { _id: '$assessment_id', count: { $sum: 1 } } }
+      ]);
+      allCounts.forEach((c: any) => totalSubmissionsCountMap.set(c._id.toString(), c.count));
+    }
+
     const now = new Date();
 
     const hydratedAssessments = assessments.map((ass) => {
+      const totalSubsCount = totalSubmissionsCountMap.get(ass._id.toString()) || 0;
       const subs = submissionsByAssessment.get(ass._id.toString()) || [];
       const completedAttemptsCount = subs.filter((s: any) => s.sync_queue_status === 'SYNCED_ONLINE').length;
       const inProgressSub = subs.find((s: any) => s.sync_queue_status === 'IN_PROGRESS');
@@ -211,6 +228,7 @@ export class UnitsService {
 
       return {
         ...ass,
+        submissions_count: totalSubsCount,
         isAccessible: isSubscribed,
         studentAttemptStatus: {
           completedAttemptsCount,

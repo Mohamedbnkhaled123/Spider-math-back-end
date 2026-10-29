@@ -24,8 +24,8 @@ export const questionItemDtoSchema = z
     questionImageUrl: z.string().trim().nullable().optional(),
     question_image_size_kb: z.number().nullable().optional(),
     options: z.array(z.string().trim()).optional().default([]),
-    correct_option_index: z.coerce.number().int().min(0).optional(),
-    correctOptionIndex: z.coerce.number().int().min(0).optional(),
+    correct_option_index: z.union([z.coerce.number().int(), z.null()]).optional(),
+    correctOptionIndex: z.union([z.coerce.number().int(), z.null()]).optional(),
     points: z.coerce.number().positive().default(1),
     model_answer_text: z.string().trim().optional(),
     explanationAr: z.string().trim().optional(),
@@ -96,7 +96,9 @@ export const questionItemDtoSchema = z
     const qType = rawType === 'ESSAY' || rawType === 'ESSAY_PHOTO' ? 'ESSAY_PHOTO' : 'MCQ';
     const qText = (data.question_text || data.textAr || data.text || '').trim();
     const qImg = data.question_image_url || data.questionImageUrl || null;
-    const correctIdx = data.correct_option_index ?? data.correctOptionIndex ?? 0;
+    const rawCorrectIdx = data.correct_option_index ?? data.correctOptionIndex;
+    const correctIdx = qType === 'MCQ' ? Math.max(0, Number(rawCorrectIdx ?? 0)) : undefined;
+    const options = qType === 'MCQ' ? (data.options || []).map((o) => (o || '').trim()) : [];
     const modelAns = (data.model_answer_text || data.explanationAr || '').trim();
 
     return {
@@ -106,8 +108,8 @@ export const questionItemDtoSchema = z
       question_text: qText,
       question_image_url: qImg,
       question_image_size_kb: data.question_image_size_kb || null,
-      options: (data.options || []).map((o) => (o || '').trim()),
-      correct_option_index: correctIdx,
+      options,
+      ...(correctIdx !== undefined ? { correct_option_index: correctIdx } : {}),
       points: data.points || 1,
       model_answer_text: modelAns,
       youtube_solution_url: data.youtube_solution_url || data.youtubeSolutionUrl || null
