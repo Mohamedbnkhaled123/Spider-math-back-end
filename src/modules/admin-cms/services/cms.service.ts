@@ -39,19 +39,7 @@ export class CmsService {
           ],
           hero_video_youtube_id: null
         },
-        schedules_table: [
-          {
-            curriculum: 'EGYPTIAN',
-            grade_level: 'SEC_3',
-            academic_term: 'TERM_1',
-            days_ar: 'الأحد والثلاثاء',
-            days_en: 'Sun & Tue',
-            dayOfWeek: 'الأحد والثلاثاء',
-            time_slot: '07:00 م - 09:00 م',
-            lecture_subject: 'تفاضل وتكامل وحساب مثلثات',
-            is_active: true
-          }
-        ],
+        schedules_table: [],
         testimonials_items: [],
         contact_channels: {
           subscription_whatsapp: '01012345678',
@@ -92,10 +80,12 @@ export class CmsService {
         term: s.academic_term || s.term,
         dayOfWeek: s.dayOfWeek || s.days_ar,
         timeSlot: s.time_slot || s.timeSlot,
-        lectureSubject: s.lecture_subject || s.lectureSubject || 'تفاضل وتكامل وحساب مثلثات'
+        lectureSubject: s.lecture_subject || s.lectureSubject || ''
       })),
       activeGrades: config.active_grades || ['SEC_3'],
-      active_grades: config.active_grades || ['SEC_3']
+      active_grades: config.active_grades || ['SEC_3'],
+      landingUnitIds: config.landing_unit_ids || [],
+      landing_unit_ids: config.landing_unit_ids || []
     };
 
     // Populate RAM cache
@@ -160,6 +150,11 @@ export class CmsService {
       updatePayload.teacher_profile = dto.teacher_profile;
     }
 
+    const landingUnits = (dto as any).landing_unit_ids ?? (dto as any).landingUnitIds;
+    if (landingUnits !== undefined && Array.isArray(landingUnits)) {
+      updatePayload.landing_unit_ids = landingUnits;
+    }
+
     const scheds = dto.schedules_table ?? dto.schedulesTable;
     if (scheds && Array.isArray(scheds)) {
       updatePayload.schedules_table = scheds.map((s: any) => ({
@@ -170,7 +165,7 @@ export class CmsService {
         days_en: s.days_en || s.daysEn || 'Sun & Tue',
         dayOfWeek: s.dayOfWeek || s.days_ar || 'الأحد والثلاثاء',
         time_slot: s.time_slot || s.timeSlot || '07:00 م - 09:00 م',
-        lecture_subject: s.lecture_subject || s.lectureSubject || 'تفاضل وتكامل وحساب مثلثات',
+        lecture_subject: s.lecture_subject || s.lectureSubject || '',
         is_active: s.is_active ?? true
       }));
     }

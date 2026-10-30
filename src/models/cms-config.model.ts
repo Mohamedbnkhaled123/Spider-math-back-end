@@ -88,6 +88,7 @@ export interface ICmsConfig {
   assessment_batch_trackers: Map<string, number>;
   analytics_snapshot: IAnalyticsSnapshot;
   active_grades: string[];
+  landing_unit_ids?: string[];
   curricula_tracks?: ICurriculumTrackItem[];
   createdAt: Date;
   updatedAt: Date;
@@ -246,6 +247,10 @@ const CmsConfigSchema = new Schema<ICmsConfigDocument>(
     active_grades: {
       type: [String],
       default: ['SEC_3']
+    },
+    landing_unit_ids: {
+      type: [String],
+      default: []
     },
     curricula_tracks: {
       type: [
