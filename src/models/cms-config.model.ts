@@ -2,6 +2,7 @@ import { Schema, model, Document } from 'mongoose';
 import {
   CURRICULUMS,
   ALL_GRADE_LEVELS,
+  ACADEMIC_TERMS,
   CurriculumType,
   GradeLevelType,
   AcademicTermType
