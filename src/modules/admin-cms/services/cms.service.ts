@@ -29,6 +29,7 @@ export class CmsService {
         announcement_banner_text: '✦ خصم 20% لفترة محدودة على اشتراك باقات الترم الأول بمناسبة تدشين المنصة ✦',
         is_announcement_active: true,
         active_academic_year: '2026 / 2027',
+        active_academic_term: 'TERM_1',
         teacher_profile: {
           bio_ar: 'المهندسة هبة عبدالوهاب — متخصصة في تدريس الرياضيات للمناهج المصرية والخليجية والدولية والأمريكية بأحدث الأساليب التفاعلية.',
           bio_en: 'Eng. Heba Abdel-Wahab — Leading Mathematics Specialist across Egyptian, Gulf, International, and American Curriculums.',
@@ -82,6 +83,8 @@ export class CmsService {
       announcementBannerText: config.announcement_banner_text || '✦ خصم 20% لفترة محدودة على اشتراك باقات الترم الأول بمناسبة تدشين المنصة ✦',
       isAnnouncementActive: config.is_announcement_active ?? true,
       activeAcademicYear: config.active_academic_year || '2026 / 2027',
+      activeAcademicTerm: config.active_academic_term || 'TERM_1',
+      active_academic_term: config.active_academic_term || 'TERM_1',
       supportWhatsapp: config.contact_channels?.support_whatsapp || '01012345678',
       schedulesTable: (config.schedules_table || []).map((s: any) => ({
         curriculum: s.curriculum,
@@ -134,6 +137,9 @@ export class CmsService {
 
     const year = dto.active_academic_year ?? dto.activeAcademicYear;
     if (year !== undefined) updatePayload.active_academic_year = year;
+
+    const term = dto.active_academic_term ?? (dto as any).activeAcademicTerm;
+    if (term !== undefined) updatePayload.active_academic_term = term;
 
     const whatsapp = dto.support_whatsapp ?? dto.supportWhatsapp;
     if (whatsapp !== undefined) {

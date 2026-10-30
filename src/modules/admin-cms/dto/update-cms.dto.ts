@@ -61,6 +61,8 @@ export const updateCmsDtoSchema = z.object({
   isAnnouncementActive: z.boolean().optional(),
   active_academic_year: z.string().optional(),
   activeAcademicYear: z.string().optional(),
+  active_academic_term: z.enum(['TERM_1', 'TERM_2']).optional(),
+  activeAcademicTerm: z.enum(['TERM_1', 'TERM_2']).optional(),
   support_whatsapp: z.string().optional(),
   supportWhatsapp: z.string().optional(),
   teacher_profile: z

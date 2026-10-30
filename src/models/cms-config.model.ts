@@ -79,6 +79,7 @@ export interface ICmsConfig {
   announcement_banner_text: string;
   is_announcement_active: boolean;
   active_academic_year: string;
+  active_academic_term: AcademicTermType;
   teacher_profile: ITeacherProfile;
   schedules_table: IScheduleItem[];
   testimonials_items: ITestimonialItem[];
@@ -203,6 +204,11 @@ const CmsConfigSchema = new Schema<ICmsConfigDocument>(
       type: String,
       default: '2026 / 2027',
       trim: true
+    },
+    active_academic_term: {
+      type: String,
+      enum: ACADEMIC_TERMS,
+      default: 'TERM_1'
     },
     teacher_profile: {
       bio_ar: { type: String, default: '', trim: true },
