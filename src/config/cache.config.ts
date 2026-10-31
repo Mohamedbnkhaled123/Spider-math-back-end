@@ -94,13 +94,13 @@ export const studentPresenceCache = new LruCacheStore<IStudentPresenceState>({
 });
 
 /**
- * 3. Public Landing Page CMS Cache
- * Caches the main site configuration, bio, schedules, and testimonials.
- * TTL: 10 minutes (600,000 ms) | Max entries: 10
- * Shields MongoDB from anonymous landing page traffic spikes.
+ * 3. Public Discovery & Landing Page CMS Cache
+ * Caches the main site configuration, bio, schedules, curriculum tree, and public unit catalog queries.
+ * TTL: 10 minutes (600,000 ms) | Max entries: 1,000
+ * Shields MongoDB from anonymous traffic and load-testing spikes.
  */
-export const publicCmsCache = new LruCacheStore<Record<string, unknown>>({
-  max: 10,
+export const publicCmsCache = new LruCacheStore<any>({
+  max: 1000,
   ttl: 10 * 60 * 1000 // 10 minutes
 });
 

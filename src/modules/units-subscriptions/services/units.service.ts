@@ -27,6 +27,16 @@ export class UnitsService {
    * Scoped by the 5-level compound index and optionally hydrated with isSubscribed flag.
    */
   public async getUnitsCatalog(query: UnitsQueryDto, studentId?: string) {
+    const isAnonymousVisitor = !studentId || !Types.ObjectId.isValid(studentId);
+    const cacheKey = `units_catalog:${query.curriculum || 'ALL'}:${query.gradeLevel || 'ALL'}:${query.term || 'ALL'}:${query.type || 'ALL'}`;
+
+    if (isAnonymousVisitor) {
+      const cached = publicCmsCache.get(cacheKey) as any[] | undefined;
+      if (cached) {
+        return cached;
+      }
+    }
+
     const filter: Record<string, unknown> = { is_published: true };
 
     if (studentId && Types.ObjectId.isValid(studentId)) {
@@ -55,8 +65,10 @@ export class UnitsService {
       .sort({ order_index: 1, createdAt: 1 })
       .lean();
 
-    if (!studentId || !Types.ObjectId.isValid(studentId)) {
-      return units.map((u) => ({ ...u, isSubscribed: false }));
+    if (isAnonymousVisitor) {
+      const mapped = units.map((u) => ({ ...u, isSubscribed: false }));
+      publicCmsCache.set(cacheKey, mapped as any, 10 * 60 * 1000); // 10 minutes TTL
+      return mapped;
     }
 
     // Hydrate subscription status for authenticated student

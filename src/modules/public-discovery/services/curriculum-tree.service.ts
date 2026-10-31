@@ -8,6 +8,7 @@ import {
 } from '../../../common/constants/curriculum-hierarchy.constant';
 import { UnitPackageModel } from '../../../models/unit-package.model';
 import { AssessmentModel } from '../../../models/assessment.model';
+import { publicCmsCache } from '../../../config/cache.config';
 
 export interface ITermTreeItem {
   term: AcademicTermType;
@@ -31,12 +32,21 @@ export interface ICurriculumTreeItem {
   hasPublishedUnits: boolean;
 }
 
+const CURRICULUM_TREE_CACHE_KEY = 'PUBLIC_CURRICULUM_TREE';
+const CURRICULUM_TREE_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
 export class CurriculumTreeService {
   /**
    * Generates the dynamic 5-level curriculum taxonomy tree.
    * Hydrates availability flags directly from MongoDB indexes.
+   * Shielded by publicCmsCache (10-minute TTL) for sub-millisecond p95 latency under high concurrency.
    */
   public async getDynamicCurriculumTree(): Promise<ICurriculumTreeItem[]> {
+    const cached = publicCmsCache.get(CURRICULUM_TREE_CACHE_KEY) as ICurriculumTreeItem[] | undefined;
+    if (cached) {
+      return cached;
+    }
+
     // 1. Aggregate published unit package counts per (curriculum, grade_level, academic_term)
     const unitStats = await UnitPackageModel.aggregate([
       { $match: { is_published: true } },
@@ -98,24 +108,22 @@ export class CurriculumTreeService {
 
     // 3. Assemble the Canonical 4-Curriculum Tree
     const tree: ICurriculumTreeItem[] = CURRICULUMS.map((curriculum) => {
-      const gradesForCurriculum = GRADE_LEVELS_BY_CURRICULUM[curriculum] || [];
+      const allowedGrades = GRADE_LEVELS_BY_CURRICULUM[curriculum] || [];
       let curriculumTotalUnits = 0;
 
-      const gradeLevels: IGradeLevelTreeItem[] = gradesForCurriculum.map((gradeLevel) => {
+      const gradeLevels: IGradeLevelTreeItem[] = allowedGrades.map((gradeLevel) => {
         let gradeTotalUnits = 0;
 
         const terms: ITermTreeItem[] = ACADEMIC_TERMS.map((term) => {
           const key = `${curriculum}:${gradeLevel}:${term}`;
-          const count = unitCountsMap.get(key) || 0;
-          const hasPlacement = placementMap.get(key) || false;
-
-          gradeTotalUnits += count;
+          const unitsCount = unitCountsMap.get(key) || 0;
+          gradeTotalUnits += unitsCount;
 
           return {
             term,
-            publishedUnitsCount: count,
-            hasPublishedUnits: count > 0,
-            hasPlacementTest: hasPlacement
+            publishedUnitsCount: unitsCount,
+            hasPublishedUnits: unitsCount > 0,
+            hasPlacementTest: placementMap.get(key) ?? false
           };
         });
 
@@ -138,7 +146,17 @@ export class CurriculumTreeService {
       };
     });
 
+    // Populate cache
+    publicCmsCache.set(CURRICULUM_TREE_CACHE_KEY, tree as any, CURRICULUM_TREE_CACHE_TTL_MS);
+
     return tree;
+  }
+
+  /**
+   * Invalidates cached curriculum tree upon admin unit/assessment mutations.
+   */
+  public invalidateCache(): void {
+    publicCmsCache.delete(CURRICULUM_TREE_CACHE_KEY);
   }
 }
 
