@@ -7,6 +7,8 @@
     "dev": "ts-node-dev --respawn --transpile-only --exit-child src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
+    "k6:setup": "node ../docs-and-testing/load-tests/setup-k6-fixtures.js",
+    "k6:cleanup": "node ../docs-and-testing/load-tests/cleanup-k6-fixtures.js",
     "lint": "eslint src/**/*.ts",
     "type-check": "tsc --noEmit"
   },
