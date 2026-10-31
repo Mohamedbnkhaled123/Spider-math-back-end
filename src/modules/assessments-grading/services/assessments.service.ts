@@ -52,6 +52,8 @@ export interface ISyncSubmissionResponse {
 /**
  * Extended cache payload to include hasEssayQuestions, timeLimitMinutes and localized titles for batch alerts.
  */
+let cachedSuperAdminId: Types.ObjectId | null = null;
+
 interface IExtendedAssessmentPayload extends IAssessmentAnswerKeyPayload {
   hasEssayQuestions: boolean;
   timeLimitMinutes: number;
@@ -512,18 +514,15 @@ export class AssessmentsService {
       assessmentAnswerKeyCache.set(assessmentId, cachedPayload);
     }
 
-    // 2. Idempotency Check: Fetch submission
-    let submission = await SubmissionModel.findOne({
-      idempotency_key: dto.idempotency_key,
-      student_id: new Types.ObjectId(studentId)
-    });
+    // 2. Idempotency Check & Single Consolidated Query
+    const existingSubs = await SubmissionModel.find({
+      student_id: new Types.ObjectId(studentId),
+      assessment_id: new Types.ObjectId(assessmentId)
+    }).sort({ attempt_number: -1 });
 
+    let submission = existingSubs.find((s) => s.idempotency_key === dto.idempotency_key);
     if (!submission) {
-      submission = await SubmissionModel.findOne({
-        student_id: new Types.ObjectId(studentId),
-        assessment_id: new Types.ObjectId(assessmentId),
-        sync_queue_status: 'IN_PROGRESS'
-      }).sort({ attempt_number: -1 });
+      submission = existingSubs.find((s) => s.sync_queue_status === 'IN_PROGRESS');
     }
 
     if (submission && submission.sync_queue_status === 'SYNCED_ONLINE') {
@@ -601,65 +600,73 @@ export class AssessmentsService {
     const resultVisibility: 'HIDDEN_PENDING_TEACHER' | 'PUBLISHED_TO_STUDENT_AND_PARENT' = 'HIDDEN_PENDING_TEACHER';
     const xpAwarded = 0;
 
-    // Record submission in BatchAlertService to aggregate teacher alerts
-    await BatchAlertService.recordSubmissionForGrading({
-      assessmentId: new Types.ObjectId(assessmentId),
-      assessmentTitleAr: cachedPayload.titleAr,
-      assessmentTitleEn: cachedPayload.titleEn
-    });
-    // 5b. Instant Submission Notification to Teacher (Eng. Heba Abdel-Wahab) & Parent
-    try {
-      const studentUser = await UserModel.findById(studentId).select('full_name student_code parent_phone').lean();
-      const sName = studentUser?.full_name || 'طالب';
-      const sCode = studentUser?.student_code ? ' (' + studentUser.student_code + ')' : '';
-
-      // Notify Teacher immediately
-      const adminUser = await UserModel.findOne({ role: ROLES.SUPER_ADMIN }).select('_id').lean();
-      if (adminUser) {
-        await NotificationModel.create({
-          recipient_id: adminUser._id as Types.ObjectId,
-          recipient_role: ROLES.SUPER_ADMIN,
-          alert_category: 'ADMIN_BATCHED_SUBMISSIONS',
-          title_ar: `تسليم واجب جديد: ${cachedPayload.titleAr}`,
-          title_en: `New Submission: ${cachedPayload.titleEn}`,
-          body_ar: `قام الطالب ${sName}${sCode} بتسليم إجاباته بنجاح وهو الآن بانتظار التصحيح والاعتماد.`,
-          body_en: `Student ${sName} has submitted ${cachedPayload.titleEn}.`,
-          action_url: '/admin',
-          is_read: false,
-          created_at: new Date()
+    // Asynchronously dispatch notifications without blocking HTTP response (0ms latency impact)
+    setImmediate(async () => {
+      try {
+        await BatchAlertService.recordSubmissionForGrading({
+          assessmentId: new Types.ObjectId(assessmentId),
+          assessmentTitleAr: cachedPayload.titleAr,
+          assessmentTitleEn: cachedPayload.titleEn
         });
-      }
 
-      // Notify Parent immediately
-      if (studentUser) {
-        const parentQuery: any[] = [{ linked_children: studentUser._id }];
-        if (studentUser.parent_phone) {
-          parentQuery.push({ phone: studentUser.parent_phone });
-          parentQuery.push({ phone_number: studentUser.parent_phone });
+        const studentUser = await UserModel.findById(studentId).select('full_name student_code parent_phone').lean();
+        const sName = studentUser?.full_name || 'طالب';
+        const sCode = studentUser?.student_code ? ' (' + studentUser.student_code + ')' : '';
+
+        // Notify Teacher immediately with cached admin ID
+        if (!cachedSuperAdminId) {
+          const adminUser = await UserModel.findOne({ role: ROLES.SUPER_ADMIN }).select('_id').lean();
+          if (adminUser) {
+            cachedSuperAdminId = adminUser._id as Types.ObjectId;
+          }
         }
-        const parentUser = await UserModel.findOne({
-          role: ROLES.PARENT,
-          $or: parentQuery
-        }).select('_id').lean();
 
-        if (parentUser) {
+        if (cachedSuperAdminId) {
           await NotificationModel.create({
-            recipient_id: parentUser._id as Types.ObjectId,
-            recipient_role: ROLES.PARENT,
-            alert_category: 'STUDENT_NEW_ASSESSMENT',
-            title_ar: `تسليم واجب: ${cachedPayload.titleAr}`,
-            title_en: `Homework Submitted: ${cachedPayload.titleEn}`,
-            body_ar: `قام ابنكم ${sName} بتسليم إجابات ${cachedPayload.titleAr} بنجاح، وسيتم إشعاركم فور تصحيح الواجب واعتماد النتيجة.`,
-            body_en: `Your child ${sName} has submitted ${cachedPayload.titleEn}.`,
-            action_url: '/parent',
+            recipient_id: cachedSuperAdminId,
+            recipient_role: ROLES.SUPER_ADMIN,
+            alert_category: 'ADMIN_BATCHED_SUBMISSIONS',
+            title_ar: `تسليم واجب جديد: ${cachedPayload.titleAr}`,
+            title_en: `New Submission: ${cachedPayload.titleEn}`,
+            body_ar: `قام الطالب ${sName}${sCode} بتسليم إجاباته بنجاح وهو الآن بانتظار التصحيح والاعتماد.`,
+            body_en: `Student ${sName} has submitted ${cachedPayload.titleEn}.`,
+            action_url: '/admin',
             is_read: false,
             created_at: new Date()
           });
         }
+
+        // Notify Parent immediately
+        if (studentUser) {
+          const parentQuery: any[] = [{ linked_children: studentUser._id }];
+          if (studentUser.parent_phone) {
+            parentQuery.push({ phone: studentUser.parent_phone });
+            parentQuery.push({ phone_number: studentUser.parent_phone });
+          }
+          const parentUser = await UserModel.findOne({
+            role: ROLES.PARENT,
+            $or: parentQuery
+          }).select('_id').lean();
+
+          if (parentUser) {
+            await NotificationModel.create({
+              recipient_id: parentUser._id as Types.ObjectId,
+              recipient_role: ROLES.PARENT,
+              alert_category: 'STUDENT_NEW_ASSESSMENT',
+              title_ar: `تسليم واجب: ${cachedPayload.titleAr}`,
+              title_en: `Homework Submitted: ${cachedPayload.titleEn}`,
+              body_ar: `قام ابنكم ${sName} بتسليم إجابات ${cachedPayload.titleAr} بنجاح، وسيتم إشعاركم فور تصحيح الواجب واعتماد النتيجة.`,
+              body_en: `Your child ${sName} has submitted ${cachedPayload.titleEn}.`,
+              action_url: '/parent',
+              is_read: false,
+              created_at: new Date()
+            });
+          }
+        }
+      } catch (alertErr) {
+        console.warn('Failed to dispatch background instant submission alert:', alertErr);
       }
-    } catch (alertErr) {
-      console.warn('Failed to dispatch instant submission alert:', alertErr);
-    }
+    });
 
     const finalTotalScore = mcqAutoScore; // essay_manual_score = 0 until reviewed
 
@@ -686,43 +693,58 @@ export class AssessmentsService {
       submission.final_total_score = finalTotalScore;
       await submission.save();
     } else {
-      const lastAttempt = await SubmissionModel.findOne({
-        student_id: new Types.ObjectId(studentId),
-        assessment_id: new Types.ObjectId(assessmentId)
-      }).sort({ attempt_number: -1 });
+      const lastSub = existingSubs[0];
+      const nextAttemptNumber = (lastSub?.attempt_number ?? 0) + 1;
 
-      const nextAttemptNumber = lastAttempt ? lastAttempt.attempt_number + 1 : 1;
-
-      submission = await SubmissionModel.create({
-        idempotency_key: dto.idempotency_key,
-        assessment_id: new Types.ObjectId(assessmentId),
-        student_id: new Types.ObjectId(studentId),
-        unit_package_id: new Types.ObjectId(),
-        attempt_number: nextAttemptNumber,
-        is_offline_cached: dto.is_offline_cached,
-        sync_queue_status: 'SYNCED_ONLINE',
-        reconnect_sync_at: dto.is_offline_cached ? new Date() : null,
-        offline_disconnect_count: dto.offline_disconnect_count,
-        server_started_at: serverStartedAt,
-        client_started_at: new Date(dto.client_started_at),
-        client_submitted_at: new Date(dto.client_submitted_at),
-        server_received_at: serverReceivedAt,
-        elapsed_time_sec: dto.elapsed_time_sec,
-        is_suspicious_fast_solve: auditResult.isSuspiciousFastSolve,
-        clock_tamper_detected: auditResult.clockTamperDetected,
-        mcq_answers: gradedMcqAnswers,
-        uploaded_solution_imgs: dto.uploaded_solution_imgs.map((img) => ({
-          question_id: img.question_id ? new Types.ObjectId(img.question_id) : undefined,
-          image_url: img.image_url,
-          size_kb: img.size_kb,
-          rotation_deg: img.rotation_deg ?? 0
-        })),
-        result_visibility: resultVisibility,
-        mcq_auto_score: mcqAutoScore,
-        essay_manual_score: 0,
-        final_total_score: finalTotalScore,
-        custom_mistake_cases: []
-      });
+      try {
+        submission = await SubmissionModel.create({
+          idempotency_key: dto.idempotency_key,
+          assessment_id: new Types.ObjectId(assessmentId),
+          student_id: new Types.ObjectId(studentId),
+          unit_package_id: new Types.ObjectId(),
+          attempt_number: nextAttemptNumber,
+          is_offline_cached: dto.is_offline_cached,
+          sync_queue_status: 'SYNCED_ONLINE',
+          reconnect_sync_at: dto.is_offline_cached ? new Date() : null,
+          offline_disconnect_count: dto.offline_disconnect_count,
+          server_started_at: serverStartedAt,
+          client_started_at: new Date(dto.client_started_at),
+          client_submitted_at: new Date(dto.client_submitted_at),
+          server_received_at: serverReceivedAt,
+          elapsed_time_sec: dto.elapsed_time_sec,
+          is_suspicious_fast_solve: auditResult.isSuspiciousFastSolve,
+          clock_tamper_detected: auditResult.clockTamperDetected,
+          mcq_answers: gradedMcqAnswers,
+          uploaded_solution_imgs: dto.uploaded_solution_imgs.map((img) => ({
+            question_id: img.question_id ? new Types.ObjectId(img.question_id) : undefined,
+            image_url: img.image_url,
+            size_kb: img.size_kb,
+            rotation_deg: img.rotation_deg ?? 0
+          })),
+          result_visibility: resultVisibility,
+          mcq_auto_score: mcqAutoScore,
+          essay_manual_score: 0,
+          final_total_score: finalTotalScore,
+          custom_mistake_cases: []
+        });
+      } catch (err: any) {
+        if (err.code === 11000) {
+          const raceSub = await SubmissionModel.findOne({
+            student_id: new Types.ObjectId(studentId),
+            $or: [
+              { idempotency_key: dto.idempotency_key },
+              { assessment_id: new Types.ObjectId(assessmentId), attempt_number: nextAttemptNumber }
+            ]
+          });
+          if (raceSub) {
+            submission = raceSub;
+          } else {
+            throw err;
+          }
+        } else {
+          throw err;
+        }
+      }
     }
 
     return {

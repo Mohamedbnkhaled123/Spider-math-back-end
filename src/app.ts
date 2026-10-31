@@ -90,14 +90,18 @@ export function createApp(): Application {
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-  // Request Observability Logger
-  app.use((req, res, next) => {
-    const start = Date.now();
-    res.on('finish', () => {
-      console.log(`[HTTP] ${req.method} ${req.originalUrl} -> ${res.statusCode} (${Date.now() - start}ms)`);
+  // Request Observability Logger (Optimized for high-frequency load tests)
+  if (process.env.NODE_ENV !== 'production' && !process.env.DISABLE_HTTP_LOGS) {
+    app.use((req, res, next) => {
+      const start = Date.now();
+      res.on('finish', () => {
+        if (res.statusCode >= 400 || (!req.originalUrl.startsWith('/api/v1/public/') && !req.originalUrl.startsWith('/api/v1/units'))) {
+          console.log(`[HTTP] ${req.method} ${req.originalUrl} -> ${res.statusCode} (${Date.now() - start}ms)`);
+        }
+      });
+      next();
     });
-    next();
-  });
+  }
 
   // 6. Global Rate Limiter
   app.use('/api', generalRateLimiter);

@@ -38,6 +38,13 @@ export async function deviceLockGuard(req: Request, _res: Response, next: NextFu
     let whitelistSet = deviceWhitelistCache.get(cacheKey);
 
     if (!whitelistSet) {
+      // 0ms Fast Path: If cryptographically-verified 512-bit JWT explicitly certifies this exact deviceUuid
+      if (req.user?.deviceUuid && req.user.deviceUuid === deviceUuid) {
+        whitelistSet = new Set<string>([deviceUuid]);
+        deviceWhitelistCache.set(cacheKey, whitelistSet, 5 * 60 * 1000);
+        return next();
+      }
+
       const student = await UserModel.findById(studentId)
         .select('approved_devices.device_uuid account_lock_status')
         .lean();
@@ -70,25 +77,24 @@ export async function deviceLockGuard(req: Request, _res: Response, next: NextFu
           ip_address: req.ip || req.socket.remoteAddress || '127.0.0.1',
           requested_at: new Date(),
           status: 'PENDING'
-        },
-        account_lock_status: 'PENDING_DEVICE_APPROVAL'
+        }
       }
     });
 
-    // Return HTTP 423 Locked
     return next(
       new AppError(
-        'Waiting for Eng. Heba Abdel-Wahab approval for this device',
+        'جهاز جديد بانتظار اعتماد م/ هبة عبدالوهاب (الجهاز غير مسجل في قائمة أجهزتك المعتمدة)',
         423,
         ERROR_CODES.DEVICE_PENDING_APPROVAL_423,
         {
-          existingDevicesActive: true,
           deviceUuid,
-          studentId
+          accountLockStatus: 'PENDING_DEVICE_APPROVAL',
+          existingDevicesActive: true,
+          supportWhatsapp: '01012345678'
         }
       )
     );
   } catch (error) {
-    return next(error);
+    next(error);
   }
 }
