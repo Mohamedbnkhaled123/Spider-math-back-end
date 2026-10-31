@@ -24,17 +24,21 @@ function createInMemoryRateLimiter(options: {
   });
 
   return (req: Request, res: Response, next: NextFunction): void => {
-    // Determine client identifier: prefers forwarded-for behind proxies/Vercel
+    // Determine client identifier: prefers device UUID (for multi-student WiFi & load testing),
+    // or forwarded-for behind proxies/Vercel, or socket remote address.
+    const deviceUuid = (req.headers['x-device-uuid'] as string)?.trim();
     const clientIp =
       (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
       req.socket.remoteAddress ||
       'unknown-ip';
 
+    const clientKey = deviceUuid ? `dev_${deviceUuid}` : `ip_${clientIp}`;
+
     const now = Date.now();
-    const existing = cache.get(clientIp);
+    const existing = cache.get(clientKey);
 
     if (!existing || now > existing.resetTimeMs) {
-      cache.set(clientIp, {
+      cache.set(clientKey, {
         count: 1,
         resetTimeMs: now + options.windowMs
       });
@@ -61,7 +65,7 @@ function createInMemoryRateLimiter(options: {
     }
 
     existing.count += 1;
-    cache.set(clientIp, existing);
+    cache.set(clientKey, existing);
 
     res.setHeader('X-RateLimit-Limit', options.maxRequests);
     res.setHeader('X-RateLimit-Remaining', Math.max(0, options.maxRequests - existing.count));
@@ -77,7 +81,7 @@ function createInMemoryRateLimiter(options: {
 export const generalRateLimiter = createInMemoryRateLimiter({
   windowMs: 15 * 60 * 1000,
   maxRequests: 300,
-  errorMessage: 'Too many requests from this IP, please try again after 15 minutes.',
+  errorMessage: 'Too many requests from this device or network, please try again after 15 minutes.',
   errorCode: ERROR_CODES.TOO_MANY_REQUESTS_429
 });
 
