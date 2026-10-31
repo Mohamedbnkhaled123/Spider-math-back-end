@@ -17,8 +17,12 @@ async function bootstrap(): Promise<void> {
 
     // Only start server listening if not running in a Vercel serverless environment
     if (process.env.VERCEL !== '1') {
-      server.listen(env.PORT, () => {
-        console.log(`[Server] HTTP API Gateway listening on: http://localhost:${env.PORT}`);
+      server.maxConnections = 20000;
+      server.keepAliveTimeout = 70000;
+      server.headersTimeout = 71000;
+
+      server.listen(Number(env.PORT), 8192, () => {
+        console.log(`[Server] HTTP API Gateway listening on: http://localhost:${env.PORT} (MaxConn: 20000, Backlog: 8192)`);
         console.log(`[Security] 512-bit JWT & 256-bit AES-256-GCM cipher loaded.`);
         console.log(`[Health] Live probe available at: http://localhost:${env.PORT}/api/v1/health`);
       });
