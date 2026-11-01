@@ -12,7 +12,9 @@ export const activateSubscriptionDtoSchema = z.object({
   unit_id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid unit_id ObjectId').optional(),
   pricePaidEgp: z.number().min(0).optional(),
   price_paid_egp: z.number().min(0).optional(),
-  validityDays: z.number().int().min(1).max(365).optional()
+  validityDays: z.number().int().min(1).max(365).optional(),
+  accessScope: z.enum(['FULL', 'ASSESSMENTS_ONLY']).optional(),
+  access_scope: z.enum(['FULL', 'ASSESSMENTS_ONLY']).optional()
 }).superRefine((data, ctx) => {
   const resolvedStudent = data.studentId || data.student_id || data.studentCode || data.student_code;
   if (!resolvedStudent) {

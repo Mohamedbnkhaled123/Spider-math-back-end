@@ -31,6 +31,7 @@ export const submissionSyncDtoSchema = z.object({
   client_submitted_at: z.string().datetime().default(() => new Date().toISOString()),
   elapsed_time_sec: z.coerce.number().min(0, 'elapsed_time_sec cannot be negative'),
 
+  is_auto_submit: z.boolean().optional().default(false),
   is_offline_cached: z.boolean().default(false),
   offline_disconnect_count: z.coerce.number().int().min(0).default(0)
 });

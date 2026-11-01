@@ -92,13 +92,12 @@ export class SubscriptionsService {
       throw new AppError('Unit package not found', 404, ERROR_CODES.RESOURCE_NOT_FOUND_404);
     }
 
-    // Mark student as having active subscription
-    student.has_active_subscription = true;
-    await student.save();
+    // Mark student as having active subscription via atomic update at line 125 below
 
     const validityDays = dto.validityDays || unit.validity_days || 90;
     const expiresAt = new Date(Date.now() + validityDays * 24 * 60 * 60 * 1000);
     const pricePaid = (dto.pricePaidEgp !== undefined ? dto.pricePaidEgp : dto.price_paid_egp) ?? unit.price_egp;
+    const accessScope = dto.accessScope || dto.access_scope || 'FULL';
 
     const subscription = await SubscriptionModel.findOneAndUpdate(
       { student_id: student._id, unit_package_id: unit._id },
@@ -109,6 +108,7 @@ export class SubscriptionsService {
           grade_level: unit.grade_level,
           academic_term: unit.academic_term,
           subscription_status: 'ACTIVE',
+          access_scope: accessScope,
           price_paid_egp: pricePaid,
           activated_by: adminId,
           activated_at: new Date(),

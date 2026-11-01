@@ -244,6 +244,17 @@ const AssessmentSchema = new Schema<IAssessmentDocument>(
   }
 );
 
+// Automatic Total Points Calculation Hook
+AssessmentSchema.pre('save', function (this: any, next: any) {
+  if (Array.isArray(this.questions) && this.questions.length > 0) {
+    const calculated = this.questions.reduce((sum: number, q: any) => sum + (Number(q.points) || 1), 0);
+    if (!this.total_points || this.total_points !== calculated) {
+      this.total_points = calculated;
+    }
+  }
+  next();
+});
+
 // Unit & Lesson Quizzes/Homeworks Compound Index
 AssessmentSchema.index({
   unit_package_id: 1,

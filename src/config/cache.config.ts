@@ -64,18 +64,18 @@ export class LruCacheStore<T extends {} = Record<string, unknown>> implements IC
 /**
  * 1. Approved Device Whitelist Cache
  * Caches Set of approved device UUIDs per student.
- * TTL: 5 minutes (300,000 ms) | Max entries: 3,000
+ * TTL: 30 minutes (1,800,000 ms) | Max entries: 10,000
  * Invalidated immediately upon Super Admin device approval/revocation.
  */
 export const deviceWhitelistCache = new LruCacheStore<Set<string>>({
-  max: 3000,
-  ttl: 5 * 60 * 1000 // 5 minutes
+  max: 10000,
+  ttl: 30 * 60 * 1000 // 30 minutes
 });
 
 /**
  * 2. Real-Time Student Presence Cache
  * Tracks real-time active lesson, position, and timestamp without MongoDB write load.
- * TTL: 45 seconds (45,000 ms) | Max entries: 5,000
+ * TTL: 45 seconds (45,000 ms) | Max entries: 10,000
  * Generates 0 database writes for live parent dashboard visibility.
  */
 export interface IStudentPresenceState {
@@ -89,26 +89,26 @@ export interface IStudentPresenceState {
 }
 
 export const studentPresenceCache = new LruCacheStore<IStudentPresenceState>({
-  max: 5000,
+  max: 10000,
   ttl: 45 * 1000 // 45 seconds
 });
 
 /**
  * 3. Public Discovery & Landing Page CMS Cache
  * Caches the main site configuration, bio, schedules, curriculum tree, and public unit catalog queries.
- * TTL: 10 minutes (600,000 ms) | Max entries: 1,000
+ * TTL: 12 hours (43,200,000 ms) | Max entries: 5,000
  * Shields MongoDB from anonymous traffic and load-testing spikes.
  */
 export const publicCmsCache = new LruCacheStore<any>({
-  max: 1000,
-  ttl: 10 * 60 * 1000 // 10 minutes
+  max: 5000,
+  ttl: 12 * 60 * 60 * 1000 // 12 hours
 });
 
 /**
  * 4. Assessment Answer Key Cache
  * Caches sanitized answer keys and question configurations for active quizzes/exams.
- * TTL: 10 minutes (600,000 ms) | Max entries: 500
- * Eliminates 500 redundant database reads during simultaneous submission spikes.
+ * TTL: 12 hours (43,200,000 ms) | Max entries: 2,000
+ * Eliminates redundant database reads during simultaneous submission spikes.
  */
 export interface IAssessmentAnswerKeyPayload {
   assessmentId: string;
@@ -125,6 +125,6 @@ export interface IAssessmentAnswerKeyPayload {
 }
 
 export const assessmentAnswerKeyCache = new LruCacheStore<IAssessmentAnswerKeyPayload>({
-  max: 500,
-  ttl: 10 * 60 * 1000 // 10 minutes
+  max: 2000,
+  ttl: 12 * 60 * 60 * 1000 // 12 hours
 });

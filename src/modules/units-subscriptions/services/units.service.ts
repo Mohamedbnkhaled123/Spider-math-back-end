@@ -67,7 +67,7 @@ export class UnitsService {
 
     if (isAnonymousVisitor) {
       const mapped = units.map((u) => ({ ...u, isSubscribed: false }));
-      publicCmsCache.set(cacheKey, mapped as any, 10 * 60 * 1000); // 10 minutes TTL
+      publicCmsCache.set(cacheKey, mapped as any, 12 * 60 * 60 * 1000); // 12 hours TTL
       return mapped;
     }
 
@@ -77,19 +77,23 @@ export class UnitsService {
       subscription_status: 'ACTIVE',
       expires_at: { $gt: new Date() }
     })
-      .select('unit_package_id expires_at')
+      .select('unit_package_id expires_at access_scope')
       .lean();
 
-    const subMap = new Map<string, Date>();
-    activeSubs.forEach((s) => {
-      subMap.set(s.unit_package_id.toString(), s.expires_at);
+    const subMap = new Map<string, { expiresAt: Date; accessScope: string }>();
+    activeSubs.forEach((s: any) => {
+      subMap.set(s.unit_package_id.toString(), { expiresAt: s.expires_at, accessScope: s.access_scope || 'FULL' });
     });
 
-    return units.map((u) => ({
-      ...u,
-      isSubscribed: subMap.has(u._id.toString()),
-      subscriptionExpiresAt: subMap.get(u._id.toString()) || null
-    }));
+    return units.map((u) => {
+      const subInfo = subMap.get(u._id.toString());
+      return {
+        ...u,
+        isSubscribed: !!subInfo,
+        accessScope: subInfo ? subInfo.accessScope : null,
+        subscriptionExpiresAt: subInfo ? subInfo.expiresAt : null
+      };
+    });
   }
 
   /**
@@ -114,6 +118,7 @@ export class UnitsService {
 
     // Check subscription status
     let isSubscribed = !!isSuperAdmin;
+    let accessScope: 'FULL' | 'ASSESSMENTS_ONLY' | null = isSuperAdmin ? 'FULL' : null;
     let subscriptionExpiresAt: string | null = null;
     let isExpired = false;
 
@@ -127,6 +132,7 @@ export class UnitsService {
         subscriptionExpiresAt = latestSub.expires_at ? new Date(latestSub.expires_at).toISOString() : null;
         if (latestSub.subscription_status === 'ACTIVE' && (!latestSub.expires_at || new Date(latestSub.expires_at) > new Date())) {
           isSubscribed = true;
+          accessScope = (latestSub as any).access_scope || 'FULL';
           isExpired = false;
         } else {
           isSubscribed = false;
@@ -177,7 +183,8 @@ export class UnitsService {
 
     const hydratedLectures = lectures.map((lec: any) => {
       const prog = progressMap.get(lec._id.toString());
-      const isAcc = isSubscribed || lec.is_free_trial;
+      const isLectureAllowed = (isSubscribed && accessScope !== 'ASSESSMENTS_ONLY') || !!lec.is_free_trial;
+      const isAcc = isLectureAllowed;
       const primaryPdf = (lec.pdf_materials && lec.pdf_materials.length > 0) ? lec.pdf_materials[0] : null;
       return {
         ...lec,
@@ -256,6 +263,7 @@ export class UnitsService {
     return {
       unit,
       isSubscribed,
+      accessScope,
       subscriptionExpiresAt,
       isExpired,
       lecturesCount: hydratedLectures.length,

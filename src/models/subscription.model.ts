@@ -19,6 +19,13 @@ export const SUBSCRIPTION_STATUSES = [
 
 export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number];
 
+export const SUBSCRIPTION_ACCESS_SCOPES = [
+  'FULL',
+  'ASSESSMENTS_ONLY'
+] as const;
+
+export type SubscriptionAccessScope = (typeof SUBSCRIPTION_ACCESS_SCOPES)[number];
+
 export interface ISubscription {
   student_id: Types.ObjectId;
   student_code: string; // Denormalized HAxxxx code for fast query & verification
@@ -30,6 +37,7 @@ export interface ISubscription {
   academic_term: AcademicTermType;
 
   subscription_status: SubscriptionStatus;
+  access_scope: SubscriptionAccessScope;
   price_paid_egp: number;
   activated_by: Types.ObjectId; // Super Admin user ID
   activated_at: Date;
@@ -114,6 +122,12 @@ const SubscriptionSchema = new Schema<ISubscriptionDocument>(
       type: String,
       enum: SUBSCRIPTION_STATUSES,
       default: 'ACTIVE',
+      index: true
+    },
+    access_scope: {
+      type: String,
+      enum: SUBSCRIPTION_ACCESS_SCOPES,
+      default: 'FULL',
       index: true
     },
     price_paid_egp: {

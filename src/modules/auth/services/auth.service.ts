@@ -606,28 +606,69 @@ export class AuthService {
     }
 
     const deviceUuid = dto.deviceUuid || 'browser_student_device';
-    const token = this.generateToken({
-      sub: student._id.toString(),
-      role: student.role,
-      deviceUuid,
-      studentCode: student.student_code
+
+    // 1. Check if the device is approved
+    const isDeviceApproved = Array.isArray(student.approved_devices) && student.approved_devices.some(
+      (d) => d.device_uuid === deviceUuid
+    );
+
+    // 2. If approved, generate token and update cache
+    if (isDeviceApproved) {
+      deviceWhitelistCache.set(
+        `device_whitelist:${student._id}`,
+        new Set(student.approved_devices.map((d) => d.device_uuid)),
+        30 * 60 * 1000
+      );
+
+      const token = this.generateToken({
+        sub: student._id.toString(),
+        role: student.role,
+        deviceUuid,
+        studentCode: student.student_code
+      });
+
+      return {
+        token,
+        user: {
+          _id: student._id.toString(),
+          full_name: student.full_name,
+          email: student.email,
+          role: student.role,
+          student_ha_code: student.student_code,
+          curriculum: student.curriculum,
+          grade_level: student.grade_level,
+          academic_term: student.academic_term,
+          total_xp: student.total_xp,
+          has_active_subscription: student.has_active_subscription
+        }
+      };
+    }
+
+    // 3. If device is not registered in approved_devices, log pending request and throw HTTP 423
+    await UserModel.findByIdAndUpdate(student._id, {
+      $set: {
+        pending_device_req: {
+          device_uuid: deviceUuid,
+          device_type: 'Web Device',
+          browser_info: 'Browser Client',
+          ip_address: '127.0.0.1',
+          requested_at: new Date(),
+          status: 'PENDING'
+        }
+      }
     });
 
-    return {
-      token,
-      user: {
-        _id: student._id.toString(),
-        full_name: student.full_name,
-        email: student.email,
-        role: student.role,
-        student_ha_code: student.student_code,
-        curriculum: student.curriculum,
-        grade_level: student.grade_level,
-        academic_term: student.academic_term,
-        total_xp: student.total_xp,
-        has_active_subscription: student.has_active_subscription
+    throw new AppError(
+      'هذا الجهاز جديد وبانتظار اعتماد م/ هبة عبدالوهاب قبل السماح بالدخول.',
+      423,
+      ERROR_CODES.DEVICE_PENDING_APPROVAL_423,
+      {
+        deviceUuid,
+        accountLockStatus: 'PENDING_DEVICE_APPROVAL',
+        existingDevicesActive: true,
+        studentId: student._id
       }
-    };
+    );
   }
 
   /**

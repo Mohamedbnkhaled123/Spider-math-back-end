@@ -66,6 +66,15 @@ export async function requireActiveSubscription(req: Request, _res: Response, ne
     }).lean();
 
     if (subscription) {
+      if (isLectureRoute && subscription.access_scope === 'ASSESSMENTS_ONLY') {
+        return next(
+          new AppError(
+            'اشتراكك في هذه الوحدة مخصص للاختبارات والكويزات فقط ولا يشمل مشاهدة المحاضرات. يمكنك ترقية باقتك للوصول إلى المحاضرات الكاملة.',
+            403,
+            ERROR_CODES.ASSESSMENTS_ONLY_SUBSCRIPTION
+          )
+        );
+      }
       return next();
     }
 

@@ -33,7 +33,7 @@ export interface ICurriculumTreeItem {
 }
 
 const CURRICULUM_TREE_CACHE_KEY = 'PUBLIC_CURRICULUM_TREE';
-const CURRICULUM_TREE_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const CURRICULUM_TREE_CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
 
 export class CurriculumTreeService {
   /**
