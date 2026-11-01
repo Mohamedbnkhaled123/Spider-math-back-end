@@ -154,6 +154,8 @@ export const createAssessmentBaseSchema = z.object({
   graph_calculator: z.enum(GRAPH_CALCULATORS).or(z.string()).default('NONE'),
   calculator_mode: z.string().optional(),
   calculatorType: z.string().optional(),
+  reference_sheet_url: z.string().nullable().optional(),
+  referenceSheetUrl: z.string().nullable().optional(),
   xp_reward: z.coerce.number().int().min(0).default(50),
   is_published: z.boolean().default(true),
   isPublished: z.boolean().optional(),
@@ -174,6 +176,7 @@ export const createAssessmentDtoSchema = createAssessmentBaseSchema.transform((d
   const availableFrom = data.available_from ?? data.availableFrom ?? null;
   const availableUntil = data.available_until ?? data.availableUntil ?? null;
   const calc = (data.graph_calculator === 'DESMOS' || data.calculator_mode === 'DESMOS' || data.calculatorType === 'DESMOS') ? 'DESMOS' : 'NONE';
+  const referenceSheetUrl = data.reference_sheet_url ?? data.referenceSheetUrl ?? null;
   const isPlacement = data.is_placement_test ?? data.isPlacementTest ?? false;
   const isPublished = data.is_published ?? data.isPublished ?? true;
   const unitId = data.unit_package_id || data.unitPackageId || null;
@@ -196,6 +199,7 @@ export const createAssessmentDtoSchema = createAssessmentBaseSchema.transform((d
     available_from: availableFrom,
     available_until: availableUntil,
     graph_calculator: calc,
+    reference_sheet_url: referenceSheetUrl,
     has_essay_questions: hasEssayQuestions,
     total_points: totalPoints,
     is_placement_test: isPlacement,

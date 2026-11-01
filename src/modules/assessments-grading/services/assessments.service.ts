@@ -99,6 +99,7 @@ export class AssessmentsService {
       available_from: dto.available_from ? new Date(dto.available_from) : null,
       available_until: dto.available_until ? new Date(dto.available_until) : null,
       graph_calculator: dto.graph_calculator,
+      reference_sheet_url: dto.reference_sheet_url ?? null,
       has_essay_questions: hasEssayQuestions,
       total_points: totalPoints,
       xp_reward: dto.xp_reward,
@@ -167,6 +168,8 @@ export class AssessmentsService {
       if (dto.available_from !== undefined) assessment.available_from = dto.available_from ? new Date(dto.available_from) : null;
       if (dto.available_until !== undefined) assessment.available_until = dto.available_until ? new Date(dto.available_until) : null;
       if (dto.graph_calculator !== undefined) assessment.graph_calculator = dto.graph_calculator as any;
+    if (dto.reference_sheet_url !== undefined) assessment.reference_sheet_url = dto.reference_sheet_url;
+      if (dto.reference_sheet_url !== undefined) assessment.reference_sheet_url = dto.reference_sheet_url;
       if ((dto as any).is_placement_test !== undefined) assessment.is_placement_test = (dto as any).is_placement_test;
       if (dto.xp_reward !== undefined) assessment.xp_reward = dto.xp_reward;
       if (dto.is_published !== undefined) assessment.is_published = dto.is_published;
@@ -225,6 +228,7 @@ export class AssessmentsService {
     if (dto.available_from !== undefined) assessment.available_from = dto.available_from ? new Date(dto.available_from) : null;
     if (dto.available_until !== undefined) assessment.available_until = dto.available_until ? new Date(dto.available_until) : null;
     if (dto.graph_calculator !== undefined) assessment.graph_calculator = dto.graph_calculator as any;
+    if (dto.reference_sheet_url !== undefined) assessment.reference_sheet_url = dto.reference_sheet_url;
     if (dto.xp_reward !== undefined) assessment.xp_reward = dto.xp_reward;
     if (dto.is_published !== undefined) assessment.is_published = dto.is_published;
 

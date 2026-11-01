@@ -32,6 +32,7 @@ export const updateAssessmentDtoSchema = createAssessmentBaseSchema
     const availableUntil = data.available_until !== undefined ? data.available_until : data.availableUntil;
     const isPublished = data.is_published ?? data.isPublished;
     const assessmentType = data.assessment_type || data.assessmentType;
+    const refSheet = data.reference_sheet_url !== undefined ? data.reference_sheet_url : data.referenceSheetUrl;
 
     return {
       ...data,
@@ -49,6 +50,7 @@ export const updateAssessmentDtoSchema = createAssessmentBaseSchema
       ...(isPublished !== undefined ? { is_published: isPublished } : {}),
       ...(assessmentType ? { assessment_type: assessmentType as any } : {}),
       ...(isPlacement !== undefined ? { is_placement_test: isPlacement } : {}),
+      ...(refSheet !== undefined ? { reference_sheet_url: refSheet } : {}),
       ...(data.questions ? {
         questions: data.questions,
         total_points: data.questions.reduce((sum, q) => sum + (q.points || 1), 0),

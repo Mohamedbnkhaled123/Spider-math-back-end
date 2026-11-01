@@ -57,6 +57,7 @@ export interface IAssessment {
   available_until?: Date | null;
 
   graph_calculator: GraphCalculatorType;
+  reference_sheet_url?: string | null;
   has_essay_questions: boolean;
   total_points: number;
   xp_reward: number;
@@ -212,6 +213,11 @@ const AssessmentSchema = new Schema<IAssessmentDocument>(
       type: String,
       enum: GRAPH_CALCULATORS,
       default: 'NONE'
+    },
+    reference_sheet_url: {
+      type: String,
+      default: null,
+      trim: true
     },
     has_essay_questions: {
       type: Boolean,
