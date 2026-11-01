@@ -381,6 +381,8 @@ export class CmsService {
         { code: 'SAT_MATH', titleAr: 'Digital SAT Math (Hard Modules)', titleEn: 'SAT Digital Math' },
         { code: 'ACT_MATH', titleAr: 'ACT Math Mastery', titleEn: 'ACT Mathematics' },
         { code: 'EST_MATH', titleAr: 'EST I & EST II Math', titleEn: 'EST Math' },
+        { code: 'GRADE_12', titleAr: 'الصف الثاني عشر الأمريكي (Grade 12)', titleEn: 'Grade 12' },
+        { code: 'GRADE_11', titleAr: 'الصف الحادي عشر الأمريكي (Grade 11)', titleEn: 'Grade 11' },
         { code: 'GRADE_10', titleAr: 'الصف العاشر الأمريكي (Grade 10)', titleEn: 'Grade 10' },
         { code: 'GRADE_9', titleAr: 'الصف التاسع الأمريكي (Grade 9)', titleEn: 'Grade 9' },
         { code: 'US_GRADE_8', titleAr: 'الصف الثامن الأمريكي (Grade 8)', titleEn: 'Grade 8' },

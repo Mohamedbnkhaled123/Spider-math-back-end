@@ -46,7 +46,7 @@ export const GRADE_LEVELS_BY_CURRICULUM: Record<CurriculumType, readonly string[
   // 4. الدبلومة الأمريكية (SAT • EST • ACT — من Grade 1 إلى اختبارات القبول)
   AMERICAN: [
     'US_GRADE_1', 'US_GRADE_2', 'US_GRADE_3', 'US_GRADE_4', 'US_GRADE_5', 'US_GRADE_6', 'US_GRADE_7', 'US_GRADE_8',
-    'GRADE_9', 'GRADE_10',
+    'GRADE_9', 'GRADE_10', 'GRADE_11', 'GRADE_12',
     'SAT_1', 'SAT_2', 'SAT_MATH',
     'EST_1', 'EST_2', 'EST_MATH',
     'ACT_1', 'ACT_2', 'ACT_MATH'
