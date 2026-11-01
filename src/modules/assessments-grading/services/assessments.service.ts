@@ -530,7 +530,7 @@ export class AssessmentsService {
       ...(dto.uploaded_solution_imgs || []).map((img) => (img.question_id ? img.question_id.toString() : ''))
     ]);
     const missingQuestions = cachedPayload.questions.filter((q) => !answeredIds.has(q.questionId));
-    if (missingQuestions.length > 0 && !dto.is_auto_submit && dto.elapsed_time_sec < (cachedPayload.timeLimitMinutes * 60 + 120)) {
+    if (missingQuestions.length > 0 && !dto.is_auto_submit && dto.elapsed_time_sec < cachedPayload.timeLimitMinutes * 60) {
       throw new AppError(
         'لا يمكن تسليم الامتحان أو الواجب بوجود أسئلة غير مجاب عنها! يرجى حل كافة الأسئلة قبل التسليم.',
         400,
@@ -580,25 +580,29 @@ export class AssessmentsService {
     const resultVisibility: 'HIDDEN_PENDING_TEACHER' | 'PUBLISHED_TO_STUDENT_AND_PARENT' = 'HIDDEN_PENDING_TEACHER';
     const xpAwarded = 0;
 
-    // Check if this submission has already been notified (Idempotency Retries)
-    const isAlreadyNotified = processedSubmissionNotificationCache.has(dto.idempotency_key);
-    let isIdempotencyRetry = isAlreadyNotified;
-    if (!isIdempotencyRetry) {
+    // Asynchronously dispatch notifications without blocking HTTP response (0ms latency impact)
+    setImmediate(async () => {
+      // Check if this submission has already been notified (Idempotency Retries)
+      if (processedSubmissionNotificationCache.has(dto.idempotency_key)) {
+        return;
+      }
+
       const existingSubmission = await SubmissionModel.findOne({
         student_id: new Types.ObjectId(studentId),
         assessment_id: new Types.ObjectId(assessmentId),
         idempotency_key: dto.idempotency_key
-      }).select('_id sync_queue_status').lean();
-      if (existingSubmission && existingSubmission.sync_queue_status === 'SYNCED_ONLINE') {
-        isIdempotencyRetry = true;
-      }
-    }
+      }).select('_id sync_queue_status createdAt').lean();
 
-    // Asynchronously dispatch notifications without blocking HTTP response (0ms latency impact)
-    setImmediate(async () => {
-      if (isIdempotencyRetry) {
+      if (
+        existingSubmission &&
+        existingSubmission.sync_queue_status === 'SYNCED_ONLINE' &&
+        existingSubmission.createdAt &&
+        Date.now() - new Date(existingSubmission.createdAt).getTime() > 10000
+      ) {
+        processedSubmissionNotificationCache.set(dto.idempotency_key, { notified: true });
         return;
       }
+
       processedSubmissionNotificationCache.set(dto.idempotency_key, { notified: true });
       try {
         await BatchAlertService.recordSubmissionForGrading({
