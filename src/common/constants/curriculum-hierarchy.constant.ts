@@ -32,14 +32,21 @@ export const GRADE_LEVELS_BY_CURRICULUM: Record<CurriculumType, readonly string[
   INTERNATIONAL: ['IGCSE_YEAR_7', 'IGCSE_YEAR_8', 'IGCSE_YEAR_9', 'IGCSE_OL', 'IGCSE_AS', 'IGCSE_AL'],
 
   // 4. الدبلومة الأمريكية (SAT • EST • ACT)
-  AMERICAN: ['GRADE_9', 'GRADE_10', 'SAT_1', 'SAT_2', 'EST_1', 'EST_2', 'ACT_1', 'ACT_2']
+  AMERICAN: [
+    'GRADE_9', 'GRADE_10',
+    'SAT_1', 'SAT_2', 'SAT_MATH',
+    'EST_1', 'EST_2', 'EST_MATH',
+    'ACT_1', 'ACT_2', 'ACT_MATH'
+  ]
 } as const;
 
 export const ALL_GRADE_LEVELS = [
   'PREP_1', 'PREP_2', 'PREP_3', 'SEC_1', 'SEC_2', 'SEC_3',
   'GRADE_7', 'GRADE_8', 'GRADE_9', 'GRADE_10', 'GRADE_11', 'GRADE_12',
   'IGCSE_YEAR_7', 'IGCSE_YEAR_8', 'IGCSE_YEAR_9', 'IGCSE_OL', 'IGCSE_AS', 'IGCSE_AL',
-  'SAT_1', 'SAT_2', 'EST_1', 'EST_2', 'ACT_1', 'ACT_2'
+  'SAT_1', 'SAT_2', 'SAT_MATH',
+  'EST_1', 'EST_2', 'EST_MATH',
+  'ACT_1', 'ACT_2', 'ACT_MATH'
 ] as const;
 
 export type GradeLevelType = (typeof ALL_GRADE_LEVELS)[number];

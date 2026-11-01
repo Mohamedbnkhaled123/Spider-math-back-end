@@ -13,7 +13,8 @@ export class UnitsController {
     try {
       const query = req.query as unknown as UnitsQueryDto;
       const studentId = req.user?.sub;
-      const units = await unitsService.getUnitsCatalog(query, studentId);
+      const isSuperAdmin = req.user?.role === ROLES.SUPER_ADMIN;
+      const units = await unitsService.getUnitsCatalog(query, studentId, isSuperAdmin);
       res.status(200).json(createSuccessResponse(units, { totalCount: units.length }));
     } catch (error) {
       next(error);

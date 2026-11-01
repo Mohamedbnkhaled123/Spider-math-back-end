@@ -9,6 +9,7 @@ import { UserModel } from '../../../models/user.model';
 import { publicCmsCache } from '../../../config/cache.config';
 import { AppError } from '../../../common/utils/app-error.util';
 import { ERROR_CODES } from '../../../common/constants/error-codes.constant';
+import { ROLES } from '../../../common/constants/roles.constant';
 import { UnitsQueryDto } from '../dto/units-query.dto';
 import { CreateUnitPackageDto, UpdateUnitPackageDto } from '../dto/unit-crud.dto';
 
@@ -26,8 +27,8 @@ export class UnitsService {
    * Retrieves published educational units and revision packages.
    * Scoped by the 5-level compound index and optionally hydrated with isSubscribed flag.
    */
-  public async getUnitsCatalog(query: UnitsQueryDto, studentId?: string) {
-    const isAnonymousVisitor = !studentId || !Types.ObjectId.isValid(studentId);
+  public async getUnitsCatalog(query: UnitsQueryDto, studentId?: string, isSuperAdmin: boolean = false) {
+    const isAnonymousVisitor = (!studentId || !Types.ObjectId.isValid(studentId)) && !isSuperAdmin;
     const cacheKey = `units_catalog:${query.curriculum || 'ALL'}:${query.gradeLevel || 'ALL'}:${query.term || 'ALL'}:${query.type || 'ALL'}`;
 
     if (isAnonymousVisitor) {
@@ -37,11 +38,11 @@ export class UnitsService {
       }
     }
 
-    const filter: Record<string, unknown> = { is_published: true };
+    const filter: Record<string, unknown> = isSuperAdmin ? {} : { is_published: true };
 
-    if (studentId && Types.ObjectId.isValid(studentId)) {
-      const student = await UserModel.findById(studentId).select('grade_level curriculum');
-      if (student && student.grade_level) {
+    if (!isSuperAdmin && studentId && Types.ObjectId.isValid(studentId)) {
+      const student = await UserModel.findById(studentId).select('grade_level curriculum role');
+      if (student && student.role === ROLES.STUDENT && student.grade_level) {
         filter.grade_level = student.grade_level;
         if (student.curriculum) {
           filter.curriculum = student.curriculum;
