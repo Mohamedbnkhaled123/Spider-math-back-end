@@ -35,7 +35,7 @@ export class GradingService {
    */
   async getAllSubmissions(query: IAllSubmissionsQuery) {
     const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+    const limit = Math.min(100, Math.max(1, Number(query.limit) || 15));
     const skip = (page - 1) * limit;
 
     const filter: Record<string, unknown> = {};
