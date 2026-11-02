@@ -374,7 +374,26 @@ export class AssessmentsService {
 
         if (!sub) {
           throw new AppError(
-            'Active subscription required to access this assessment',
+            'عذراً، هذا الاختبار خاص بطلاب الوحدة المشتركين فقط. يرجى تفعيل اشتراك الوحدة للوصول إلى الاختبار.',
+            403,
+            ERROR_CODES.NO_ACTIVE_SUBSCRIPTION_403
+          );
+        }
+      }
+    }
+
+    // General assessment authorization check: Must have ANY active subscription (whether FULL or ASSESSMENTS_ONLY)
+    if (!assessment.is_placement_test && !assessment.unit_package_id) {
+      if (userRole !== ROLES.SUPER_ADMIN) {
+        const student = await UserModel.findById(studentId).select('has_active_subscription');
+        const hasActiveSub = student?.has_active_subscription || (await SubscriptionModel.exists({
+          student_id: new Types.ObjectId(studentId),
+          subscription_status: 'ACTIVE'
+        }));
+
+        if (!hasActiveSub) {
+          throw new AppError(
+            'عذراً، هذا الاختبار متاح فقط للطلاب أصحاب الاشتراكات النشطة بالمنصة.',
             403,
             ERROR_CODES.NO_ACTIVE_SUBSCRIPTION_403
           );

@@ -34,6 +34,18 @@ export class SubscriptionsService {
       throw new AppError('Unit package not found', 404, ERROR_CODES.RESOURCE_NOT_FOUND_404);
     }
 
+    // Strict Academic Integrity Check: Unit Curriculum & Grade Level MUST match Student Profile
+    if (student.role === 'STUDENT' && student.grade_level && unit.grade_level) {
+      if (student.curriculum !== unit.curriculum || student.grade_level !== unit.grade_level) {
+        throw new AppError(
+          `لا يمكن تفعيل هذه الوحدة لأنها مخصصة لـ (${unit.curriculum} - ${unit.grade_level}) بينما الطالب مسجل في (${student.curriculum} - ${student.grade_level}).`,
+          400,
+          ERROR_CODES.BAD_REQUEST_400
+        );
+      }
+    }
+
+
     const teacherPhone = cms?.contact_channels?.subscription_whatsapp || '+201000000001';
 
     const whatsappUrl = generateSubscriptionRequestWhatsAppLink({

@@ -12,6 +12,7 @@ import { UserModel, IApprovedDevice } from '../../../models/user.model';
 import { SubscriptionModel } from '../../../models/subscription.model';
 import { NotificationModel } from '../../../models/notification.model';
 import { PlacementAttemptModel } from '../../../models/placement-attempt.model';
+import { CmsConfigModel } from '../../../models/cms-config.model';
 import { GoogleLoginDto } from '../dto/google-login.dto';
 import { CompleteProfileDto } from '../dto/complete-profile.dto';
 import { ParentActivateLoginDto, ParentLinkChildDto } from '../dto/parent-auth.dto';
@@ -397,7 +398,8 @@ export class AuthService {
     user.parent_phone = dto.parentPhone.trim();
     user.curriculum = dto.curriculum;
     user.grade_level = dto.gradeLevel;
-    user.academic_term = dto.academicTerm;
+    const cms = await CmsConfigModel.findOne({ singleton_key: 'MAIN_SITE_CONFIG' }).select('active_academic_term').lean();
+    user.academic_term = dto.academicTerm || cms?.active_academic_term || 'TERM_1';
     user.country = dto.country || 'EG';
     user.governorate = dto.governorate || null;
     if (dto.avatarUrl) {
@@ -468,7 +470,7 @@ export class AuthService {
       role: ROLES.STUDENT,
       curriculum: dto.curriculum,
       grade_level: dto.gradeLevel,
-      academic_term: dto.academicTerm,
+      academic_term: dto.academicTerm || (await CmsConfigModel.findOne({ singleton_key: 'MAIN_SITE_CONFIG' }).select('active_academic_term').lean())?.active_academic_term || 'TERM_1',
       country: dto.country || 'EG',
       governorate: dto.governorate || null,
       avatar_url: dto.avatarUrl || null,
