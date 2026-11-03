@@ -6,7 +6,7 @@ export interface IWatchProgress {
   lecture_id: Types.ObjectId;
   accumulated_watch_sec: number;
   last_playback_position_sec: number;
-  watched_chunks_bitmap: string; // Compact string bitmask (1 character per 5s interval)
+  watched_chunks_bitmap?: string; // Optional legacy bitmask
   watch_percentage: number;
   is_completed: boolean;
   xp_awarded: boolean; // Atomic idempotency guard preventing duplicate XP

@@ -760,30 +760,45 @@ export class AuthService {
    * Links an additional child to an already authenticated parent account.
    */
   public async parentLinkAdditionalChild(parentId: string, dto: ParentLinkChildDto) {
-    const student = await UserModel.findOne({ student_code: dto.studentCode });
-    if (!student) {
+    const parent = await UserModel.findById(parentId);
+    if (!parent || parent.role !== ROLES.PARENT) {
+      throw new AppError('Parent account not found', 404, ERROR_CODES.RESOURCE_NOT_FOUND_404);
+    }
+
+    const code = (dto.studentCode || (dto as any).student_ha_code || '').trim().toUpperCase();
+    const student = await UserModel.findOne({ student_code: code });
+
+    if (!student || student.role !== ROLES.STUDENT) {
       throw new AppError(
-        `Student with code ${dto.studentCode} not found`,
+        'كود الطالب غير صحيح أو لم يتم العثور على حساب الطالب.',
         404,
         ERROR_CODES.STUDENT_NOT_FOUND_404
       );
     }
 
-    const parent = await UserModel.findByIdAndUpdate(
+    // Strict verification: student's registered parent phone must match current parent's phone
+    const country = (student as any).country || 'EG';
+    const isPhoneMatched = arePhoneNumbersIdentical(parent.phone || '', student.parent_phone || '', country);
+
+    if (!isPhoneMatched) {
+      throw new AppError(
+        'كود الطالب غير صحيح أو غير مرتبط برقم هاتف ولي الأمر المسجل.',
+        400,
+        ERROR_CODES.BAD_REQUEST_400
+      );
+    }
+
+    const updatedParent = await UserModel.findByIdAndUpdate(
       parentId,
       { $addToSet: { linked_children: student._id } },
       { new: true }
     ).populate('linked_children', 'full_name student_code curriculum grade_level total_xp avatar_url');
 
-    if (!parent) {
-      throw new AppError('Parent account not found', 404, ERROR_CODES.RESOURCE_NOT_FOUND_404);
-    }
-
     return {
       parent: {
-        id: parent._id,
-        fullName: parent.full_name,
-        linkedChildren: parent.linked_children
+        id: updatedParent!._id,
+        fullName: updatedParent!.full_name,
+        linkedChildren: updatedParent!.linked_children
       },
       newlyLinkedChild: {
         id: student._id,
@@ -880,7 +895,7 @@ export class AuthService {
    */
   public async getAllStudents() {
     const students = await UserModel.find()
-      .select('full_name student_code email phone parent_phone curriculum grade_level approved_devices total_xp has_active_subscription account_lock_status role is_profile_completed createdAt')
+      .select('full_name student_code email phone parent_phone curriculum grade_level approved_devices total_xp has_active_subscription account_lock_status role is_profile_completed is_leaderboard_hidden createdAt')
       .sort({ createdAt: -1 })
       .lean();
 

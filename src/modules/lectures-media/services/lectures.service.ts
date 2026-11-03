@@ -268,19 +268,9 @@ export class LecturesService {
       throw new AppError('Student profile not found', 404, ERROR_CODES.STUDENT_NOT_FOUND_404);
     }
 
-    const reportedDuration = params.dto.actualDurationSec || params.dto.videoDurationSec;
-    let effectiveDurationSec = lecture.video_duration_sec;
-    if (reportedDuration && reportedDuration > 0) {
-      const rounded = Math.round(reportedDuration);
-      if (!effectiveDurationSec || Math.abs(effectiveDurationSec - rounded) > 3) {
-        effectiveDurationSec = rounded;
-        await LectureMaterialModel.findByIdAndUpdate(lecture._id, {
-          video_duration_sec: rounded
-        });
-      }
-    }
-
-    const totalChunks = Math.max(1, Math.ceil(effectiveDurationSec / 5));
+    // Fixed original video duration: Video duration in database is strictly protected from external modification
+    const videoDurationSec = lecture.video_duration_sec || 60;
+    const currentPlaybackSec = Math.max(0, params.dto.currentPlaybackSec || 0);
 
     // Find or create watch progress document
     let progress = await WatchProgressModel.findOne({
@@ -295,58 +285,22 @@ export class LecturesService {
         lecture_id: lecture._id,
         accumulated_watch_sec: 0,
         last_playback_position_sec: 0,
-        watched_chunks_bitmap: '0'.repeat(totalChunks),
         watch_percentage: 0,
         is_completed: false,
         xp_awarded: false
       });
     }
 
-    // Ensure bitmap has proper length
-    let bitmap = progress.watched_chunks_bitmap || '';
-    if (bitmap.length < totalChunks) {
-      bitmap = bitmap.padEnd(totalChunks, '0');
-    } else if (bitmap.length > totalChunks) {
-      bitmap = bitmap.substring(0, totalChunks);
-    }
+    // Calculate percentage and update playback position
+    const watchPercentage = Math.min(100, Math.round((currentPlaybackSec / videoDurationSec) * 100));
+    const accumulatedSec = Math.max(progress.accumulated_watch_sec || 0, Math.round(currentPlaybackSec));
 
-    // Set bit '1' at all watched chunk indices
-    const chunksToMark = new Set<number>();
-    if (params.dto.chunkIndex !== undefined && params.dto.chunkIndex >= 0) {
-      chunksToMark.add(params.dto.chunkIndex);
-    }
-    if (Array.isArray(params.dto.watchedChunks)) {
-      params.dto.watchedChunks.forEach(c => {
-        if (typeof c === 'number' && c >= 0) chunksToMark.add(c);
-      });
-    }
-
-    if (chunksToMark.size > 0) {
-      const bitmapArr = bitmap.split('');
-      chunksToMark.forEach(idx => {
-        if (idx < totalChunks) {
-          bitmapArr[idx] = '1';
-        }
-      });
-      bitmap = bitmapArr.join('');
-    }
-
-    // Count verified watched chunks
-    let onesCount = 0;
-    for (let i = 0; i < bitmap.length; i++) {
-      if (bitmap[i] === '1') onesCount++;
-    }
-
-    const watchPercentage = Math.min(100, Math.round((onesCount / totalChunks) * 100));
-    const accumulatedSec = onesCount * 5;
-
-    progress.watched_chunks_bitmap = bitmap;
-    progress.watch_percentage = watchPercentage;
+    progress.watch_percentage = Math.max(progress.watch_percentage || 0, watchPercentage);
     progress.accumulated_watch_sec = accumulatedSec;
-    progress.last_playback_position_sec = params.dto.currentPlaybackSec;
+    progress.last_playback_position_sec = currentPlaybackSec;
     progress.last_watched_at = new Date();
 
-    // 1. Update In-Memory Real-Time Presence Cache (45-second TTL, 0 MongoDB writes)
+    // 1. Update In-Memory Real-Time Presence Cache (45-second TTL, 0 MongoDB writes) for live parent radar
     studentPresenceCache.set(
       `presence:${params.studentId}`,
       {
@@ -356,47 +310,45 @@ export class LecturesService {
         referenceId: params.lectureId,
         referenceTitle: lecture.lecture_title_ar,
         lastHeartbeatAt: new Date(),
-        currentPlaybackSec: params.dto.currentPlaybackSec
+        currentPlaybackSec: currentPlaybackSec
       },
       45 * 1000
     );
 
-    // 2. Check Atomic Idempotent XP Award (Threshold >= 85%)
+    // 2. Atomic Idempotent XP Award (>= 85% or explicit isCompleted signal)
+    const isEligible = params.dto.isCompleted === true || currentPlaybackSec >= (videoDurationSec * 0.85);
     let xpJustAwarded = false;
-    if (watchPercentage >= lecture.completion_threshold_pct && !progress.xp_awarded) {
-      const awardedProgress = await WatchProgressModel.findOneAndUpdate(
+
+    if (isEligible && !progress.xp_awarded) {
+      const awarded = await WatchProgressModel.findOneAndUpdate(
         { _id: progress._id, xp_awarded: false },
-        {
-          $set: {
-            xp_awarded: true,
-            is_completed: true,
-            completed_at: new Date()
-          }
-        },
+        { $set: { xp_awarded: true, is_completed: true, completed_at: new Date() } },
         { new: true }
       );
 
-      if (awardedProgress) {
+      if (awarded) {
         xpJustAwarded = true;
         progress.xp_awarded = true;
         progress.is_completed = true;
-        progress.completed_at = awardedProgress.completed_at;
+        progress.completed_at = awarded.completed_at;
+
+        const xpDelta = lecture.xp_reward_on_complete || 50;
 
         // Atomically increment student's cumulative XP
         await UserModel.findByIdAndUpdate(params.studentId, {
-          $inc: { total_xp: lecture.xp_reward_on_complete }
+          $inc: { total_xp: xpDelta }
         });
 
         // Audit XP ledger with 90-day rolling TTL
         await GamificationLogModel.create({
           student_id: params.studentId,
-          xp_delta: lecture.xp_reward_on_complete,
+          xp_delta: xpDelta,
           action_type: 'LECTURE_COMPLETED_85',
           reference_id: lecture._id,
-          reason_note: `أتم 85% من المحاضرة: ${lecture.lecture_title_ar}`
+          reason_note: `أتم مشاهدة المحاضرة: ${lecture.lecture_title_ar}`
         });
       }
-    } else if (watchPercentage >= lecture.completion_threshold_pct && !progress.is_completed) {
+    } else if (isEligible && !progress.is_completed) {
       progress.is_completed = true;
       progress.completed_at = new Date();
     }
@@ -404,13 +356,13 @@ export class LecturesService {
     await progress.save();
 
     return {
-      watchPercentage,
-      accumulatedWatchSec: accumulatedSec,
+      watchPercentage: progress.watch_percentage,
+      accumulatedWatchSec: progress.accumulated_watch_sec,
       lastPlaybackPositionSec: progress.last_playback_position_sec,
       isCompleted: progress.is_completed,
       xpAwarded: progress.xp_awarded,
       xpJustAwarded,
-      xpReward: xpJustAwarded ? lecture.xp_reward_on_complete : 0
+      xpReward: xpJustAwarded ? (lecture.xp_reward_on_complete || 50) : 0
     };
   }
 }

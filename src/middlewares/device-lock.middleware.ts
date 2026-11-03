@@ -38,13 +38,6 @@ export async function deviceLockGuard(req: Request, _res: Response, next: NextFu
     let whitelistSet = deviceWhitelistCache.get(cacheKey);
 
     if (!whitelistSet) {
-      // 0ms Fast Path: If cryptographically-verified 512-bit JWT explicitly certifies this exact deviceUuid
-      if (req.user?.deviceUuid && req.user.deviceUuid === deviceUuid) {
-        whitelistSet = new Set<string>([deviceUuid]);
-        deviceWhitelistCache.set(cacheKey, whitelistSet, 30 * 60 * 1000);
-        return next();
-      }
-
       const student = await UserModel.findById(studentId)
         .select('approved_devices.device_uuid account_lock_status')
         .lean();
@@ -59,7 +52,8 @@ export async function deviceLockGuard(req: Request, _res: Response, next: NextFu
         );
       }
 
-      whitelistSet = new Set<string>(student.approved_devices.map((d: { device_uuid: string }) => d.device_uuid));
+      // Cache all approved devices for the student (never locks out 2nd approved device)
+      whitelistSet = new Set<string>((student.approved_devices || []).map((d: { device_uuid: string }) => d.device_uuid));
       deviceWhitelistCache.set(cacheKey, whitelistSet, 30 * 60 * 1000);
     }
 
