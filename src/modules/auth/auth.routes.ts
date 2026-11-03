@@ -177,6 +177,8 @@ adminDeviceRouter.patch(
 // Router for /api/v1/admin/users
 export const adminUsersRouter = Router();
 
+adminUsersRouter.use(authenticateJwt, requireRoles(ROLES.SUPER_ADMIN));
+
 adminUsersRouter.get(
   '/students',
   authController.getAllStudents

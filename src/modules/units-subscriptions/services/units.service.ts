@@ -142,14 +142,34 @@ export class UnitsService {
       }
     }
 
-    // Fetch ordered lectures (excluding raw cipher details if not authorized, but keeping metadata)
+    const hasFullAccess = isSuperAdmin || (isSubscribed && accessScope !== 'ASSESSMENTS_ONLY');
+
+    // Fetch ordered lectures (excluding sensitive links & cipher from default query for non-subscribed)
     const lectures = await LectureMaterialModel.find({
       unit_package_id: unitId,
       is_published: true
     })
       .sort({ order_index: 1 })
-      .select('-youtube_encrypted_id')
+      .select(
+        hasFullAccess
+          ? '-youtube_encrypted_id'
+          : '-youtube_encrypted_id -youtube_url -youtube_video_id'
+      )
       .lean();
+
+    // For non-subscribed users, selectively query playback and PDF credentials for free-trial lectures only
+    const freeTrialLectureMap = new Map<string, any>();
+    if (!hasFullAccess) {
+      const trialIds = lectures.filter((l) => l.is_free_trial).map((l) => l._id);
+      if (trialIds.length > 0) {
+        const trialLecs = await LectureMaterialModel.find({
+          _id: { $in: trialIds }
+        })
+          .select('youtube_video_id youtube_url google_drive_pdf_id pdf_materials is_print_allowed')
+          .lean();
+        trialLecs.forEach((t) => freeTrialLectureMap.set(t._id.toString(), t));
+      }
+    }
 
     // Fetch ordered assessments with sanitized answer keys (hide empty assessments from students)
     const assessmentsFilter: Record<string, any> = {
@@ -185,18 +205,55 @@ export class UnitsService {
     const hydratedLectures = lectures.map((lec: any) => {
       const prog = progressMap.get(lec._id.toString());
       const isLectureAllowed = (isSubscribed && accessScope !== 'ASSESSMENTS_ONLY') || !!lec.is_free_trial;
-      const isAcc = isLectureAllowed;
-      const primaryPdf = (lec.pdf_materials && lec.pdf_materials.length > 0) ? lec.pdf_materials[0] : null;
+      const trialData = freeTrialLectureMap.get(lec._id.toString());
+
+      // If lecture is not authorized, zero-out sensitive DRM video & PDF credentials
+      if (!isLectureAllowed) {
+        const {
+          youtube_video_id,
+          youtube_url,
+          google_drive_pdf_id,
+          pdf_materials,
+          youtube_encrypted_id,
+          ...safeLec
+        } = lec;
+
+        return {
+          ...safeLec,
+          isCompleted: prog?.isCompleted || false,
+          watchPercentage: prog?.watchPercentage || 0,
+          lastPlaybackPositionSec: prog?.lastPlaybackPositionSec || 0,
+          isAccessible: false,
+          is_free_trial: false,
+          youtube_video_id: '',
+          youtube_url: '',
+          google_drive_pdf_id: '',
+          pdf_materials: [],
+          is_print_allowed: false
+        };
+      }
+
+      // Authorized lecture (subscribed student or free trial)
+      const effectivePdfMaterials = trialData ? (trialData.pdf_materials || []) : (lec.pdf_materials || []);
+      const primaryPdf = (effectivePdfMaterials && effectivePdfMaterials.length > 0) ? effectivePdfMaterials[0] : null;
+      const effectiveVideoId = trialData ? (trialData.youtube_video_id || '') : (lec.youtube_video_id || '');
+      const effectiveYoutubeUrl = trialData ? (trialData.youtube_url || '') : (lec.youtube_url || '');
+      const effectiveGoogleDrivePdfId = primaryPdf
+        ? (primaryPdf.storage_file_id || primaryPdf._id?.toString() || '')
+        : (trialData ? trialData.google_drive_pdf_id : lec.google_drive_pdf_id) || '';
+      const effectivePrintAllowed = primaryPdf ? !!primaryPdf.is_print_allowed : false;
+
       return {
         ...lec,
         isCompleted: prog?.isCompleted || false,
         watchPercentage: prog?.watchPercentage || 0,
         lastPlaybackPositionSec: prog?.lastPlaybackPositionSec || 0,
-        isAccessible: isAcc,
-        youtube_video_id: lec.youtube_video_id || '',
-        youtube_url: lec.youtube_url || '',
-        google_drive_pdf_id: primaryPdf ? (primaryPdf.storage_file_id || primaryPdf._id?.toString() || '') : (lec.google_drive_pdf_id || ''),
-        is_print_allowed: primaryPdf ? !!primaryPdf.is_print_allowed : false
+        isAccessible: true,
+        youtube_video_id: effectiveVideoId,
+        youtube_url: effectiveYoutubeUrl,
+        google_drive_pdf_id: effectiveGoogleDrivePdfId,
+        pdf_materials: effectivePdfMaterials,
+        is_print_allowed: effectivePrintAllowed
       };
     });
 
