@@ -1,3 +1,4 @@
+import { authenticateJwt } from '../../middlewares/auth.middleware';
 import { Router } from 'express';
 import { publicController } from './controllers/public.controller';
 import { validateRequest, validateBody } from '../../middlewares/validate.middleware';
@@ -32,6 +33,17 @@ publicRouter.get('/curriculum-tree', publicController.getCurriculumTree);
  * Cached landing page configuration (10m TTL)
  */
 publicRouter.get('/landing-data', publicController.getLandingData);
+
+/**
+ * GET /api/v1/public/placement-test/my-attempt
+ * Retrieves latest placement attempt for authenticated student
+ */
+publicRouter.get(
+  '/placement-test/my-attempt',
+  authenticateJwt,
+  publicController.getMyPlacementAttempt
+);
+
 
 /**
  * GET /api/v1/public/placement-test

@@ -1,3 +1,6 @@
+import { Types } from 'mongoose';
+import { PlacementAttemptModel } from '../../../models/placement-attempt.model';
+import { LeadModel } from '../../../models/lead.model';
 import { Request, Response, NextFunction } from 'express';
 import { curriculumTreeService } from '../services/curriculum-tree.service';
 import { cmsService } from '../../admin-cms/services/cms.service';
@@ -83,6 +86,58 @@ export class PublicController {
       const xml = await sitemapService.generateSitemapXml();
       res.header('Content-Type', 'application/xml');
       res.status(200).send(xml);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/public/placement-test/my-attempt
+   * Retrieves latest diagnostic placement attempt for authenticated student
+   */
+  public async getMyPlacementAttempt(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const studentId = req.user?.sub;
+      const studentCode = req.user?.studentCode;
+
+      let attempt = null;
+      if (studentId && Types.ObjectId.isValid(studentId)) {
+        attempt = await PlacementAttemptModel.findOne({
+          $or: [
+            { linked_user_id: new Types.ObjectId(studentId) },
+            { claimed_by_student_id: new Types.ObjectId(studentId) }
+          ]
+        }).sort({ createdAt: -1 }).lean();
+
+        if (!attempt) {
+          const lead = await LeadModel.findOne({ user_id: new Types.ObjectId(studentId) }).lean();
+          if (lead?.placement_test_attempt_id) {
+            attempt = await PlacementAttemptModel.findById(lead.placement_test_attempt_id).lean();
+          }
+        }
+      }
+
+      if (!attempt && studentCode) {
+        attempt = await PlacementAttemptModel.findOne({ student_code: studentCode }).sort({ createdAt: -1 }).lean();
+      }
+
+      if (!attempt) {
+        res.status(200).json(createSuccessResponse(null));
+        return;
+      }
+
+      res.status(200).json(createSuccessResponse({
+        attemptId: attempt._id,
+        scorePercentage: attempt.score_percentage,
+        academicLevelBadge: attempt.academic_level_badge,
+        strengthsWeaknesses: attempt.strengths_weaknesses,
+        curriculum: attempt.curriculum,
+        gradeLevel: attempt.grade_level,
+        academicTerm: attempt.academic_term,
+        totalQuestions: attempt.total_questions,
+        correctCount: attempt.correct_count,
+        createdAt: attempt.createdAt
+      }));
     } catch (error) {
       next(error);
     }

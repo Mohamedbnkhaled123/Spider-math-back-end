@@ -40,7 +40,6 @@ export class CmsService {
           hero_video_youtube_id: null
         },
         schedules_table: [],
-        testimonials_items: [],
         contact_channels: {
           subscription_whatsapp: '01012345678',
           support_whatsapp: '01012345678',
@@ -295,10 +294,6 @@ export class CmsService {
         lecture_subject: s.lecture_subject || s.lectureSubject || '',
         is_active: s.is_active ?? true
       }));
-    }
-
-    if (dto.testimonials_items) {
-      updatePayload.testimonials_items = dto.testimonials_items;
     }
     if (dto.contact_channels) {
       updatePayload.contact_channels = dto.contact_channels;

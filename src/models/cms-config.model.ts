@@ -1,7 +1,6 @@
 import { Schema, model, Document } from 'mongoose';
 import {
   CURRICULUMS,
-  ALL_GRADE_LEVELS,
   ACADEMIC_TERMS,
   CurriculumType,
   GradeLevelType,
@@ -33,15 +32,6 @@ export interface IScheduleItem {
   is_active: boolean;
 }
 
-export interface ITestimonialItem {
-  author_name: string;
-  author_role: 'STUDENT' | 'PARENT';
-  curriculum: CurriculumType;
-  grade_level: GradeLevelType;
-  content: string;
-  rating: number; // 1 to 5
-  is_approved: boolean;
-}
 
 export interface IContactChannels {
   subscription_whatsapp: string;
@@ -144,7 +134,6 @@ export interface ICmsConfig {
   pricing_subtitle_en?: string;
   teacher_profile: ITeacherProfile;
   schedules_table: IScheduleItem[];
-  testimonials_items: ITestimonialItem[];
   contact_channels: IContactChannels;
   assessment_batch_trackers: Map<string, number>;
   analytics_snapshot: IAnalyticsSnapshot;
@@ -193,27 +182,6 @@ const ScheduleItemSchema = new Schema<IScheduleItem>(
   { _id: true }
 );
 
-const TestimonialItemSchema = new Schema<ITestimonialItem>(
-  {
-    author_name: { type: String, required: true, trim: true },
-    author_role: { type: String, enum: ['STUDENT', 'PARENT'], required: true },
-    curriculum: {
-      type: String,
-      enum: CURRICULUMS,
-      required: true,
-      default: 'EGYPTIAN'
-    },
-    grade_level: {
-      type: String,
-      enum: ALL_GRADE_LEVELS,
-      required: true
-    },
-    content: { type: String, required: true, trim: true, maxlength: 600 },
-    rating: { type: Number, min: 1, max: 5, default: 5 },
-    is_approved: { type: Boolean, default: true }
-  },
-  { _id: true }
-);
 
 /**
  * Pure Landing Page CMS & Operational Configuration Schema
@@ -534,10 +502,6 @@ const CmsConfigSchema = new Schema<ICmsConfigDocument>(
     },
     schedules_table: {
       type: [ScheduleItemSchema],
-      default: []
-    },
-    testimonials_items: {
-      type: [TestimonialItemSchema],
       default: []
     },
     contact_channels: {

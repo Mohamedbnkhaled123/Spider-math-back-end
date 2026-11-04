@@ -23,18 +23,6 @@ const scheduleItemSchema = z.object({
   is_active: z.boolean().optional().default(true)
 }).passthrough();
 
-const testimonialItemSchema = z.object({
-  author_name: z.string().optional(),
-  authorName: z.string().optional(),
-  author_role: z.string().optional(),
-  authorRole: z.string().optional(),
-  curriculum: z.string().optional(),
-  grade_level: z.string().optional(),
-  gradeLevel: z.string().optional(),
-  content: z.string().optional(),
-  rating: z.number().optional().default(5),
-  is_approved: z.boolean().optional().default(true)
-}).passthrough();
 
 const contactChannelsSchema = z.object({
   subscription_whatsapp: z.string().optional(),
@@ -79,7 +67,6 @@ export const updateCmsDtoSchema = z.object({
   activeGrades: z.array(z.string()).optional(),
   curricula_tracks: z.array(z.any()).optional(),
   curriculaTracks: z.array(z.any()).optional(),
-  testimonials_items: z.array(testimonialItemSchema).optional(),
   contact_channels: contactChannelsSchema.optional()
 }).passthrough();
 
