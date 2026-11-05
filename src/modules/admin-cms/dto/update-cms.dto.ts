@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-
 const qualificationSchema = z.object({
   title_ar: z.string().min(2),
   title_en: z.string().min(2),
@@ -22,7 +21,6 @@ const scheduleItemSchema = z.object({
   lectureSubject: z.string().optional(),
   is_active: z.boolean().optional().default(true)
 }).passthrough();
-
 
 const contactChannelsSchema = z.object({
   subscription_whatsapp: z.string().optional(),
@@ -53,6 +51,14 @@ export const updateCmsDtoSchema = z.object({
   activeAcademicTerm: z.enum(['TERM_1', 'TERM_2']).optional(),
   support_whatsapp: z.string().optional(),
   supportWhatsapp: z.string().optional(),
+  support_telegram: z.string().optional(),
+  supportTelegram: z.string().optional(),
+  telegram_url: z.string().optional(),
+  telegramUrl: z.string().optional(),
+  facebook_url: z.string().optional(),
+  facebookUrl: z.string().optional(),
+  youtube_channel_url: z.string().optional(),
+  youtubeUrl: z.string().optional(),
   teacher_profile: z
     .object({
       bio_ar: z.string().optional(),

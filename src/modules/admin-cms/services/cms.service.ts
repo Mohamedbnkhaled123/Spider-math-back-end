@@ -138,6 +138,16 @@ export class CmsService {
       activeAcademicTerm: config.active_academic_term || 'TERM_1',
       active_academic_term: config.active_academic_term || 'TERM_1',
       supportWhatsapp: config.contact_channels?.support_whatsapp || '01012345678',
+      supportTelegram: config.contact_channels?.telegram_url || '',
+      facebookUrl: config.contact_channels?.facebook_url || '',
+      youtubeUrl: config.contact_channels?.youtube_channel_url || '',
+      contactChannels: config.contact_channels || {
+        subscription_whatsapp: config.contact_channels?.support_whatsapp || '01012345678',
+        support_whatsapp: config.contact_channels?.support_whatsapp || '01012345678',
+        telegram_url: config.contact_channels?.telegram_url || '',
+        facebook_url: config.contact_channels?.facebook_url || '',
+        youtube_channel_url: config.contact_channels?.youtube_channel_url || ''
+      },
       schedulesTable: (config.schedules_table || []).map((s: any) => ({
         curriculum: s.curriculum,
         gradeLevel: s.grade_level || s.gradeLevel,
