@@ -199,22 +199,22 @@ const CmsConfigSchema = new Schema<ICmsConfigDocument>(
     },
     hero_headline_ar: {
       type: String,
-      default: 'تعلم الرياضيات بأعلى المعايير الهندسية مع المهندسة هبة عبد الوهاب',
+      default: 'التميز الرياضي المتقدم',
       trim: true
     },
     hero_headline_en: {
       type: String,
-      default: 'Master Mathematics with Engineering Standards — Eng. Heba Abdel-Wahab',
+      default: 'Advanced Mathematics Mastery',
       trim: true
     },
     hero_subheadline_ar: {
       type: String,
-      default: 'منصة تفاعلية مخصصة للثانوية العامة والأنظمة الدولية بنظام حماية متطور واستراتيجيات ديسموس البيانية.',
+      default: 'إعداد جامعي وتميز لطلاب الثانوية العامة والأنظمة الدولية (الثانوية العامة • IGCSE • SAT)',
       trim: true
     },
     hero_subheadline_en: {
       type: String,
-      default: 'Interactive learning for Egyptian, Gulf, International, and American Curriculums with Desmos graphing strategies.',
+      default: 'University-Prep & High School Excellence (Thanweya Amma • IGCSE • SAT)',
       trim: true
     },
     hero_video_url: {
@@ -248,22 +248,22 @@ const CmsConfigSchema = new Schema<ICmsConfigDocument>(
     },
     hero_cta_primary_ar: {
       type: String,
-      default: 'اختار منهجك وابدأ الآن',
+      default: 'استكشف المناهج',
       trim: true
     },
     hero_cta_primary_en: {
       type: String,
-      default: 'Choose Your Curriculum & Begin',
+      default: 'Explore Curricula',
       trim: true
     },
     hero_cta_secondary_ar: {
       type: String,
-      default: 'امتحان تحديد المستوى المجاني',
+      default: 'تواصل مع المساعد الذكي',
       trim: true
     },
     hero_cta_secondary_en: {
       type: String,
-      default: 'Free Placement Test',
+      default: 'Speak to AI Tutor',
       trim: true
     },
     teacher_name_ar: {
