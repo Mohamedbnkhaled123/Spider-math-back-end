@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import mongoose from 'mongoose';
 import { env } from './config/env.config';
+import { connectToDatabase } from './config/db.config';
 import { errorHandler } from './middlewares/error-handler.middleware';
 import { generalRateLimiter } from './middlewares/rate-limiter.middleware';
 import { createSuccessResponse } from './common/interfaces/api-response.interface';
@@ -83,10 +84,21 @@ export function createApp(): Application {
     })
   );
 
-  // 4. Gzip / Deflate Response Compression
+  // 4. Serverless MongoDB Connection Pre-flight Middleware
+  // Guarantees active cached DB connection on every Vercel serverless request
+  app.use(async (_req: Request, _res: Response, next: NextFunction) => {
+    try {
+      await connectToDatabase();
+      next();
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // 5. Gzip / Deflate Response Compression
   app.use(compression());
 
-  // 5. Body Parsers (Strictly capped at 1MB — Homework photos bypass Express via direct Cloudinary upload)
+  // 6. Body Parsers (Strictly capped at 1MB — Homework photos bypass Express via direct Cloudinary upload)
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 

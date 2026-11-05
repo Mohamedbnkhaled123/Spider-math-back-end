@@ -118,6 +118,16 @@ export class LecturesService {
 
     const googleDriveFileId = pdfItem.storage_file_id;
 
+    // Vercel Serverless Optimization: If running in Serverless environment (Vercel) or requested,
+    // redirect directly to Google Drive stream/download to prevent 10s Serverless Function timeout
+    if (process.env.VERCEL === '1' || process.env.DIRECT_MEDIA_STREAM === 'true') {
+      const directDriveUrl = googleDriveFileId.startsWith('http')
+        ? googleDriveFileId
+        : `https://drive.google.com/uc?export=download&id=${encodeURIComponent(googleDriveFileId)}`;
+      params.res.redirect(307, directDriveUrl);
+      return;
+    }
+
     // Set secure binary streaming headers
     params.res.setHeader('Content-Type', 'application/pdf');
     params.res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(pdfItem.title)}.pdf"`);

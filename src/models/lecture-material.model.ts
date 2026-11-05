@@ -15,6 +15,7 @@ import {
 export interface IPdfMaterialItem {
   title: string;
   storage_file_id: string; // Strictly Google Drive File ID for PDF files ONLY
+  google_drive_url?: string;
   is_print_allowed: boolean;
   pages_count: number;
 }
@@ -39,6 +40,7 @@ export interface ILectureMaterial {
 
   pdf_materials: IPdfMaterialItem[];
   google_drive_pdf_id?: string;
+  google_drive_pdf_url?: string;
   is_print_allowed?: boolean;
   is_free_trial: boolean;
   is_published: boolean;
@@ -52,6 +54,7 @@ const PdfMaterialItemSchema = new Schema<IPdfMaterialItem>(
   {
     title: { type: String, required: true, trim: true },
     storage_file_id: { type: String, required: true, trim: true },
+    google_drive_url: { type: String, default: '', trim: true },
     is_print_allowed: { type: Boolean, default: false },
     pages_count: { type: Number, default: 1, min: 1 }
   },
@@ -143,6 +146,11 @@ const LectureMaterialSchema = new Schema<ILectureMaterialDocument>(
       default: []
     },
     google_drive_pdf_id: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    google_drive_pdf_url: {
       type: String,
       default: '',
       trim: true
