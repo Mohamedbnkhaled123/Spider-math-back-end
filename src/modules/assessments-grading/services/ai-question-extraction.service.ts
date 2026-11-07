@@ -85,6 +85,12 @@ export class AiQuestionExtractionService {
     for (const rawQ of rawQuestions) {
       const parsed = extractedQuestionSchema.safeParse(rawQ);
       if (parsed.success) {
+        // Enforce strict pure-text extraction for TEXT_LATEX_ONLY mode: Zero box_2d or cropped diagrams
+        if (validatedDto.mode === 'TEXT_LATEX_ONLY') {
+          parsed.data.box_2d = undefined;
+          parsed.data.has_geometry_diagram = false;
+        }
+
         // In FULL_IMAGE_CROP mode or when box_2d is present, provide fallback text if text was blank
         const trimmedText = parsed.data.question_text.trim();
         const fallbackText =

@@ -121,6 +121,18 @@ async function runTests() {
   assert.equal(cropQuestions[2]?.question_text, 'سؤال مصور (قص كامل)', 'Blank text question should receive fallback text');
   console.log('✔ Test 6 Passed: FULL_IMAGE_CROP mode uses fallback text for blank questions.');
 
+  // Test 6.2: TEXT_LATEX_ONLY mode strips box_2d and geometry diagram
+  const textOnlyQuestions = await service.extractQuestions({
+    imageBase64: 'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAQAcJaQAA3AA/v39gAA=',
+    mimeType: 'image/webp',
+    mode: 'TEXT_LATEX_ONLY',
+    providerId: 'mock-provider'
+  });
+  assert.equal(textOnlyQuestions.length, 2, 'TEXT_LATEX_ONLY should filter blank and return 2 questions');
+  assert.equal(textOnlyQuestions[1]?.box_2d, undefined, 'TEXT_LATEX_ONLY must strip box_2d completely');
+  assert.equal(textOnlyQuestions[1]?.has_geometry_diagram, false, 'TEXT_LATEX_ONLY must force has_geometry_diagram to false');
+  console.log('✔ Test 6.2 Passed: TEXT_LATEX_ONLY strictly strips box_2d and geometry diagram.');
+
   // Test 7: Gemini adapter parser normalizes inverted coordinates and rejects zero-area box
   const geminiAdapter = service.getProvider('gemini') as any;
   const mockGeminiJson = JSON.stringify([

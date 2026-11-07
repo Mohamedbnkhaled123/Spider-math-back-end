@@ -98,9 +98,12 @@ Diagrams and Bounding Boxes (box_2d):
 2. Coordinates in "box_2d" MUST be [ymin, xmin, ymax, xmax] normalized on a scale from 0 to 1000 (integers).
 3. If mode is "FULL_IMAGE_CROP": "box_2d" MUST enclose the entire rectangular bounding box of the question (text + diagram + choices).
 4. If mode is "SMART_HYBRID":
-   - If "has_geometry_diagram" is true: "box_2d" MUST tightly enclose ONLY the geometric figure/graph drawing, so it can be cropped as a supporting diagram.
+   - If "has_geometry_diagram" is true: "box_2d" MUST enclose the geometric figure or graph drawing GENEROUSLY with safe breathing margin (at least 5-8% padding around all sides) so that ALL corner vertices, label letters (e.g., A, B, C, D, H, X, Y), angle indicators, degree marks, arrows, and side length labels are completely inside the box without clipping. NEVER cut off perimeter labels or boundary strokes.
    - If "has_geometry_diagram" is false: omit "box_2d" or set to null.
-5. If mode is "TEXT_LATEX_ONLY": omit "box_2d" or set to null.
+5. If mode is "TEXT_LATEX_ONLY":
+   - STRICT CONSTRAINT: Do NOT generate or output "box_2d" under any circumstances. Set "box_2d" to null and "has_geometry_diagram" to false.
+   - Extract the entire question purely as text and standard KaTeX/LaTeX expressions without any cropped images.
+   - If the original question contains a geometric drawing, translate all given lengths, vertices, angles, and relationships into clean mathematical text and LaTeX formulas within the question statement (e.g. $ABCD$ مستطيل فيه $AB = 6\\text{ cm}, BC = 8\\text{ cm}$).
 `.trim();
 
     const userPromptText = `
@@ -184,7 +187,7 @@ Return a structured JSON array of questions.
       return [];
     }
 
-    return this.parseAndSanitizeGeminiOutput(rawCandidate);
+    return this.parseAndSanitizeGeminiOutput(rawCandidate, options.mode);
   }
 
   /**
@@ -368,7 +371,7 @@ Return a structured JSON array of questions.
   /**
    * Robust JSON parser and sanitizer for LLM responses.
    */
-  private parseAndSanitizeGeminiOutput(rawText: string): IExtractedQuestionItem[] {
+  parseAndSanitizeGeminiOutput(rawText: string, mode?: string): IExtractedQuestionItem[] {
     let cleanJson = rawText.trim();
 
     // Check for markdown code fence anywhere in output
@@ -410,7 +413,13 @@ Return a structured JSON array of questions.
     return itemsArray.map((item: any) => {
       // Validate and normalize box_2d if provided
       let box: [number, number, number, number] | undefined = undefined;
-      if (Array.isArray(item.box_2d) && item.box_2d.length === 4) {
+      let hasDiagram = Boolean(item.has_geometry_diagram);
+
+      // Strict enforcement for TEXT_LATEX_ONLY mode: Zero image crop or box_2d
+      if (mode === 'TEXT_LATEX_ONLY') {
+        box = undefined;
+        hasDiagram = false;
+      } else if (Array.isArray(item.box_2d) && item.box_2d.length === 4) {
         const rawCoords = item.box_2d.map((val: any) => {
           const num = typeof val === 'number' ? val : parseInt(val, 10);
           return isNaN(num) ? 0 : Math.max(0, Math.min(1000, Math.round(num)));
@@ -441,7 +450,7 @@ Return a structured JSON array of questions.
         question_text: String(item.question_text || '').trim(),
         options,
         correct_option_index: correctIndex,
-        has_geometry_diagram: Boolean(item.has_geometry_diagram),
+        has_geometry_diagram: hasDiagram,
         box_2d: box,
         points: typeof item.points === 'number' && item.points > 0 ? Math.round(item.points) : 1
       };
