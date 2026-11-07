@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AssessmentsService } from '../services/assessments.service';
+import { AiQuestionExtractionService } from '../services/ai-question-extraction.service';
 import { CloudinarySignedUploadAdapter, UploadTargetType } from '../adapters/cloudinary-signed-upload.adapter';
 import { createAssessmentDtoSchema } from '../dto/assessment-create.dto';
 import { updateAssessmentDtoSchema } from '../dto/assessment-update.dto';
@@ -9,7 +10,10 @@ import { ERROR_CODES } from '../../../common/constants/error-codes.constant';
 import { ROLES } from '../../../common/constants/roles.constant';
 
 export class AssessmentsController {
-  constructor(private assessmentsService: AssessmentsService) {}
+  constructor(
+    private assessmentsService: AssessmentsService,
+    private aiExtractionService: AiQuestionExtractionService = new AiQuestionExtractionService()
+  ) {}
 
   /**
    * Issues signed Cloudinary parameters for direct client-to-CDN upload (<= 150KB WebP)
@@ -211,6 +215,25 @@ export class AssessmentsController {
       res.status(200).json({
         success: true,
         data: submissions
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * Extracts math questions with LaTeX & bounding boxes from an uploaded page image using AI Vision
+   * POST /api/v1/assessments/ai-extract-questions
+   */
+  aiExtractQuestions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const questions = await this.aiExtractionService.extractQuestions(req.body);
+      res.status(200).json({
+        success: true,
+        data: {
+          questions,
+          count: questions.length
+        }
       });
     } catch (error) {
       next(error);

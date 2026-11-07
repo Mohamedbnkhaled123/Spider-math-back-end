@@ -80,7 +80,12 @@ const envSchema = z.object({
     .string({
       required_error: 'CLOUDINARY_API_SECRET is required for student homework upload signatures'
     })
-    .min(1, 'CLOUDINARY_API_SECRET cannot be empty')
+    .min(1, 'CLOUDINARY_API_SECRET cannot be empty'),
+
+  // AI Multimodal Question Extraction (Optional - defaults to 'gemini' and 'gemini-2.5-flash')
+  GEMINI_API_KEY: z.string().optional(),
+  AI_EXTRACTION_PROVIDER: z.string().default('gemini'),
+  GEMINI_EXTRACTION_MODEL: z.string().default('gemini-2.5-flash')
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

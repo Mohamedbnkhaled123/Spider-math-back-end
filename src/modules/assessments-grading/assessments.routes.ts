@@ -19,6 +19,14 @@ export const gradingController = new GradingController(gradingService);
 // 1. Student / Public Assessment Routers (/api/v1/assessments)
 export const assessmentsRouter = Router();
 
+// AI Multimodal Question Extraction (Super Admin only)
+assessmentsRouter.post(
+  '/ai-extract-questions',
+  authenticateJwt,
+  authorizeRoles(ROLES.SUPER_ADMIN),
+  assessmentsController.aiExtractQuestions
+);
+
 // Upload signature for direct client-to-CDN upload (<= 150KB WebP)
 // Target 'question' requires SUPER_ADMIN; Target 'homework' requires STUDENT (enforced in adapter)
 assessmentsRouter.get(
@@ -101,6 +109,13 @@ adminAssessmentsRouter.delete(
   authenticateJwt,
   authorizeRoles(ROLES.SUPER_ADMIN),
   assessmentsController.deleteAssessment
+);
+
+adminAssessmentsRouter.post(
+  '/ai-extract-questions',
+  authenticateJwt,
+  authorizeRoles(ROLES.SUPER_ADMIN),
+  assessmentsController.aiExtractQuestions
 );
 
 // 3. Admin Submissions Router (/api/v1/admin/submissions)

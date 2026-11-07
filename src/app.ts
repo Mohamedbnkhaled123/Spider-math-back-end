@@ -98,9 +98,9 @@ export function createApp(): Application {
   // 5. Gzip / Deflate Response Compression
   app.use(compression());
 
-  // 6. Body Parsers (Strictly capped at 1MB — Homework photos bypass Express via direct Cloudinary upload)
-  app.use(express.json({ limit: '1mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+  // 6. Body Parsers (Capped at 4.5MB to support single-page High-DPI AI question image payloads — Rule 5.2)
+  app.use(express.json({ limit: '4.5mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '4.5mb' }));
 
   // Request Observability Logger (Optimized for high-frequency load tests)
   if (process.env.NODE_ENV !== 'production' && !process.env.DISABLE_HTTP_LOGS) {
