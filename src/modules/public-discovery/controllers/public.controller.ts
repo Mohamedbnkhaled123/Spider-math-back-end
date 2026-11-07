@@ -199,6 +199,7 @@ export class PublicController {
       // Map assessments to units
       const unitMap = new Map<string, any[]>();
       const generalQuizzes: any[] = [];
+      const unitIdsSet = new Set(units.map((u) => u._id.toString()));
 
       for (const a of assessments) {
         const item = {
@@ -214,8 +215,8 @@ export class PublicController {
           xpReward: a.xp_reward || 0
         };
 
-        if (a.unit_package_id) {
-          const uId = a.unit_package_id.toString();
+        const uId = a.unit_package_id ? a.unit_package_id.toString() : null;
+        if (uId && unitIdsSet.has(uId)) {
           const list = unitMap.get(uId) || [];
           list.push(item);
           unitMap.set(uId, list);

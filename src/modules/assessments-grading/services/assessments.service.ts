@@ -346,8 +346,8 @@ export class AssessmentsService {
       throw new AppError('This assessment is not currently available', 404, ERROR_CODES.ASSESSMENT_NOT_FOUND_404);
     }
 
-    // Strict Grade-Level Isolation: Student can ONLY access and start exams for their exact grade_level
-    if (userRole === ROLES.STUDENT) {
+    // Strict Grade-Level Isolation: Student can ONLY access and start exams for their exact grade_level (Placement tests are open across grades)
+    if (!assessment.is_placement_test && userRole === ROLES.STUDENT) {
       const student = await UserModel.findById(studentId).select('grade_level curriculum');
       if (student && student.grade_level && assessment.grade_level && assessment.grade_level !== student.grade_level) {
         throw new AppError(

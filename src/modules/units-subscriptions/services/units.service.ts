@@ -344,7 +344,7 @@ export class UnitsService {
       return {
         ...ass,
         submissions_count: totalSubsCount,
-        isAccessible: isSubscribed,
+        isAccessible: isSubscribed || !!ass.is_free || !!ass.is_placement_test,
         studentAttemptStatus: {
           completedAttemptsCount,
           inProgressSubmissionId: inProgressSub ? inProgressSub._id.toString() : null,

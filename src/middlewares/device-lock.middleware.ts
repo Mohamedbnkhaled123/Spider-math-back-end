@@ -13,6 +13,11 @@ import { UserModel } from '../models/user.model';
  */
 export async function deviceLockGuard(req: Request, _res: Response, next: NextFunction): Promise<void> {
   try {
+    // Super Admin and Parent roles bypass student device lock
+    if (req.user && req.user.role !== ROLES.STUDENT) {
+      return next();
+    }
+
     const deviceUuid = req.header('X-Device-UUID')?.trim();
     if (!deviceUuid || deviceUuid.length < 16) {
       return next(
@@ -21,11 +26,6 @@ export async function deviceLockGuard(req: Request, _res: Response, next: NextFu
     }
 
     req.deviceUuid = deviceUuid;
-
-    // Super Admin and Parent roles bypass student device lock
-    if (req.user && req.user.role !== ROLES.STUDENT) {
-      return next();
-    }
 
     const studentId = req.user?.sub;
     if (!studentId) {
