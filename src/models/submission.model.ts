@@ -37,7 +37,7 @@ export interface ISubmission {
   idempotency_key: string; // UUIDv4 client idempotency key
   assessment_id: Types.ObjectId;
   student_id: Types.ObjectId;
-  unit_package_id: Types.ObjectId;
+  unit_package_id?: Types.ObjectId | null;
   attempt_number: number;
 
   is_offline_cached: boolean;
@@ -124,7 +124,8 @@ const SubmissionSchema = new Schema<ISubmissionDocument>(
     unit_package_id: {
       type: Schema.Types.ObjectId,
       ref: 'UnitPackage',
-      required: true
+      required: false,
+      default: null
     },
     attempt_number: {
       type: Number,

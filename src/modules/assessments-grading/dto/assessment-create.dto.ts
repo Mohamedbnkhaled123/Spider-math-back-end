@@ -158,6 +158,10 @@ export const createAssessmentBaseSchema = z.object({
   calculatorType: z.string().optional(),
   reference_sheet_url: z.string().nullable().optional(),
   referenceSheetUrl: z.string().nullable().optional(),
+  requires_teacher_review: z.boolean().optional(),
+  requiresTeacherReview: z.boolean().optional(),
+  requires_review: z.boolean().optional(),
+  requiresReview: z.boolean().optional(),
   xp_reward: z.coerce.number().int().min(0).default(50),
   is_published: z.boolean().default(true),
   isPublished: z.boolean().optional(),
@@ -187,6 +191,8 @@ export const createAssessmentDtoSchema = createAssessmentBaseSchema.transform((d
   const questions = data.questions || [];
   const totalPoints = questions.reduce((sum, q) => sum + (q.points || 1), 0);
   const hasEssayQuestions = questions.some((q) => q.question_type === 'ESSAY_PHOTO');
+  const rawRequiresReview = (data as any).requires_teacher_review ?? (data as any).requiresTeacherReview ?? (data as any).requires_review ?? (data as any).requiresReview ?? false;
+  const requiresTeacherReview = hasEssayQuestions ? true : !!rawRequiresReview;
 
   return {
     ...data,
@@ -204,6 +210,7 @@ export const createAssessmentDtoSchema = createAssessmentBaseSchema.transform((d
     graph_calculator: calc,
     reference_sheet_url: referenceSheetUrl,
     has_essay_questions: hasEssayQuestions,
+    requires_teacher_review: requiresTeacherReview,
     total_points: totalPoints,
     is_placement_test: isPlacement,
     is_free: isFree,

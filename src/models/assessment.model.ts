@@ -59,6 +59,7 @@ export interface IAssessment {
   graph_calculator: GraphCalculatorType;
   reference_sheet_url?: string | null;
   has_essay_questions: boolean;
+  requires_teacher_review?: boolean;
   total_points: number;
   xp_reward: number;
   is_free?: boolean;
@@ -224,6 +225,11 @@ const AssessmentSchema = new Schema<IAssessmentDocument>(
       type: Boolean,
       default: false
     },
+    requires_teacher_review: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
     total_points: {
       type: Number,
       required: true,
@@ -256,7 +262,7 @@ const AssessmentSchema = new Schema<IAssessmentDocument>(
   }
 );
 
-// Automatic Total Points Calculation Hook & Homework Free Exclusion
+// Automatic Total Points Calculation Hook, Homework Free Exclusion & Essay Review Enforcer
 AssessmentSchema.pre('save', function (this: any, next: any) {
   if (this.assessment_type === 'HOMEWORK') {
     this.is_free = false;
@@ -265,6 +271,13 @@ AssessmentSchema.pre('save', function (this: any, next: any) {
     const calculated = this.questions.reduce((sum: number, q: any) => sum + (Number(q.points) || 1), 0);
     if (!this.total_points || this.total_points !== calculated) {
       this.total_points = calculated;
+    }
+    const hasEssay = this.questions.some((q: any) => q.question_type === 'ESSAY_PHOTO');
+    if (hasEssay) {
+      this.has_essay_questions = true;
+      this.requires_teacher_review = true;
+    } else if (this.has_essay_questions) {
+      this.requires_teacher_review = true;
     }
   }
   next();

@@ -40,9 +40,10 @@ export const createUnitPackageDtoSchema = unitPackageBaseObject
     }
   })
   .transform((data) => {
-    const titleEn = (data.title_en && data.title_en.trim().length >= 2)
+    const isDefaultUnitPkg = data.title_en && data.title_en.trim().toLowerCase() === 'unit package';
+    const titleEn = (data.title_en && data.title_en.trim().length >= 2 && !isDefaultUnitPkg)
       ? data.title_en.trim()
-      : (data.title_ar ? data.title_ar.trim() : 'Unit Package');
+      : (data.title_ar ? data.title_ar.trim() : 'Unit');
 
     let slug = (data.slug && data.slug.trim())
       ? data.slug.toLowerCase().trim().replace(/[^a-z0-9-]+/g, '-')

@@ -28,6 +28,7 @@ import { UpdateAssessmentDto } from '../dto/assessment-update.dto';
 import { SubmissionSyncDto } from '../dto/submission-sync.dto';
 import { QuestionGraderFactory } from '../factories/question-grader.factory';
 import { MonotonicTimingAuditStrategy } from '../strategies/monotonic-timing-audit.strategy';
+import { QuizPassedXpStrategy } from '../strategies/xp-calculation.strategy';
 import { BatchAlertService } from './batch-alert.service';
 import { validateAndNormalizeYouTubeUrl } from '../utils/youtube-url.util';
 
@@ -60,7 +61,9 @@ const processedSubmissionNotificationCache = new LruCacheStore<{ notified: boole
 });
 
 interface IExtendedAssessmentPayload extends IAssessmentAnswerKeyPayload {
+  unitPackageId?: string | null;
   hasEssayQuestions: boolean;
+  requiresTeacherReview?: boolean;
   timeLimitMinutes: number;
   titleAr: string;
   titleEn: string;
@@ -470,7 +473,7 @@ export class AssessmentsService {
         idempotency_key: idempotencyKey,
         assessment_id: assessment._id,
         student_id: new Types.ObjectId(studentId),
-        unit_package_id: assessment.unit_package_id ?? new Types.ObjectId(),
+        unit_package_id: assessment.unit_package_id ?? null,
         attempt_number: nextAttemptNumber,
         is_offline_cached: false,
         sync_queue_status: 'IN_PROGRESS',
@@ -527,12 +530,14 @@ export class AssessmentsService {
 
       cachedPayload = {
         assessmentId: assessment._id.toString(),
+        unitPackageId: assessment.unit_package_id ? assessment.unit_package_id.toString() : null,
         assessmentType: assessment.assessment_type,
         minExpectedSolveSec: assessment.min_expected_solve_sec,
         timeLimitMinutes: assessment.time_limit_minutes || 30,
         totalPoints: assessment.total_points,
         xpReward: assessment.xp_reward,
         hasEssayQuestions: assessment.has_essay_questions,
+        requiresTeacherReview: !!assessment.requires_teacher_review,
         titleAr: assessment.title_ar,
         titleEn: assessment.title_en,
         questions: assessment.questions.map((q) => ({
@@ -602,10 +607,35 @@ export class AssessmentsService {
     });
 
     // 5. Result Visibility & Gamification Logic
-    // In accordance with Teacher Approval Policy, submissions ALWAYS default to HIDDEN_PENDING_TEACHER.
-    // Teacher must explicitly click the approval button in the grading studio to publish results and award XP.
-    const resultVisibility: 'HIDDEN_PENDING_TEACHER' | 'PUBLISHED_TO_STUDENT_AND_PARENT' = 'HIDDEN_PENDING_TEACHER';
-    const xpAwarded = 0;
+    // If the quiz contains essay questions, it MUST wait for teacher review.
+    // If all questions are MCQ, teacher's requires_teacher_review option determines visibility.
+    const hasEssay = cachedPayload.hasEssayQuestions || cachedPayload.questions.some((q) => q.questionType === 'ESSAY_PHOTO');
+    const requiresReview = hasEssay || !!cachedPayload.requiresTeacherReview;
+    const resultVisibility: 'HIDDEN_PENDING_TEACHER' | 'PUBLISHED_TO_STUDENT_AND_PARENT' =
+      requiresReview ? 'HIDDEN_PENDING_TEACHER' : 'PUBLISHED_TO_STUDENT_AND_PARENT';
+
+    let xpAwarded = 0;
+    if (resultVisibility === 'PUBLISHED_TO_STUDENT_AND_PARENT') {
+      const scorePercentage = cachedPayload.totalPoints > 0 ? (mcqAutoScore / cachedPayload.totalPoints) * 100 : 0;
+      const xpStrategy = new QuizPassedXpStrategy();
+      xpAwarded = xpStrategy.calculateDelta({
+        baseXpReward: cachedPayload.xpReward || 30,
+        scorePercentage,
+        isSuspiciousFastSolve: auditResult.isSuspiciousFastSolve,
+        clockTamperDetected: auditResult.clockTamperDetected
+      });
+      if (xpAwarded > 0) {
+        await UserModel.findByIdAndUpdate(studentId, {
+          $inc: { total_xp: xpAwarded }
+        });
+        await GamificationLogModel.create({
+          student_id: new Types.ObjectId(studentId),
+          xp_delta: xpAwarded,
+          action_type: 'QUIZ_PASSED',
+          reason_note: `Auto-published assessment "${cachedPayload.titleAr}"`
+        });
+      }
+    }
 
     // Asynchronously dispatch notifications without blocking HTTP response (0ms latency impact)
     setImmediate(async () => {
@@ -713,7 +743,7 @@ export class AssessmentsService {
             student_id: new Types.ObjectId(studentId),
             assessment_id: new Types.ObjectId(assessmentId),
             idempotency_key: dto.idempotency_key,
-            unit_package_id: new Types.ObjectId(),
+            unit_package_id: cachedPayload.unitPackageId ? new Types.ObjectId(cachedPayload.unitPackageId) : null,
             attempt_number: (dto as any).attempt_number || 1,
             server_started_at: serverStartedAt,
             client_started_at: new Date(dto.client_started_at),
@@ -737,6 +767,7 @@ export class AssessmentsService {
               rotation_deg: img.rotation_deg ?? 0
             })),
             result_visibility: resultVisibility,
+            graded_at: resultVisibility === 'PUBLISHED_TO_STUDENT_AND_PARENT' ? new Date() : null,
             mcq_auto_score: mcqAutoScore,
             essay_manual_score: 0,
             final_total_score: finalTotalScore
@@ -788,6 +819,7 @@ export class AssessmentsService {
               rotation_deg: img.rotation_deg ?? 0
             })),
             result_visibility: resultVisibility,
+            graded_at: resultVisibility === 'PUBLISHED_TO_STUDENT_AND_PARENT' ? new Date() : null,
             mcq_auto_score: mcqAutoScore,
             essay_manual_score: 0,
             final_total_score: finalTotalScore,
@@ -900,7 +932,9 @@ export class AssessmentsService {
       filter['questions.0'] = { $exists: true };
     }
 
-    const queryBuilder = AssessmentModel.find(filter).sort({ createdAt: -1 });
+    const queryBuilder = AssessmentModel.find(filter)
+      .populate('unit_package_id', 'title_ar title_en order_index')
+      .sort({ createdAt: -1 });
 
     if (!isSuperAdmin) {
       queryBuilder.select('-questions.correct_option_index -questions.model_answer_text -questions.youtube_solution_url');

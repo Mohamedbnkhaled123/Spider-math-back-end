@@ -34,6 +34,14 @@ export const updateAssessmentDtoSchema = createAssessmentBaseSchema
     const isPublished = data.is_published ?? data.isPublished;
     const assessmentType = data.assessment_type || data.assessmentType;
     const refSheet = data.reference_sheet_url !== undefined ? data.reference_sheet_url : data.referenceSheetUrl;
+    const rawRequiresReview = (data as any).requires_teacher_review !== undefined
+      ? (data as any).requires_teacher_review
+      : ((data as any).requiresTeacherReview !== undefined
+      ? (data as any).requiresTeacherReview
+      : ((data as any).requires_review !== undefined ? (data as any).requires_review : (data as any).requiresReview));
+
+    const questionsUpdated = Array.isArray(data.questions);
+    const hasEssayInQuestions = questionsUpdated ? data.questions!.some((q) => q.question_type === 'ESSAY_PHOTO') : false;
 
     return {
       ...data,
@@ -53,10 +61,13 @@ export const updateAssessmentDtoSchema = createAssessmentBaseSchema
       ...(isPlacement !== undefined ? { is_placement_test: isPlacement } : {}),
       ...(isFree !== undefined ? { is_free: isFree } : {}),
       ...(refSheet !== undefined ? { reference_sheet_url: refSheet } : {}),
+      ...(rawRequiresReview !== undefined || hasEssayInQuestions ? {
+        requires_teacher_review: hasEssayInQuestions ? true : !!rawRequiresReview
+      } : {}),
       ...(data.questions ? {
         questions: data.questions,
         total_points: data.questions.reduce((sum, q) => sum + (q.points || 1), 0),
-        has_essay_questions: data.questions.some((q) => q.question_type === 'ESSAY_PHOTO')
+        has_essay_questions: hasEssayInQuestions
       } : {})
     };
   });

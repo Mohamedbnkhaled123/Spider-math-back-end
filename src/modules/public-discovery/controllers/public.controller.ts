@@ -205,13 +205,15 @@ export class PublicController {
         const item = {
           id: a._id.toString(),
           titleAr: a.title_ar,
-          titleEn: a.title_en,
+          titleEn: (!a.title_en || a.title_en.trim().toLowerCase() === 'unit package') ? a.title_ar : a.title_en.trim(),
           assessmentType: a.assessment_type,
           timeLimitMinutes: a.time_limit_minutes,
           totalPoints: a.total_points,
           questionsCount: a.questions?.length || 0,
           isFree: !!a.is_free,
           isPlacementTest: !!a.is_placement_test,
+          requiresTeacherReview: !!(a as any).requires_teacher_review,
+          hasEssayQuestions: !!(a as any).has_essay_questions,
           xpReward: a.xp_reward || 0
         };
 
@@ -228,7 +230,7 @@ export class PublicController {
       const groupedUnits = units.map((u) => ({
         unitId: u._id.toString(),
         titleAr: u.title_ar,
-        titleEn: u.title_en,
+        titleEn: (!u.title_en || u.title_en.trim().toLowerCase() === 'unit package') ? u.title_ar : u.title_en.trim(),
         orderIndex: u.order_index,
         packageType: u.package_type,
         priceEgp: u.price_egp,

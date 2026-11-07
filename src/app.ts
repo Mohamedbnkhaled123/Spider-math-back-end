@@ -40,6 +40,10 @@ import {
   adminBackupRouter,
   adminMaintenanceRouter
 } from './modules/admin-cms/admin-backup.routes';
+import {
+  publicTestimonialsRouter,
+  adminTestimonialsRouter
+} from './modules/testimonials/testimonials.routes';
 
 /**
  * Express Application Bootstrap
@@ -158,6 +162,7 @@ export function createApp(): Application {
 
   // 9. Domain REST API Routers
   app.use('/api/v1/public', publicRouter);
+  app.use('/api/v1/public/testimonials', publicTestimonialsRouter);
   app.use('/api/v1/auth', authRouter);
   app.use('/api/v1/units', unitsRouter);
   app.use('/api/v1/subscriptions', subscriptionsRouter);
@@ -178,6 +183,7 @@ export function createApp(): Application {
   app.use('/api/v1/admin/gamification', adminGamificationRouter);
   app.use('/api/v1/admin/backup', adminBackupRouter);
   app.use('/api/v1/admin/maintenance', adminMaintenanceRouter);
+  app.use('/api/v1/admin/testimonials', adminTestimonialsRouter);
 
   // 10. 404 Handler for Unmatched API Endpoints
   app.use('/api/*', (req: Request, _res: Response, next: NextFunction) => {
