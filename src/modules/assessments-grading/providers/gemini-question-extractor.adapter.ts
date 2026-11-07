@@ -106,10 +106,34 @@ Diagrams and Bounding Boxes (box_2d):
    - If the original question contains a geometric drawing, translate all given lengths, vertices, angles, and relationships into clean mathematical text and LaTeX formulas within the question statement (e.g. $ABCD$ مستطيل فيه $AB = 6\\text{ cm}, BC = 8\\text{ cm}$).
 `.trim();
 
+    let modeSpecificInstruction = '';
+    if (options.mode === 'TEXT_LATEX_ONLY') {
+      modeSpecificInstruction = `
+MODE: TEXT_LATEX_ONLY.
+STRICT CONSTRAINT:
+- DO NOT generate or output "box_2d" (set "box_2d": null, "has_geometry_diagram": false).
+- Extract the questions 100% as text and standard KaTeX/LaTeX expressions without any cropped images.
+- If there is a geometric diagram, figure, or graph, translate all its given lengths, angles, vertices, and relations into complete text and LaTeX notation inside the question text so the question is fully self-contained.
+`.trim();
+    } else if (options.mode === 'SMART_HYBRID') {
+      modeSpecificInstruction = `
+MODE: SMART_HYBRID.
+- Extract question statements in clean Arabic text and standard LaTeX formulas.
+- If a question has an accompanying geometry diagram, coordinate graph, or figure, set "has_geometry_diagram": true and provide "box_2d": [ymin, xmin, ymax, xmax] around the figure. Ensure generous breathing margins (8-10% padding) around the drawing so all corner vertices (e.g. A, B, C, D), angle labels, arrows, and degree markings are completely inside the box without being cut off.
+`.trim();
+    } else {
+      modeSpecificInstruction = `
+MODE: FULL_IMAGE_CROP.
+- Provide "box_2d" enclosing the entire question block (statement, diagram, and options).
+`.trim();
+    }
+
     const userPromptText = `
 Extraction Mode: ${options.mode}
 Curriculum: ${options.curriculum || 'General / Egyptian'}
 Grade Level: ${options.gradeLevel || 'Secondary / Prep'}
+
+${modeSpecificInstruction}
 
 Please extract all math questions present in this page image according to the system instructions.
 Return a structured JSON array of questions.
