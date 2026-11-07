@@ -240,8 +240,18 @@ export class AssessmentsController {
           count: questions.length
         }
       });
-    } catch (error) {
-      next(error);
+    } catch (error: any) {
+      if (error instanceof AppError) {
+        return next(error);
+      }
+      const message = error?.message || 'Failed to process AI question extraction';
+      return next(
+        new AppError(
+          `AI Question Extraction Error: ${message}`,
+          400,
+          ERROR_CODES.BAD_REQUEST_400
+        )
+      );
     }
   };
 }

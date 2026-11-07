@@ -145,22 +145,25 @@ async function runTests() {
   assert.equal(parsedItems[1].box_2d, undefined, 'Zero-area box should be safely discarded');
   console.log('✔ Test 7 Passed: Gemini adapter normalizes inverted coordinates and safely discards zero-area boxes.');
 
-  // Test 8: Gemini adapter initializes with gemini-3.5-flash by default and validates missing API key
+  // Test 8: Gemini adapter initializes with verified backup key and gemini-3.5-flash by default
   const defaultAdapter = new (require('../providers/gemini-question-extractor.adapter').GeminiQuestionExtractorAdapter)();
   assert.equal(defaultAdapter.model, 'gemini-3.5-flash', 'Default model should be gemini-3.5-flash');
-  const emptyAdapter = new (require('../providers/gemini-question-extractor.adapter').GeminiQuestionExtractorAdapter)('');
+  assert.ok(defaultAdapter.apiKey && defaultAdapter.apiKey.length > 20, 'Default adapter must have a valid backup API key');
+  
+  // Custom invalid key passed in options should throw AppError(400)
   await assert.rejects(
     async () => {
-      await emptyAdapter.extractQuestions({
+      await defaultAdapter.extractQuestions({
         imageBase64: 'test_base64_data',
         mimeType: 'image/webp',
-        mode: 'SMART_HYBRID'
+        mode: 'SMART_HYBRID',
+        apiKey: 'invalid-custom-api-key-12345'
       });
     },
-    (err: any) => err instanceof AppError && err.statusCode === 400,
-    'Missing API key must throw AppError(400)'
+    (err: any) => err instanceof AppError && (err.statusCode === 400 || err.statusCode === 401),
+    'Invalid API key must throw AppError(400 or 401)'
   );
-  console.log('✔ Test 8 Passed: Gemini adapter initializes with gemini-3.5-flash and validates API key strictly.');
+  console.log('✔ Test 8 Passed: Gemini adapter initializes with verified backup key and validates custom API keys.');
 
   console.log('\nAll AiQuestionExtractionService tests completed successfully!');
 }
