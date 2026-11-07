@@ -10,10 +10,30 @@ export class GeminiQuestionExtractorAdapter implements IAiQuestionExtractorProvi
   readonly providerId = 'gemini';
   private readonly apiKey: string;
   private readonly model: string;
+  private readonly fallbackModel: string;
 
-  constructor(apiKey?: string, model?: string) {
+  constructor(apiKey?: string, model?: string, fallbackModel?: string) {
     this.apiKey = apiKey || process.env.GEMINI_API_KEY || '';
-    this.model = model || process.env.GEMINI_EXTRACTION_MODEL || 'gemini-2.5-flash';
+    this.model = this.normalizeModelName(
+      model || process.env.GEMINI_MODEL || process.env.GEMINI_EXTRACTION_MODEL || 'gemini-3.1-pro-preview'
+    );
+    this.fallbackModel = this.normalizeModelName(
+      fallbackModel || process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.5-flash'
+    );
+  }
+
+  /**
+   * Normalizes model aliases to valid Gemini API model identifiers.
+   * e.g., maps 'gemini-3.1-pro' to 'gemini-3.1-pro-preview', and legacy models to current versions.
+   */
+  private normalizeModelName(rawModel: string): string {
+    const trimmed = (rawModel || '').trim();
+    if (!trimmed) return 'gemini-3.1-pro-preview';
+    if (trimmed === 'gemini-3.1-pro') return 'gemini-3.1-pro-preview';
+    if (trimmed === 'gemini-2.5-pro') return 'gemini-3.1-pro-preview';
+    if (trimmed === 'gemini-2.5-flash') return 'gemini-3.5-flash';
+    if (trimmed === 'gemini-3-flash') return 'gemini-3-flash-preview';
+    return trimmed;
   }
 
   async extractQuestions(options: IExtractionOptions): Promise<IExtractedQuestionItem[]> {
@@ -135,8 +155,42 @@ Return a structured JSON array of questions.
       }
     };
 
+    const rawCandidate = await this.executeGeminiWithFallback(requestBody);
+
+    if (!rawCandidate) {
+      return [];
+    }
+
+    return this.parseAndSanitizeGeminiOutput(rawCandidate);
+  }
+
+  /**
+   * Executes the Gemini generateContent call, automatically falling back to a secondary model
+   * if the primary model hits free-tier quota (HTTP 429) or model deprecation (HTTP 404).
+   */
+  private async executeGeminiWithFallback(requestBody: any): Promise<string | null> {
+    const primaryResult = await this.callGeminiModel(this.model, requestBody, true);
+    if (primaryResult !== null) {
+      return primaryResult;
+    }
+
+    if (this.model !== this.fallbackModel) {
+      console.warn(
+        `[GeminiQuestionExtractorAdapter] Primary model "${this.model}" failed quota or availability check. Falling back to "${this.fallbackModel}"...`
+      );
+      return this.callGeminiModel(this.fallbackModel, requestBody, false);
+    }
+
+    return null;
+  }
+
+  private async callGeminiModel(
+    modelName: string,
+    requestBody: any,
+    allowFallback: boolean
+  ): Promise<string | null> {
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-      this.model
+      modelName
     )}:generateContent?key=${encodeURIComponent(this.apiKey)}`;
 
     let response: Response;
@@ -149,6 +203,9 @@ Return a structured JSON array of questions.
         body: JSON.stringify(requestBody)
       });
     } catch (networkError: any) {
+      if (allowFallback && modelName !== this.fallbackModel) {
+        return null;
+      }
       throw new AppError(
         `Failed to communicate with Gemini AI API: ${networkError?.message || networkError}`,
         502,
@@ -164,6 +221,12 @@ Return a structured JSON array of questions.
       } catch {
         // use raw errorText
       }
+
+      // If quota exceeded (429) or model not found (404), allow fallback to alternate model
+      if (allowFallback && (response.status === 429 || response.status === 404)) {
+        return null;
+      }
+
       const message =
         parsedError?.error?.message ||
         `Gemini API returned HTTP ${response.status}: ${errorText.substring(0, 300)}`;
@@ -175,13 +238,7 @@ Return a structured JSON array of questions.
     }
 
     const data: any = await response.json();
-    const rawCandidate = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!rawCandidate) {
-      return [];
-    }
-
-    return this.parseAndSanitizeGeminiOutput(rawCandidate);
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
   }
 
   /**
@@ -190,9 +247,20 @@ Return a structured JSON array of questions.
   private parseAndSanitizeGeminiOutput(rawText: string): IExtractedQuestionItem[] {
     let cleanJson = rawText.trim();
 
-    // Strip markdown code fences if present (e.g., ```json ... ```)
-    if (cleanJson.startsWith('```')) {
-      cleanJson = cleanJson.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+    // Check for markdown code fence anywhere in output
+    const fenceMatch = cleanJson.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (fenceMatch && fenceMatch[1]) {
+      cleanJson = fenceMatch[1].trim();
+    } else if (!cleanJson.startsWith('[') && !cleanJson.startsWith('{')) {
+      const firstBracket = cleanJson.indexOf('[');
+      const firstBrace = cleanJson.indexOf('{');
+      const startIdx =
+        firstBracket !== -1 && (firstBrace === -1 || firstBracket < firstBrace)
+          ? firstBracket
+          : firstBrace;
+      if (startIdx !== -1) {
+        cleanJson = cleanJson.substring(startIdx);
+      }
     }
 
     let parsed: any;
