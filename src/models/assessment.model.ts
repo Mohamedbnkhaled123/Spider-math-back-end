@@ -61,6 +61,7 @@ export interface IAssessment {
   has_essay_questions: boolean;
   total_points: number;
   xp_reward: number;
+  is_free?: boolean;
   is_published: boolean;
 
   questions: IQuestionItem[];
@@ -234,6 +235,11 @@ const AssessmentSchema = new Schema<IAssessmentDocument>(
       default: 30,
       min: 0
     },
+    is_free: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
     is_published: {
       type: Boolean,
       default: true,
@@ -250,8 +256,11 @@ const AssessmentSchema = new Schema<IAssessmentDocument>(
   }
 );
 
-// Automatic Total Points Calculation Hook
+// Automatic Total Points Calculation Hook & Homework Free Exclusion
 AssessmentSchema.pre('save', function (this: any, next: any) {
+  if (this.assessment_type === 'HOMEWORK') {
+    this.is_free = false;
+  }
   if (Array.isArray(this.questions) && this.questions.length > 0) {
     const calculated = this.questions.reduce((sum: number, q: any) => sum + (Number(q.points) || 1), 0);
     if (!this.total_points || this.total_points !== calculated) {

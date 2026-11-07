@@ -80,6 +80,14 @@ assessmentsRouter.get(
   assessmentsController.getAssessmentById
 );
 
+// Quick Toggle Free / Private Assessment (Super Admin only)
+assessmentsRouter.patch(
+  '/:id/toggle-free',
+  authenticateJwt,
+  authorizeRoles(ROLES.SUPER_ADMIN),
+  assessmentsController.toggleAssessmentFree
+);
+
 // 2. Admin Assessments Router (/api/v1/admin/assessments)
 export const adminAssessmentsRouter = Router();
 
@@ -102,6 +110,13 @@ adminAssessmentsRouter.patch(
   authenticateJwt,
   authorizeRoles(ROLES.SUPER_ADMIN),
   assessmentsController.updateAssessment
+);
+
+adminAssessmentsRouter.patch(
+  '/:id/toggle-free',
+  authenticateJwt,
+  authorizeRoles(ROLES.SUPER_ADMIN),
+  assessmentsController.toggleAssessmentFree
 );
 
 adminAssessmentsRouter.delete(

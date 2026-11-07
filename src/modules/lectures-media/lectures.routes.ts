@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { lecturesController } from './controllers/lectures.controller';
+import { adminLecturesController } from './controllers/admin-lectures.controller';
 import { authenticateJwt } from '../../middlewares/auth.middleware';
 import { deviceLockGuard } from '../../middlewares/device-lock.middleware';
 import { requireActiveSubscription } from '../../middlewares/subscription.middleware';
+import { authorizeRoles } from '../../middlewares/role.middleware';
+import { ROLES } from '../../common/constants/roles.constant';
 import { validateBody } from '../../middlewares/validate.middleware';
 import { watchHeartbeatDtoSchema } from './dto/watch-heartbeat.dto';
 
@@ -10,6 +13,16 @@ export const lecturesRouter = Router();
 
 // All lecture DRM streaming endpoints require valid JWT authentication & device lock
 lecturesRouter.use(authenticateJwt, deviceLockGuard);
+
+/**
+ * PATCH /api/v1/lectures/:id/toggle-free
+ * Quick toggle free/private status for Super Admin
+ */
+lecturesRouter.patch(
+  '/:id/toggle-free',
+  authorizeRoles(ROLES.SUPER_ADMIN),
+  adminLecturesController.toggleLectureFree
+);
 
 /**
  * GET /api/v1/lectures/:id/secure-playback

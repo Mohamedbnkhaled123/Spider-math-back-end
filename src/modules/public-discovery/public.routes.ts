@@ -29,6 +29,12 @@ publicRouter.get('/active-grades', async (_req, res, next) => {
 publicRouter.get('/curriculum-tree', publicController.getCurriculumTree);
 
 /**
+ * GET /api/v1/public/grade-quizzes
+ * Published curriculum quizzes grouped by units for students & visitors
+ */
+publicRouter.get('/grade-quizzes', publicController.getGradeQuizzes);
+
+/**
  * GET /api/v1/public/landing-data
  * Cached landing page configuration (10m TTL)
  */

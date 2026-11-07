@@ -66,8 +66,40 @@ export class UnitsService {
       .sort({ order_index: 1, createdAt: 1 })
       .lean();
 
+    if (units.length === 0) {
+      return [];
+    }
+
+    const unitIds = units.map((u) => u._id);
+
+    // Dynamically aggregate real published lectures and assessments counts directly from database
+    const [lectureCounts, quizCounts] = await Promise.all([
+      LectureMaterialModel.aggregate([
+        { $match: { unit_package_id: { $in: unitIds }, is_published: true } },
+        { $group: { _id: '$unit_package_id', count: { $sum: 1 } } }
+      ]),
+      AssessmentModel.aggregate([
+        { $match: { unit_package_id: { $in: unitIds }, is_published: true } },
+        { $group: { _id: '$unit_package_id', count: { $sum: 1 } } }
+      ])
+    ]);
+
+    const lectureMap = new Map<string, number>(lectureCounts.map((l: any) => [l._id.toString(), l.count]));
+    const quizMap = new Map<string, number>(quizCounts.map((q: any) => [q._id.toString(), q.count]));
+
     if (isAnonymousVisitor) {
-      const mapped = units.map((u) => ({ ...u, isSubscribed: false }));
+      const mapped = units.map((u) => {
+        const lecturesCount = lectureMap.get(u._id.toString()) || 0;
+        const quizzesCount = quizMap.get(u._id.toString()) || 0;
+        return {
+          ...u,
+          lectures_count: lecturesCount,
+          quizzes_count: quizzesCount,
+          total_lectures_count: lecturesCount,
+          total_assessments_count: quizzesCount,
+          isSubscribed: false
+        };
+      });
       publicCmsCache.set(cacheKey, mapped as any, 12 * 60 * 60 * 1000); // 12 hours TTL
       return mapped;
     }
@@ -88,8 +120,14 @@ export class UnitsService {
 
     return units.map((u) => {
       const subInfo = subMap.get(u._id.toString());
+      const lecturesCount = lectureMap.get(u._id.toString()) || 0;
+      const quizzesCount = quizMap.get(u._id.toString()) || 0;
       return {
         ...u,
+        lectures_count: lecturesCount,
+        quizzes_count: quizzesCount,
+        total_lectures_count: lecturesCount,
+        total_assessments_count: quizzesCount,
         isSubscribed: !!subInfo,
         accessScope: subInfo ? subInfo.accessScope : null,
         subscriptionExpiresAt: subInfo ? subInfo.expiresAt : null
@@ -160,7 +198,7 @@ export class UnitsService {
     // For non-subscribed users, selectively query playback and PDF credentials for free-trial lectures only
     const freeTrialLectureMap = new Map<string, any>();
     if (!hasFullAccess) {
-      const trialIds = lectures.filter((l) => l.is_free_trial).map((l) => l._id);
+      const trialIds = lectures.filter((l) => l.is_free || l.is_free_trial).map((l) => l._id);
       if (trialIds.length > 0) {
         const trialLecs = await LectureMaterialModel.find({
           _id: { $in: trialIds }
@@ -204,7 +242,7 @@ export class UnitsService {
 
     const hydratedLectures = lectures.map((lec: any) => {
       const prog = progressMap.get(lec._id.toString());
-      const isLectureAllowed = (isSubscribed && accessScope !== 'ASSESSMENTS_ONLY') || !!lec.is_free_trial;
+      const isLectureAllowed = (isSubscribed && accessScope !== 'ASSESSMENTS_ONLY') || !!lec.is_free || !!lec.is_free_trial;
       const trialData = freeTrialLectureMap.get(lec._id.toString());
 
       // If lecture is not authorized, zero-out sensitive DRM video & PDF credentials

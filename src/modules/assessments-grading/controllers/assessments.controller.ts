@@ -138,6 +138,23 @@ export class AssessmentsController {
   };
 
   /**
+   * Toggles an assessment free status
+   * PATCH /api/v1/assessments/:id/toggle-free or /api/v1/admin/assessments/:id/toggle-free
+   */
+  toggleAssessmentFree = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const assessment = await this.assessmentsService.toggleAssessmentFree(req.params.id as string);
+      res.status(200).json({
+        success: true,
+        data: assessment,
+        message: assessment.is_free ? 'تم تفعيل إتاحة الكويز مجاناً لجميع الطلاب' : 'تم قفل الكويز ليكون خاصاً بالطلاب المشتركين فقط'
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
    * Lists assessments with optional filters
    * GET /api/v1/assessments
    */

@@ -22,6 +22,7 @@ export interface IGradeLevelTreeItem {
   terms: ITermTreeItem[];
   hasPublishedUnits: boolean;
   totalPublishedUnitsCount: number;
+  hasPlacementTest: boolean;
   isAvailable: boolean; // Dynamic availability: true if content exists, false = 'Coming Soon'
 }
 
@@ -129,12 +130,15 @@ export class CurriculumTreeService {
 
         curriculumTotalUnits += gradeTotalUnits;
 
+        const hasPlacement = terms.some((t) => t.hasPlacementTest);
+
         return {
           gradeLevel: gradeLevel as GradeLevelType,
           terms,
           hasPublishedUnits: gradeTotalUnits > 0,
           totalPublishedUnitsCount: gradeTotalUnits,
-          isAvailable: gradeTotalUnits > 0
+          hasPlacementTest: hasPlacement,
+          isAvailable: gradeTotalUnits > 0 || hasPlacement
         };
       });
 

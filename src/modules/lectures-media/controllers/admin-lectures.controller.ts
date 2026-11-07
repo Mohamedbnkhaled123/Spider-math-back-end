@@ -7,6 +7,7 @@ import { ERROR_CODES } from '../../../common/constants/error-codes.constant';
 import { CryptoProxyService } from '../../../common/utils/crypto.util';
 import { createSuccessResponse } from '../../../common/interfaces/api-response.interface';
 import { fetchYouTubeVideoDurationSec } from '../utils/youtube-duration.util';
+import { publicCmsCache } from '../../../config/cache.config';
 
 export class AdminLecturesController {
   /**
@@ -86,7 +87,8 @@ export class AdminLecturesController {
         pdf_materials: pdfMaterials,
         google_drive_pdf_id: googleDrivePdfFileId ? googleDrivePdfFileId.trim() : '',
         is_print_allowed: !!isPrintAllowed,
-        is_free_trial: !!isFreeTrial,
+        is_free: req.body.isFree !== undefined ? !!req.body.isFree : (req.body.is_free !== undefined ? !!req.body.is_free : !!isFreeTrial),
+        is_free_trial: req.body.isFree !== undefined ? !!req.body.isFree : (req.body.is_free !== undefined ? !!req.body.is_free : !!isFreeTrial),
         is_published: true
       });
 
@@ -130,7 +132,11 @@ export class AdminLecturesController {
 
       if (titleAr) lecture.lecture_title_ar = titleAr.trim();
       if (titleEn) lecture.lecture_title_en = titleEn.trim();
-      if (isFreeTrial !== undefined) lecture.is_free_trial = isFreeTrial;
+      const updatedFree = req.body.isFree !== undefined ? !!req.body.isFree : (req.body.is_free !== undefined ? !!req.body.is_free : (isFreeTrial !== undefined ? !!isFreeTrial : undefined));
+      if (updatedFree !== undefined) {
+        lecture.is_free = updatedFree;
+        lecture.is_free_trial = updatedFree;
+      }
       if (isPublished !== undefined) lecture.is_published = isPublished;
       if (xpReward !== undefined) lecture.xp_reward_on_complete = Number(xpReward);
 
@@ -201,6 +207,39 @@ export class AdminLecturesController {
       });
 
       res.status(200).json(createSuccessResponse({ deletedId: lectureId }));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/v1/admin/lectures/:id/toggle-free or /api/v1/lectures/:id/toggle-free
+   */
+  public async toggleLectureFree(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const lectureId = req.params.id;
+      if (!lectureId || !Types.ObjectId.isValid(lectureId)) {
+        throw new AppError('Invalid lectureId format', 400, ERROR_CODES.BAD_REQUEST_400);
+      }
+      const lecture = await LectureMaterialModel.findById(lectureId);
+      if (!lecture) {
+        throw new AppError('Lecture not found', 404, ERROR_CODES.RESOURCE_NOT_FOUND_404);
+      }
+
+      const newStatus = !(lecture.is_free || lecture.is_free_trial);
+      lecture.is_free = newStatus;
+      lecture.is_free_trial = newStatus;
+      await lecture.save();
+
+      publicCmsCache.clear();
+
+      res.status(200).json({
+        success: true,
+        data: lecture,
+        message: newStatus
+          ? 'تم تفعيل إتاحة المحاضرة مجاناً لجميع الطلاب'
+          : 'تم قفل المحاضرة لتكون خاصة بالطلاب المشتركين فقط'
+      });
     } catch (error) {
       next(error);
     }

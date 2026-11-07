@@ -42,6 +42,7 @@ export interface ILectureMaterial {
   google_drive_pdf_id?: string;
   google_drive_pdf_url?: string;
   is_print_allowed?: boolean;
+  is_free?: boolean;
   is_free_trial: boolean;
   is_published: boolean;
   createdAt: Date;
@@ -159,6 +160,11 @@ const LectureMaterialSchema = new Schema<ILectureMaterialDocument>(
       type: Boolean,
       default: false
     },
+    is_free: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
     is_free_trial: {
       type: Boolean,
       default: false,
@@ -175,6 +181,16 @@ const LectureMaterialSchema = new Schema<ILectureMaterialDocument>(
     versionKey: false
   }
 );
+
+// Sync is_free and is_free_trial
+LectureMaterialSchema.pre('save', function (this: any, next: any) {
+  if (this.is_free !== undefined) {
+    this.is_free_trial = !!this.is_free;
+  } else if (this.is_free_trial !== undefined) {
+    this.is_free = !!this.is_free_trial;
+  }
+  next();
+});
 
 // Ordered lessons inside a Unit Package
 LectureMaterialSchema.index({ unit_package_id: 1, is_published: 1, order_index: 1 });

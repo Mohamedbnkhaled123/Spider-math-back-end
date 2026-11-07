@@ -11,4 +11,5 @@ adminLecturesRouter.use(authenticateJwt, requireRoles(ROLES.SUPER_ADMIN));
 
 adminLecturesRouter.post('/', adminLecturesController.createLecture);
 adminLecturesRouter.patch('/:id', adminLecturesController.updateLecture);
+adminLecturesRouter.patch('/:id/toggle-free', adminLecturesController.toggleLectureFree);
 adminLecturesRouter.delete('/:id', adminLecturesController.deleteLecture);

@@ -123,6 +123,8 @@ export const createAssessmentBaseSchema = z.object({
   lectureId: z.string().optional().nullable(),
   is_placement_test: z.boolean().default(false),
   isPlacementTest: z.boolean().optional(),
+  is_free: z.boolean().optional(),
+  isFree: z.boolean().optional(),
 
   curriculum: z.enum(CURRICULUMS),
   grade_level: z.enum(ALL_GRADE_LEVELS).or(z.string()),
@@ -178,6 +180,7 @@ export const createAssessmentDtoSchema = createAssessmentBaseSchema.transform((d
   const calc = (data.graph_calculator === 'DESMOS' || data.calculator_mode === 'DESMOS' || data.calculatorType === 'DESMOS') ? 'DESMOS' : 'NONE';
   const referenceSheetUrl = data.reference_sheet_url ?? data.referenceSheetUrl ?? null;
   const isPlacement = data.is_placement_test ?? data.isPlacementTest ?? false;
+  const isFree = assessmentType === 'HOMEWORK' ? false : (data.is_free ?? data.isFree ?? false);
   const isPublished = data.is_published ?? data.isPublished ?? true;
   const unitId = data.unit_package_id || data.unitPackageId || null;
 
@@ -203,6 +206,7 @@ export const createAssessmentDtoSchema = createAssessmentBaseSchema.transform((d
     has_essay_questions: hasEssayQuestions,
     total_points: totalPoints,
     is_placement_test: isPlacement,
+    is_free: isFree,
     is_published: isPublished,
     unit_package_id: unitId && /^[0-9a-fA-F]{24}$/.test(unitId) ? unitId : null,
     questions

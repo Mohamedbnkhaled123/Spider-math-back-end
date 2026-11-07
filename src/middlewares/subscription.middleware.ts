@@ -40,7 +40,7 @@ export async function requireActiveSubscription(req: Request, _res: Response, ne
     const isLectureRoute = req.baseUrl.includes('lectures') || req.path.includes('lecture');
     if (isLectureRoute) {
       const lecture = await LectureMaterialModel.findById(rawId)
-        .select('unit_package_id is_free_trial')
+        .select('unit_package_id is_free_trial is_free')
         .lean();
 
       if (!lecture) {
@@ -50,7 +50,7 @@ export async function requireActiveSubscription(req: Request, _res: Response, ne
       }
 
       // Free trial lectures are accessible to all authenticated students without a subscription
-      if (lecture.is_free_trial) {
+      if (lecture.is_free || lecture.is_free_trial) {
         return next();
       }
 

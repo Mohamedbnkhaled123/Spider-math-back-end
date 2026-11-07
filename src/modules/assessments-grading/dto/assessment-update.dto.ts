@@ -26,6 +26,7 @@ export const updateAssessmentDtoSchema = createAssessmentBaseSchema
     const grade = data.grade_level || data.gradeLevel;
     const term = data.academic_term || data.term;
     const isPlacement = data.is_placement_test ?? data.isPlacementTest;
+    const isFree = data.is_free ?? data.isFree;
     const passPercentage = data.pass_percentage ?? data.passPercentage;
     const maxAttempts = data.max_attempts ?? data.maxAttempts;
     const availableFrom = data.available_from !== undefined ? data.available_from : data.availableFrom;
@@ -50,6 +51,7 @@ export const updateAssessmentDtoSchema = createAssessmentBaseSchema
       ...(isPublished !== undefined ? { is_published: isPublished } : {}),
       ...(assessmentType ? { assessment_type: assessmentType as any } : {}),
       ...(isPlacement !== undefined ? { is_placement_test: isPlacement } : {}),
+      ...(isFree !== undefined ? { is_free: isFree } : {}),
       ...(refSheet !== undefined ? { reference_sheet_url: refSheet } : {}),
       ...(data.questions ? {
         questions: data.questions,

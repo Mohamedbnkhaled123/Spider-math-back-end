@@ -86,6 +86,7 @@ export class AssessmentsService {
       unit_package_id: (dto.unit_package_id && Types.ObjectId.isValid(dto.unit_package_id)) ? new Types.ObjectId(dto.unit_package_id) : null,
       lecture_id: (dto.lecture_id && Types.ObjectId.isValid(dto.lecture_id)) ? new Types.ObjectId(dto.lecture_id) : null,
       is_placement_test: dto.is_placement_test ?? false,
+      is_free: dto.assessment_type === 'HOMEWORK' ? false : (dto.is_free ?? false),
       curriculum: dto.curriculum,
       grade_level: dto.grade_level,
       academic_term: dto.academic_term,
@@ -171,6 +172,9 @@ export class AssessmentsService {
     if (dto.reference_sheet_url !== undefined) assessment.reference_sheet_url = dto.reference_sheet_url;
       if (dto.reference_sheet_url !== undefined) assessment.reference_sheet_url = dto.reference_sheet_url;
       if ((dto as any).is_placement_test !== undefined) assessment.is_placement_test = (dto as any).is_placement_test;
+      if ((dto as any).is_free !== undefined) {
+        assessment.is_free = assessment.assessment_type === 'HOMEWORK' ? false : !!(dto as any).is_free;
+      }
       if (dto.xp_reward !== undefined) assessment.xp_reward = dto.xp_reward;
       if (dto.is_published !== undefined) assessment.is_published = dto.is_published;
 
@@ -364,7 +368,7 @@ export class AssessmentsService {
     }
 
     // Subscription authorization check for curriculum units
-    if (!assessment.is_placement_test && assessment.unit_package_id) {
+    if (!assessment.is_placement_test && !assessment.is_free && assessment.unit_package_id) {
       if (userRole !== ROLES.SUPER_ADMIN) {
         const sub = await SubscriptionModel.findOne({
           student_id: new Types.ObjectId(studentId),
@@ -383,7 +387,7 @@ export class AssessmentsService {
     }
 
     // General assessment authorization check: Must have ANY active subscription (whether FULL or ASSESSMENTS_ONLY)
-    if (!assessment.is_placement_test && !assessment.unit_package_id) {
+    if (!assessment.is_placement_test && !assessment.is_free && !assessment.unit_package_id) {
       if (userRole !== ROLES.SUPER_ADMIN) {
         const student = await UserModel.findById(studentId).select('has_active_subscription');
         const hasActiveSub = student?.has_active_subscription || (await SubscriptionModel.exists({
@@ -825,6 +829,30 @@ export class AssessmentsService {
 
     assessmentAnswerKeyCache.delete(assessmentId);
     publicCmsCache.clear();
+  }
+
+  /**
+   * Toggles the is_free status of an assessment (excluding HOMEWORK)
+   */
+  async toggleAssessmentFree(assessmentId: string): Promise<IAssessmentDocument> {
+    if (!Types.ObjectId.isValid(assessmentId)) {
+      throw new AppError('Invalid assessment ID', 400, ERROR_CODES.BAD_REQUEST_400);
+    }
+    const assessment = await AssessmentModel.findById(assessmentId);
+    if (!assessment) {
+      throw new AppError('Assessment not found', 404, ERROR_CODES.ASSESSMENT_NOT_FOUND_404);
+    }
+
+    if (assessment.assessment_type === 'HOMEWORK') {
+      throw new AppError('لا يمكن جعل الواجب المنزلي محتوى مجانياً، الواجبات خاصة دائماً بالمشتركين', 400, ERROR_CODES.BAD_REQUEST_400);
+    }
+
+    assessment.is_free = !assessment.is_free;
+    await assessment.save();
+
+    assessmentAnswerKeyCache.delete(assessmentId);
+    publicCmsCache.clear();
+    return assessment;
   }
 
   /**

@@ -1,6 +1,8 @@
 import { Types } from 'mongoose';
 import { PlacementAttemptModel } from '../../../models/placement-attempt.model';
 import { LeadModel } from '../../../models/lead.model';
+import { UnitPackageModel } from '../../../models/unit-package.model';
+import { AssessmentModel } from '../../../models/assessment.model';
 import { Request, Response, NextFunction } from 'express';
 import { curriculumTreeService } from '../services/curriculum-tree.service';
 import { cmsService } from '../../admin-cms/services/cms.service';
@@ -138,6 +140,106 @@ export class PublicController {
         correctCount: attempt.correct_count,
         createdAt: attempt.createdAt
       }));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/public/grade-quizzes?curriculum=EGYPTIAN&gradeLevel=SEC_1&term=TERM_1
+   * Returns published curriculum quizzes grouped by units for students & visitors.
+   */
+  public async getGradeQuizzes(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const curriculum = req.query.curriculum as string;
+      const gradeLevel = (req.query.gradeLevel || req.query.grade_level) as string;
+      const term = (req.query.term || req.query.academic_term) as string;
+
+      if (!curriculum || !gradeLevel) {
+        res.status(200).json(createSuccessResponse({ units: [], generalQuizzes: [] }));
+        return;
+      }
+
+      // Query published units for this curriculum + grade
+      const unitFilter: any = {
+        curriculum,
+        grade_level: gradeLevel,
+        is_published: true
+      };
+      if (term && term !== 'ALL_TERMS') {
+        unitFilter.academic_term = term;
+      }
+
+      const units = await UnitPackageModel.find(unitFilter)
+        .sort({ order_index: 1, createdAt: 1 })
+        .select('_id title_ar title_en order_index package_type price_egp')
+        .lean();
+
+      // Query published assessments (excluding HOMEWORK, which is strictly private)
+      const assessmentFilter: any = {
+        curriculum,
+        grade_level: gradeLevel,
+        is_published: true,
+        assessment_type: { $ne: 'HOMEWORK' }
+      };
+      if (term && term !== 'ALL_TERMS') {
+        assessmentFilter.$or = [
+          { academic_term: term },
+          { academic_term: 'ALL_TERMS' },
+          { academic_term: null },
+          { academic_term: { $exists: false } }
+        ];
+      }
+
+      const assessments = await AssessmentModel.find(assessmentFilter)
+        .sort({ createdAt: 1 })
+        .select('_id title_ar title_en unit_package_id assessment_type time_limit_minutes total_points is_free is_placement_test xp_reward questions')
+        .lean();
+
+      // Map assessments to units
+      const unitMap = new Map<string, any[]>();
+      const generalQuizzes: any[] = [];
+
+      for (const a of assessments) {
+        const item = {
+          id: a._id.toString(),
+          titleAr: a.title_ar,
+          titleEn: a.title_en,
+          assessmentType: a.assessment_type,
+          timeLimitMinutes: a.time_limit_minutes,
+          totalPoints: a.total_points,
+          questionsCount: a.questions?.length || 0,
+          isFree: !!a.is_free,
+          isPlacementTest: !!a.is_placement_test,
+          xpReward: a.xp_reward || 0
+        };
+
+        if (a.unit_package_id) {
+          const uId = a.unit_package_id.toString();
+          const list = unitMap.get(uId) || [];
+          list.push(item);
+          unitMap.set(uId, list);
+        } else {
+          generalQuizzes.push(item);
+        }
+      }
+
+      const groupedUnits = units.map((u) => ({
+        unitId: u._id.toString(),
+        titleAr: u.title_ar,
+        titleEn: u.title_en,
+        orderIndex: u.order_index,
+        packageType: u.package_type,
+        priceEgp: u.price_egp,
+        quizzes: unitMap.get(u._id.toString()) || []
+      }));
+
+      res.status(200).json(
+        createSuccessResponse({
+          units: groupedUnits,
+          generalQuizzes
+        })
+      );
     } catch (error) {
       next(error);
     }
