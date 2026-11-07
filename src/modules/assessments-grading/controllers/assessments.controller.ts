@@ -227,7 +227,12 @@ export class AssessmentsController {
    */
   aiExtractQuestions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const questions = await this.aiExtractionService.extractQuestions(req.body);
+      const headerKey = req.header('x-gemini-api-key')?.trim();
+      const payload = {
+        ...req.body,
+        ...(headerKey && !req.body.apiKey ? { apiKey: headerKey } : {})
+      };
+      const questions = await this.aiExtractionService.extractQuestions(payload);
       res.status(200).json({
         success: true,
         data: {

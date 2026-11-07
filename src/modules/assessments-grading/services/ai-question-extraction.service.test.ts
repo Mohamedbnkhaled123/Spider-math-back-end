@@ -145,6 +145,12 @@ async function runTests() {
   assert.equal(parsedItems[1].box_2d, undefined, 'Zero-area box should be safely discarded');
   console.log('✔ Test 7 Passed: Gemini adapter normalizes inverted coordinates and safely discards zero-area boxes.');
 
+  // Test 8: Gemini adapter initializes with verified backup key and gemini-3.5-flash by default
+  const defaultAdapter = new (require('../providers/gemini-question-extractor.adapter').GeminiQuestionExtractorAdapter)();
+  assert.ok(defaultAdapter.apiKey && defaultAdapter.apiKey.length > 20, 'Adapter should have a non-empty backup apiKey');
+  assert.equal(defaultAdapter.model, 'gemini-3.5-flash', 'Default model should be gemini-3.5-flash');
+  console.log('✔ Test 8 Passed: Gemini adapter initializes with verified backup key and gemini-3.5-flash.');
+
   console.log('\nAll AiQuestionExtractionService tests completed successfully!');
 }
 

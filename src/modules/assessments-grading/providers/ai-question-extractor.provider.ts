@@ -17,6 +17,7 @@ export interface IExtractionOptions {
   mode: ExtractionMode;
   curriculum?: string;
   gradeLevel?: string;
+  apiKey?: string;
 }
 
 export interface IExtractedQuestionItem {

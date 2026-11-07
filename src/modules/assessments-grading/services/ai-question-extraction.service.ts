@@ -73,7 +73,8 @@ export class AiQuestionExtractionService {
       mimeType: validatedDto.mimeType,
       mode: validatedDto.mode,
       curriculum: validatedDto.curriculum,
-      gradeLevel: validatedDto.gradeLevel
+      gradeLevel: validatedDto.gradeLevel,
+      apiKey: validatedDto.apiKey
     };
 
     const rawQuestions = await provider.extractQuestions(options);

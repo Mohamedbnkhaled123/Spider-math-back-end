@@ -17,7 +17,8 @@ export const aiExtractQuestionsDtoSchema = z.object({
 
   providerId: z.string().optional(),
   curriculum: z.string().optional(),
-  gradeLevel: z.string().optional()
+  gradeLevel: z.string().optional(),
+  apiKey: z.string().optional()
 });
 
 export type AiExtractQuestionsDto = z.infer<typeof aiExtractQuestionsDtoSchema>;
