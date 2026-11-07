@@ -145,11 +145,22 @@ async function runTests() {
   assert.equal(parsedItems[1].box_2d, undefined, 'Zero-area box should be safely discarded');
   console.log('✔ Test 7 Passed: Gemini adapter normalizes inverted coordinates and safely discards zero-area boxes.');
 
-  // Test 8: Gemini adapter initializes with verified backup key and gemini-3.5-flash by default
+  // Test 8: Gemini adapter initializes with gemini-3.5-flash by default and validates missing API key
   const defaultAdapter = new (require('../providers/gemini-question-extractor.adapter').GeminiQuestionExtractorAdapter)();
-  assert.ok(defaultAdapter.apiKey && defaultAdapter.apiKey.length > 20, 'Adapter should have a non-empty backup apiKey');
   assert.equal(defaultAdapter.model, 'gemini-3.5-flash', 'Default model should be gemini-3.5-flash');
-  console.log('✔ Test 8 Passed: Gemini adapter initializes with verified backup key and gemini-3.5-flash.');
+  const emptyAdapter = new (require('../providers/gemini-question-extractor.adapter').GeminiQuestionExtractorAdapter)('');
+  await assert.rejects(
+    async () => {
+      await emptyAdapter.extractQuestions({
+        imageBase64: 'test_base64_data',
+        mimeType: 'image/webp',
+        mode: 'SMART_HYBRID'
+      });
+    },
+    (err: any) => err instanceof AppError && err.statusCode === 400,
+    'Missing API key must throw AppError(400)'
+  );
+  console.log('✔ Test 8 Passed: Gemini adapter initializes with gemini-3.5-flash and validates API key strictly.');
 
   console.log('\nAll AiQuestionExtractionService tests completed successfully!');
 }

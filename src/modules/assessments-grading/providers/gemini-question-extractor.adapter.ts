@@ -6,15 +6,6 @@ import {
 import { AppError } from '../../../common/utils/app-error.util';
 import { ERROR_CODES } from '../../../common/constants/error-codes.constant';
 
-/**
- * Verified backup Gemini API key to ensure seamless functionality on
- * Vercel serverless environments even before environment variables are set manually.
- */
-export const BACKUP_GEMINI_API_KEY = Buffer.from(
-  'QVEuQWI4Uk42SXhJb2gyakc5b3dneE1CcUJHeTMxMG5YSWlDcW1EdVNhWGk0dzBuTHRzeXc=',
-  'base64'
-).toString('utf8');
-
 export class GeminiQuestionExtractorAdapter implements IAiQuestionExtractorProvider {
   readonly providerId = 'gemini';
   private readonly apiKey: string;
@@ -22,7 +13,7 @@ export class GeminiQuestionExtractorAdapter implements IAiQuestionExtractorProvi
   private readonly fallbackModel: string;
 
   constructor(apiKey?: string, model?: string, fallbackModel?: string) {
-    this.apiKey = (apiKey || process.env.GEMINI_API_KEY || BACKUP_GEMINI_API_KEY).trim();
+    this.apiKey = (apiKey || process.env.GEMINI_API_KEY || '').trim();
     this.model = this.normalizeModelName(
       model || process.env.GEMINI_MODEL || process.env.GEMINI_EXTRACTION_MODEL || 'gemini-3.5-flash'
     );
@@ -46,12 +37,12 @@ export class GeminiQuestionExtractorAdapter implements IAiQuestionExtractorProvi
   }
 
   async extractQuestions(options: IExtractionOptions): Promise<IExtractedQuestionItem[]> {
-    const effectiveApiKey = (options.apiKey || this.apiKey || BACKUP_GEMINI_API_KEY).trim();
+    const effectiveApiKey = (options.apiKey || this.apiKey).trim();
     if (!effectiveApiKey) {
       throw new AppError(
-        'GEMINI_API_KEY is not configured on the server. Please provide a valid Gemini API key.',
-        500,
-        ERROR_CODES.INTERNAL_SERVER_ERROR_500
+        'GEMINI_API_KEY is not configured on the server. Please add GEMINI_API_KEY to your environment variables or provide it in the extraction request.',
+        400,
+        ERROR_CODES.BAD_REQUEST_400
       );
     }
 
