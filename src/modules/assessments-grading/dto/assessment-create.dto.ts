@@ -132,10 +132,11 @@ export const createAssessmentBaseSchema = z.object({
   academic_term: z.enum(ACADEMIC_TERMS).or(z.string()).default('TERM_1'),
   term: z.string().optional(),
 
-  title_ar: z.string().trim().min(1, 'Arabic title is required'),
+  title_ar: z.string().trim().optional(),
   titleAr: z.string().optional(),
   title_en: z.string().trim().optional(),
   titleEn: z.string().optional(),
+  title: z.string().trim().optional(),
   assessment_type: z.enum(ASSESSMENT_TYPES).default('QUIZ'),
   assessmentType: z.string().optional(),
   time_limit_minutes: z.coerce.number().int().positive().default(30),
@@ -169,12 +170,24 @@ export const createAssessmentBaseSchema = z.object({
   questions: z.array(questionItemDtoSchema).default([])
 }).passthrough();
 
-export const createAssessmentDtoSchema = createAssessmentBaseSchema.transform((data) => {
+export const createAssessmentDtoSchema = createAssessmentBaseSchema
+  .superRefine((data, ctx) => {
+    const rawTitle = (data.title_ar || data.titleAr || data.title_en || data.titleEn || (data as any).title || '').trim();
+    if (!rawTitle) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Assessment title is required (Arabic or English)',
+        path: ['title_ar']
+      });
+    }
+  })
+  .transform((data) => {
   const curriculum = data.curriculum as any;
   const gradeLevel = (data.grade_level || data.gradeLevel) as any;
   const academicTerm = (data.academic_term || data.term || 'TERM_1') as any;
-  const titleAr = (data.title_ar || data.titleAr || '').trim();
-  const titleEn = (data.title_en || data.titleEn || titleAr).trim();
+  const rawTitle = (data.title_ar || data.titleAr || data.title_en || data.titleEn || (data as any).title || '').trim();
+  const titleAr = (data.title_ar || data.titleAr || rawTitle).trim();
+  const titleEn = (data.title_en || data.titleEn || rawTitle).trim();
   const assessmentType = (data.assessment_type || data.assessmentType || 'QUIZ') as any;
   const timeLimit = data.time_limit_minutes || data.duration_minutes || data.durationMinutes || 30;
   const passPercentage = data.pass_percentage ?? data.passPercentage ?? 60;

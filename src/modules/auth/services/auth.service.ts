@@ -907,9 +907,12 @@ export class AuthService {
 
   /**
    * Fetches all registered users/students from Atlas for Super Admin overview.
+   * Strictly filters out SUPER_ADMIN, ADMIN, and TEACHER accounts.
    */
   public async getAllStudents() {
-    const students = await UserModel.find()
+    const students = await UserModel.find({
+      role: { $nin: ['SUPER_ADMIN', 'ADMIN', 'TEACHER'] }
+    })
       .select('full_name student_code email phone parent_phone curriculum grade_level approved_devices total_xp has_active_subscription account_lock_status role is_profile_completed is_leaderboard_hidden createdAt')
       .sort({ createdAt: -1 })
       .lean();
