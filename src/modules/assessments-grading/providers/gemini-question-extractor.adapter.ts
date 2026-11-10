@@ -32,10 +32,10 @@ export class GeminiQuestionExtractorAdapter implements IAiQuestionExtractorProvi
   constructor(apiKey?: string, model?: string, fallbackModel?: string) {
     this.apiKey = resolveValidApiKey(apiKey) || resolveValidApiKey(process.env.GEMINI_API_KEY) || BACKUP_GEMINI_API_KEY;
     this.model = this.normalizeModelName(
-      model || process.env.GEMINI_MODEL || process.env.GEMINI_EXTRACTION_MODEL || 'gemini-3.5-flash'
+      model || process.env.GEMINI_MODEL || process.env.GEMINI_EXTRACTION_MODEL || 'gemini-3.5-flash-lite'
     );
     this.fallbackModel = this.normalizeModelName(
-      fallbackModel || process.env.GEMINI_FALLBACK_MODEL || 'gemini-3-flash-preview'
+      fallbackModel || process.env.GEMINI_FALLBACK_MODEL || 'gemini-flash-lite-latest'
     );
   }
 
@@ -45,11 +45,12 @@ export class GeminiQuestionExtractorAdapter implements IAiQuestionExtractorProvi
    */
   private normalizeModelName(rawModel: string): string {
     const trimmed = (rawModel || '').trim();
-    if (!trimmed) return 'gemini-3.5-flash';
+    if (!trimmed) return 'gemini-3.5-flash-lite';
     if (trimmed === 'gemini-3.1-pro') return 'gemini-3.1-pro-preview';
     if (trimmed === 'gemini-2.5-pro') return 'gemini-3.1-pro-preview';
-    if (trimmed === 'gemini-2.5-flash') return 'gemini-3.5-flash';
-    if (trimmed === 'gemini-3-flash') return 'gemini-3-flash-preview';
+    if (trimmed === 'gemini-2.5-flash') return 'gemini-3.5-flash-lite';
+    if (trimmed === 'gemini-2.5-flash-lite') return 'gemini-3.5-flash-lite';
+    if (trimmed === 'gemini-3-flash') return 'gemini-3.5-flash-lite';
     return trimmed;
   }
 
@@ -227,7 +228,10 @@ Return a structured JSON array of questions.
       new Set([
         this.model,
         this.fallbackModel,
+        'gemini-3.5-flash-lite',
+        'gemini-flash-lite-latest',
         'gemini-3.5-flash',
+        'gemini-flash-latest',
         'gemini-3-flash-preview',
         'gemini-3.8-flash',
         'gemini-3.1-pro-preview'

@@ -103,9 +103,9 @@ const envSchema = z.object({
       ).toString('utf8')
     ),
   AI_EXTRACTION_PROVIDER: z.string().default('gemini'),
-  GEMINI_EXTRACTION_MODEL: z.string().default('gemini-3.5-flash'),
-  GEMINI_MODEL: z.string().default('gemini-3.5-flash'),
-  GEMINI_FALLBACK_MODEL: z.string().default('gemini-3-flash-preview')
+  GEMINI_EXTRACTION_MODEL: z.string().default('gemini-3.5-flash-lite'),
+  GEMINI_MODEL: z.string().default('gemini-3.5-flash-lite'),
+  GEMINI_FALLBACK_MODEL: z.string().default('gemini-flash-lite-latest')
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
