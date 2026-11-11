@@ -11,11 +11,13 @@ export interface IQuestionData {
   questionId: string;
   questionType: QuestionType;
   correctOptionIndex?: number;
+  acceptedAnswers?: string[];
   points: number;
 }
 
 export interface IStudentAnswerData {
   selectedOptionIndex?: number;
+  textAnswer?: string;
   solutionImgsCount?: number;
 }
 
@@ -52,6 +54,47 @@ export class McqQuestionGrader implements IQuestionGrader {
 }
 
 /**
+ * Grader implementation for Short Answer / Text Input Questions (INPUT_TEXT).
+ * Evaluates student text answer against teacher's accepted_answers
+ * using trim(), toUpperCase(), and collapsing multiple whitespace characters.
+ */
+export class InputTextQuestionGrader implements IQuestionGrader {
+  grade(question: IQuestionData, answer?: IStudentAnswerData): IQuestionGradeResult {
+    if (
+      !answer ||
+      answer.textAnswer === undefined ||
+      answer.textAnswer === null ||
+      !question.acceptedAnswers ||
+      question.acceptedAnswers.length === 0
+    ) {
+      return {
+        isCorrect: false,
+        pointsEarned: 0
+      };
+    }
+
+    const normalize = (str: string): string => str.trim().toUpperCase().replace(/\s+/g, ' ');
+
+    const studentNormalized = normalize(answer.textAnswer);
+    if (!studentNormalized) {
+      return {
+        isCorrect: false,
+        pointsEarned: 0
+      };
+    }
+
+    const isMatch = question.acceptedAnswers.some(
+      (accepted) => normalize(accepted) === studentNormalized
+    );
+
+    return {
+      isCorrect: isMatch,
+      pointsEarned: isMatch ? question.points : 0
+    };
+  }
+}
+
+/**
  * Grader implementation for Essay & Photo Questions (ESSAY_PHOTO).
  * Auto-grades as 0 pending manual review by Eng. Heba Abdel-Wahab in Grading Studio.
  */
@@ -73,6 +116,8 @@ export class QuestionGraderFactory {
     switch (questionType) {
       case 'MCQ':
         return new McqQuestionGrader();
+      case 'INPUT_TEXT':
+        return new InputTextQuestionGrader();
       case 'ESSAY_PHOTO':
         return new EssayPhotoQuestionGrader();
       default:

@@ -26,7 +26,7 @@ export class PlacementService {
       is_placement_test: true,
       is_published: true
     })
-      .select('-questions.correct_option_index -questions.model_answer_text -questions.youtube_solution_url')
+      .select('-questions.correct_option_index -questions.accepted_answers -questions.model_answer_text -questions.youtube_solution_url')
       .lean();
 
     // 2. Fallback to any published quiz for this grade level
@@ -38,7 +38,7 @@ export class PlacementService {
         assessment_type: 'QUIZ',
         is_published: true
       })
-        .select('-questions.correct_option_index -questions.model_answer_text -questions.youtube_solution_url')
+        .select('-questions.correct_option_index -questions.accepted_answers -questions.model_answer_text -questions.youtube_solution_url')
         .lean();
     }
 

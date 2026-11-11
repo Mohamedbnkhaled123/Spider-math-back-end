@@ -11,7 +11,7 @@ import {
 export const ASSESSMENT_TYPES = ['QUIZ', 'HOMEWORK', 'COMPREHENSIVE_EXAM'] as const;
 export type AssessmentType = (typeof ASSESSMENT_TYPES)[number];
 
-export const QUESTION_TYPES = ['MCQ', 'ESSAY_PHOTO'] as const;
+export const QUESTION_TYPES = ['MCQ', 'ESSAY_PHOTO', 'INPUT_TEXT'] as const;
 export type QuestionType = (typeof QUESTION_TYPES)[number];
 
 // Graphing calculator options strictly limited to NONE or DESMOS (GeoGebra completely excluded)
@@ -32,7 +32,9 @@ export interface IQuestionItem {
 
   options: string[];
   correct_option_index?: number; // Stripped by default (select: false)
+  accepted_answers?: string[]; // Teacher-defined probable answers for INPUT_TEXT (select: false)
   points: number;
+  module_index?: 1 | 2;
   model_answer_text?: string; // Stripped by default (select: false)
   youtube_solution_url?: string | null; // Unprotected YouTube solution URL (select: false)
 }
@@ -50,6 +52,9 @@ export interface IAssessment {
   title_en: string;
   assessment_type: AssessmentType;
   time_limit_minutes: number;
+  is_multi_module?: boolean;
+  module_1_time_minutes?: number | null;
+  module_2_time_minutes?: number | null;
   pass_percentage?: number;
   min_expected_solve_sec: number; // Anti-cheat baseline timing
   max_attempts: number;
@@ -102,11 +107,21 @@ const QuestionItemSchema = new Schema<IQuestionItem>(
       type: Number,
       select: false // Zero answer leakage: hidden from student API queries by default
     },
+    accepted_answers: {
+      type: [String],
+      default: undefined,
+      select: false // Zero answer leakage: never returned to students
+    },
     points: {
       type: Number,
       required: true,
       default: 1,
       min: 1
+    },
+    module_index: {
+      type: Number,
+      enum: [1, 2],
+      default: 1
     },
     model_answer_text: {
       type: String,
@@ -184,6 +199,21 @@ const AssessmentSchema = new Schema<IAssessmentDocument>(
       type: Number,
       required: true,
       default: 30,
+      min: 1
+    },
+    is_multi_module: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    module_1_time_minutes: {
+      type: Number,
+      default: null,
+      min: 1
+    },
+    module_2_time_minutes: {
+      type: Number,
+      default: null,
       min: 1
     },
     pass_percentage: {
@@ -264,6 +294,9 @@ const AssessmentSchema = new Schema<IAssessmentDocument>(
 
 // Automatic Total Points Calculation Hook, Homework Free Exclusion & Essay Review Enforcer
 AssessmentSchema.pre('save', function (this: any, next: any) {
+  if (this.is_multi_module === true) {
+    this.time_limit_minutes = (this.module_1_time_minutes || 0) + (this.module_2_time_minutes || 0);
+  }
   if (this.assessment_type === 'HOMEWORK') {
     this.is_free = false;
   }

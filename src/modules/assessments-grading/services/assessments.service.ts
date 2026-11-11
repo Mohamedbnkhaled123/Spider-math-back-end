@@ -7,7 +7,8 @@ import {
 } from '../../../models/assessment.model';
 import {
   SubmissionModel,
-  IMcqAnswer
+  IMcqAnswer,
+  ITextAnswer
 } from '../../../models/submission.model';
 import { SubscriptionModel } from '../../../models/subscription.model';
 import { UnitPackageModel } from '../../../models/unit-package.model';
@@ -97,6 +98,9 @@ export class AssessmentsService {
       title_en: dto.title_en,
       assessment_type: dto.assessment_type,
       time_limit_minutes: dto.time_limit_minutes,
+      is_multi_module: (dto as any).is_multi_module ?? false,
+      module_1_time_minutes: (dto as any).module_1_time_minutes ?? null,
+      module_2_time_minutes: (dto as any).module_2_time_minutes ?? null,
       pass_percentage: dto.pass_percentage ?? 60,
       min_expected_solve_sec: dto.min_expected_solve_sec,
       max_attempts: dto.max_attempts,
@@ -131,7 +135,7 @@ export class AssessmentsService {
    * while allowing non-breaking typo fixes. If MCQ correct_option_index changed, trigger atomic auto-regrade.
    */
   async updateAssessment(_adminId: string, assessmentId: string, dto: UpdateAssessmentDto): Promise<IAssessmentDocument> {
-    const assessment = await AssessmentModel.findById(assessmentId).select('+questions.correct_option_index');
+    const assessment = await AssessmentModel.findById(assessmentId).select('+questions.correct_option_index +questions.accepted_answers');
     if (!assessment) {
       throw new AppError('Assessment not found', 404, ERROR_CODES.ASSESSMENT_NOT_FOUND_404);
     }
@@ -166,6 +170,9 @@ export class AssessmentsService {
       if (dto.academic_term !== undefined) assessment.academic_term = dto.academic_term as any;
       if (dto.assessment_type !== undefined) assessment.assessment_type = dto.assessment_type as any;
       if (dto.time_limit_minutes !== undefined) assessment.time_limit_minutes = dto.time_limit_minutes;
+      if ((dto as any).is_multi_module !== undefined) assessment.is_multi_module = (dto as any).is_multi_module;
+      if ((dto as any).module_1_time_minutes !== undefined) assessment.module_1_time_minutes = (dto as any).module_1_time_minutes;
+      if ((dto as any).module_2_time_minutes !== undefined) assessment.module_2_time_minutes = (dto as any).module_2_time_minutes;
       if ((dto as any).pass_percentage !== undefined) assessment.pass_percentage = (dto as any).pass_percentage;
       if (dto.min_expected_solve_sec !== undefined) assessment.min_expected_solve_sec = dto.min_expected_solve_sec;
       if (dto.max_attempts !== undefined) assessment.max_attempts = dto.max_attempts;
@@ -201,7 +208,7 @@ export class AssessmentsService {
     let correctOptionIndexChanged = false;
 
     if (dto.questions) {
-      // Check if any existing MCQ question had its answer key changed
+      // Check if any existing MCQ or INPUT_TEXT question had its answer key changed
       for (let i = 0; i < Math.min(dto.questions.length, assessment.questions.length); i++) {
         const incomingQ = dto.questions[i];
         const currentQ = assessment.questions[i];
@@ -211,6 +218,16 @@ export class AssessmentsService {
           incomingQ.question_type === 'MCQ' &&
           incomingQ.correct_option_index !== undefined &&
           incomingQ.correct_option_index !== currentQ.correct_option_index
+        ) {
+          correctOptionIndexChanged = true;
+        }
+
+        if (
+          incomingQ &&
+          currentQ &&
+          incomingQ.question_type === 'INPUT_TEXT' &&
+          incomingQ.accepted_answers !== undefined &&
+          JSON.stringify(incomingQ.accepted_answers) !== JSON.stringify(currentQ.accepted_answers)
         ) {
           correctOptionIndexChanged = true;
         }
@@ -230,6 +247,9 @@ export class AssessmentsService {
     if (dto.title_ar !== undefined) assessment.title_ar = dto.title_ar;
     if (dto.title_en !== undefined) assessment.title_en = dto.title_en;
     if (dto.time_limit_minutes !== undefined) assessment.time_limit_minutes = dto.time_limit_minutes;
+    if ((dto as any).is_multi_module !== undefined) assessment.is_multi_module = (dto as any).is_multi_module;
+    if ((dto as any).module_1_time_minutes !== undefined) assessment.module_1_time_minutes = (dto as any).module_1_time_minutes;
+    if ((dto as any).module_2_time_minutes !== undefined) assessment.module_2_time_minutes = (dto as any).module_2_time_minutes;
     if ((dto as any).pass_percentage !== undefined) assessment.pass_percentage = (dto as any).pass_percentage;
     if (dto.max_attempts !== undefined) assessment.max_attempts = dto.max_attempts;
     if (dto.available_from !== undefined) assessment.available_from = dto.available_from ? new Date(dto.available_from) : null;
@@ -265,8 +285,11 @@ export class AssessmentsService {
       questionMap.set((q._id as Types.ObjectId).toString(), q);
     });
 
+    const textGrader = QuestionGraderFactory.getGrader('INPUT_TEXT');
+
     for (const sub of submissions) {
       let newMcqScore = 0;
+      let newTextScore = 0;
       let answersModified = false;
 
       const updatedMcqAnswers: IMcqAnswer[] = sub.mcq_answers.map((ans) => {
@@ -289,12 +312,42 @@ export class AssessmentsService {
         };
       });
 
-      if (answersModified || sub.mcq_auto_score !== newMcqScore) {
+      const updatedTextAnswers: ITextAnswer[] = (sub.text_answers || []).map((ans) => {
+        const q = questionMap.get(ans.question_id.toString());
+        if (!q || q.question_type !== 'INPUT_TEXT') return ans;
+
+        const gradeRes = textGrader.grade(
+          {
+            questionId: (q._id as Types.ObjectId).toString(),
+            questionType: 'INPUT_TEXT',
+            acceptedAnswers: q.accepted_answers,
+            points: q.points
+          },
+          { textAnswer: ans.text_answer }
+        );
+
+        if (ans.is_correct !== gradeRes.isCorrect || ans.points_earned !== gradeRes.pointsEarned) {
+          answersModified = true;
+        }
+
+        newTextScore += gradeRes.pointsEarned;
+        return {
+          question_id: ans.question_id,
+          text_answer: ans.text_answer,
+          is_correct: gradeRes.isCorrect,
+          points_earned: gradeRes.pointsEarned
+        };
+      });
+
+      const totalAutoScore = newMcqScore + newTextScore;
+
+      if (answersModified || sub.mcq_auto_score !== newMcqScore || sub.final_total_score !== (totalAutoScore + sub.essay_manual_score)) {
         const oldScore = sub.final_total_score;
-        const newTotalScore = newMcqScore + sub.essay_manual_score;
+        const newTotalScore = totalAutoScore + sub.essay_manual_score;
         const scoreDelta = newTotalScore - oldScore;
 
         sub.mcq_answers = updatedMcqAnswers;
+        sub.text_answers = updatedTextAnswers;
         sub.mcq_auto_score = newMcqScore;
         sub.final_total_score = newTotalScore;
         await sub.save();
@@ -484,6 +537,7 @@ export class AssessmentsService {
         is_suspicious_fast_solve: false,
         clock_tamper_detected: false,
         mcq_answers: [],
+        text_answers: [],
         uploaded_solution_imgs: [],
         result_visibility: 'HIDDEN_PENDING_TEACHER',
         mcq_auto_score: 0,
@@ -495,7 +549,7 @@ export class AssessmentsService {
 
     // Zero Answer Leakage Projection
     const sanitizedAssessment = await AssessmentModel.findById(assessmentId)
-      .select('-questions.correct_option_index -questions.model_answer_text -questions.youtube_solution_url')
+      .select('-questions.correct_option_index -questions.accepted_answers -questions.model_answer_text -questions.youtube_solution_url')
       .lean();
 
     return {
@@ -521,7 +575,7 @@ export class AssessmentsService {
 
     if (!cachedPayload) {
       const assessment = await AssessmentModel.findById(assessmentId)
-        .select('+questions.correct_option_index')
+        .select('+questions.correct_option_index +questions.accepted_answers')
         .lean();
 
       if (!assessment) {
@@ -540,11 +594,16 @@ export class AssessmentsService {
         requiresTeacherReview: !!assessment.requires_teacher_review,
         titleAr: assessment.title_ar,
         titleEn: assessment.title_en,
+        isMultiModule: !!assessment.is_multi_module,
+        module1TimeMinutes: assessment.module_1_time_minutes ?? undefined,
+        module2TimeMinutes: assessment.module_2_time_minutes ?? undefined,
         questions: assessment.questions.map((q) => ({
           questionId: q._id ? (q._id as Types.ObjectId).toString() : '',
           questionType: q.question_type,
           correctOptionIndex: q.correct_option_index,
-          points: q.points
+          acceptedAnswers: q.accepted_answers || [],
+          points: q.points,
+          moduleIndex: (q.module_index as 1 | 2) || 1
         }))
       };
 
@@ -556,9 +615,10 @@ export class AssessmentsService {
     const serverStartedAt = new Date(dto.client_started_at);
 
     // 3. Monotonic Timing & Anti-Cheat Audit
-    // 3.5 Enforce all questions answered (either MCQ choice or uploaded solution image)
+    // 3.5 Enforce all questions answered (MCQ choice, text input, or uploaded solution image)
     const answeredIds = new Set([
       ...(dto.mcq_answers || []).map((a) => a.question_id.toString()),
+      ...(dto.text_answers || []).filter((a) => a.text_answer && a.text_answer.trim()).map((a) => a.question_id.toString()),
       ...(dto.uploaded_solution_imgs || []).map((img) => (img.question_id ? img.question_id.toString() : ''))
     ]);
     const missingQuestions = cachedPayload.questions.filter((q) => !answeredIds.has(q.questionId));
@@ -579,12 +639,12 @@ export class AssessmentsService {
       isOfflineSynced: dto.is_offline_cached
     });
 
-    // 4. Auto-Grade MCQs via QuestionGraderFactory
+    // 4. Auto-Grade MCQs & Text Answers via QuestionGraderFactory
     const questionLookup = new Map(cachedPayload.questions.map((q) => [q.questionId, q]));
     const mcqGrader = QuestionGraderFactory.getGrader('MCQ');
 
     let mcqAutoScore = 0;
-    const gradedMcqAnswers: IMcqAnswer[] = dto.mcq_answers.map((ans) => {
+    const gradedMcqAnswers: IMcqAnswer[] = (dto.mcq_answers || []).map((ans) => {
       const q = questionLookup.get(ans.question_id);
       if (!q) {
         return {
@@ -606,9 +666,35 @@ export class AssessmentsService {
       };
     });
 
+    const textGrader = QuestionGraderFactory.getGrader('INPUT_TEXT');
+    let textAutoScore = 0;
+    const gradedTextAnswers: ITextAnswer[] = (dto.text_answers || []).map((ans) => {
+      const q = questionLookup.get(ans.question_id);
+      if (!q) {
+        return {
+          question_id: new Types.ObjectId(ans.question_id),
+          text_answer: ans.text_answer,
+          is_correct: false,
+          points_earned: 0
+        };
+      }
+
+      const gradeRes = textGrader.grade(q, { textAnswer: ans.text_answer });
+      textAutoScore += gradeRes.pointsEarned;
+
+      return {
+        question_id: new Types.ObjectId(ans.question_id),
+        text_answer: ans.text_answer,
+        is_correct: gradeRes.isCorrect,
+        points_earned: gradeRes.pointsEarned
+      };
+    });
+
+    const totalAutoScore = mcqAutoScore + textAutoScore;
+
     // 5. Result Visibility & Gamification Logic
     // If the quiz contains essay questions, it MUST wait for teacher review.
-    // If all questions are MCQ, teacher's requires_teacher_review option determines visibility.
+    // If all questions are MCQ or INPUT_TEXT, teacher's requires_teacher_review option determines visibility.
     const hasEssay = cachedPayload.hasEssayQuestions || cachedPayload.questions.some((q) => q.questionType === 'ESSAY_PHOTO');
     const requiresReview = hasEssay || !!cachedPayload.requiresTeacherReview;
     const resultVisibility: 'HIDDEN_PENDING_TEACHER' | 'PUBLISHED_TO_STUDENT_AND_PARENT' =
@@ -616,7 +702,7 @@ export class AssessmentsService {
 
     let xpAwarded = 0;
     if (resultVisibility === 'PUBLISHED_TO_STUDENT_AND_PARENT') {
-      const scorePercentage = cachedPayload.totalPoints > 0 ? (mcqAutoScore / cachedPayload.totalPoints) * 100 : 0;
+      const scorePercentage = cachedPayload.totalPoints > 0 ? (totalAutoScore / cachedPayload.totalPoints) * 100 : 0;
       const xpStrategy = new QuizPassedXpStrategy();
       xpAwarded = xpStrategy.calculateDelta({
         baseXpReward: cachedPayload.xpReward || 30,
@@ -727,7 +813,7 @@ export class AssessmentsService {
       }
     });
 
-    const finalTotalScore = mcqAutoScore; // essay_manual_score = 0 until reviewed
+    const finalTotalScore = totalAutoScore; // essay_manual_score = 0 until reviewed
 
     // 6. 1 DB Round-Trip Atomic Upsert (Single Atomic Operation for 100% Race-Condition Immunity)
     let submission: any;
@@ -760,6 +846,7 @@ export class AssessmentsService {
             is_suspicious_fast_solve: auditResult.isSuspiciousFastSolve,
             clock_tamper_detected: auditResult.clockTamperDetected,
             mcq_answers: gradedMcqAnswers,
+            text_answers: gradedTextAnswers,
             uploaded_solution_imgs: dto.uploaded_solution_imgs.map((img) => ({
               question_id: img.question_id ? new Types.ObjectId(img.question_id) : undefined,
               image_url: img.image_url,
@@ -812,6 +899,7 @@ export class AssessmentsService {
             is_suspicious_fast_solve: auditResult.isSuspiciousFastSolve,
             clock_tamper_detected: auditResult.clockTamperDetected,
             mcq_answers: gradedMcqAnswers,
+            text_answers: gradedTextAnswers,
             uploaded_solution_imgs: dto.uploaded_solution_imgs.map((img) => ({
               question_id: img.question_id ? new Types.ObjectId(img.question_id) : undefined,
               image_url: img.image_url,
@@ -937,10 +1025,11 @@ export class AssessmentsService {
       .sort({ createdAt: -1 });
 
     if (!isSuperAdmin) {
-      queryBuilder.select('-questions.correct_option_index -questions.model_answer_text -questions.youtube_solution_url');
+      queryBuilder.select('-questions.correct_option_index -questions.accepted_answers -questions.model_answer_text -questions.youtube_solution_url');
       return (await queryBuilder.lean()) as any;
     }
 
+    queryBuilder.select('+questions.correct_option_index +questions.accepted_answers +questions.model_answer_text +questions.youtube_solution_url');
     const assessmentDocs = await queryBuilder.lean();
     if (assessmentDocs.length === 0) return [];
 
@@ -964,9 +1053,9 @@ export class AssessmentsService {
     const queryBuilder = AssessmentModel.findById(id);
 
     if (isSuperAdmin) {
-      queryBuilder.select('+questions.correct_option_index');
+      queryBuilder.select('+questions.correct_option_index +questions.accepted_answers +questions.model_answer_text +questions.youtube_solution_url');
     } else {
-      queryBuilder.select('-questions.correct_option_index -questions.model_answer_text -questions.youtube_solution_url');
+      queryBuilder.select('-questions.correct_option_index -questions.accepted_answers -questions.model_answer_text -questions.youtube_solution_url');
     }
 
     const assessment = await queryBuilder.lean();
@@ -1050,18 +1139,21 @@ export class AssessmentsService {
       }
     }
 
-    // Fetch full assessment with correct options and solution URLs
-    const fullAssessment = await AssessmentModel.findById(assessment._id).select('+questions.correct_option_index +questions.youtube_solution_url').lean();
+    // Fetch full assessment with correct options, accepted answers, and solution URLs
+    const fullAssessment = await AssessmentModel.findById(assessment._id).select('+questions.correct_option_index +questions.accepted_answers +questions.youtube_solution_url').lean();
     const questions = fullAssessment?.questions || [];
     const questionMap = new Map(questions.map((q: any) => [q._id.toString(), q]));
 
     const mcqAnswersMap = new Map<string, any>(
       (submission.mcq_answers || []).map((ans: any) => [ans.question_id.toString(), ans])
     );
+    const textAnswersMap = new Map<string, any>(
+      (submission.text_answers || []).map((ans: any) => [ans.question_id.toString(), ans])
+    );
 
     const mistakeCases: any[] = [];
 
-    // 1. Check all MCQ questions for mistakes or unanswered
+    // 1. Check all MCQ and INPUT_TEXT questions for mistakes or unanswered
     questions.forEach((q: any, idx: number) => {
       if (q.question_type === 'MCQ') {
         const studentAns: any = mcqAnswersMap.get(q._id.toString());
@@ -1087,6 +1179,27 @@ export class AssessmentsService {
             youtubeSolutionUrl: q.youtube_solution_url || null
           });
         }
+      } else if (q.question_type === 'INPUT_TEXT') {
+        const studentAns: any = textAnswersMap.get(q._id.toString());
+        const isCorrect = studentAns ? studentAns.is_correct : false;
+
+        if (!isCorrect) {
+          const studentTyped = studentAns ? (studentAns.text_answer || 'لم تتم الإجابة') : 'لم تتم الإجابة';
+          const acceptedText = q.accepted_answers && q.accepted_answers.length > 0
+            ? q.accepted_answers.join(' / ')
+            : '';
+
+          mistakeCases.push({
+            questionId: q._id.toString(),
+            questionOrder: idx + 1,
+            questionPromptText: q.question_text || `السؤال رقم ${idx + 1}`,
+            questionImageUrl: q.question_image_url || null,
+            studentAnswerText: studentTyped,
+            correctAnswerText: acceptedText,
+            errorNote: `إجابة غير صحيحة. الإجابات المقبولة هي: "${acceptedText}"`,
+            youtubeSolutionUrl: q.youtube_solution_url || null
+          });
+        }
       }
     });
 
@@ -1109,14 +1222,32 @@ export class AssessmentsService {
     const questionsReview: any[] = [];
     questions.forEach((q: any, idx: number) => {
       const isMcq = q.question_type === 'MCQ';
-      const studentAns: any = isMcq ? mcqAnswersMap.get(q._id.toString()) : null;
-      const isCorrect = isMcq ? (studentAns ? !!studentAns.is_correct : false) : false;
-      const selectedIdx = studentAns ? studentAns.selected_option_index : null;
-      const selectedText = selectedIdx !== null && selectedIdx !== undefined && q.options && q.options[selectedIdx]
-        ? q.options[selectedIdx]
-        : (isMcq ? 'لم تتم الإجابة' : '');
-      const correctText = isPublished && q.correct_option_index !== undefined && q.options && q.options[q.correct_option_index]
-        ? q.options[q.correct_option_index]
+      const isInputText = q.question_type === 'INPUT_TEXT';
+
+      const mcqAns: any = isMcq ? mcqAnswersMap.get(q._id.toString()) : null;
+      const textAns: any = isInputText ? textAnswersMap.get(q._id.toString()) : null;
+
+      const isCorrect = isMcq
+        ? (mcqAns ? !!mcqAns.is_correct : false)
+        : isInputText
+        ? (textAns ? !!textAns.is_correct : false)
+        : false;
+
+      const selectedIdx = mcqAns ? mcqAns.selected_option_index : null;
+      const selectedText = isMcq
+        ? (selectedIdx !== null && selectedIdx !== undefined && q.options && q.options[selectedIdx]
+          ? q.options[selectedIdx]
+          : 'لم تتم الإجابة')
+        : isInputText
+        ? (textAns?.text_answer || (isPublished ? 'لم تتم الإجابة' : ''))
+        : '';
+
+      const correctText = isPublished
+        ? (isMcq && q.correct_option_index !== undefined && q.options && q.options[q.correct_option_index]
+          ? q.options[q.correct_option_index]
+          : isInputText && q.accepted_answers?.length
+          ? q.accepted_answers.join(' / ')
+          : '')
         : '';
 
       const customNote = (submission.custom_mistake_cases || []).find(
@@ -1134,9 +1265,9 @@ export class AssessmentsService {
         studentAnswerText: selectedText,
         correctOptionIndex: isPublished ? q.correct_option_index : undefined,
         correctAnswerText: correctText,
-        isCorrect: isMcq ? isCorrect : undefined,
+        isCorrect: (isMcq || isInputText) ? isCorrect : undefined,
         points: q.points || 1,
-        awardedPoints: isMcq ? (isCorrect ? (q.points || 1) : 0) : undefined,
+        awardedPoints: (isMcq || isInputText) ? (isCorrect ? (q.points || 1) : 0) : undefined,
         youtubeSolutionUrl: isPublished ? (q.youtube_solution_url || customNote?.youtube_solution_url || null) : null,
         teacherNote: customNote ? customNote.error_note : null
       });

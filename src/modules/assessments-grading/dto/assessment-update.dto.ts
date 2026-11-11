@@ -19,7 +19,12 @@ export const updateAssessmentDtoSchema = createAssessmentBaseSchema
   })
   .transform((data) => {
     const calc = data.graph_calculator || data.calculator_mode || data.calculatorType;
-    const timeLimit = data.time_limit_minutes || data.duration_minutes || data.durationMinutes;
+    const isMultiModule = data.is_multi_module !== undefined ? data.is_multi_module : data.isMultiModule;
+    const module1Time = data.module_1_time_minutes !== undefined ? data.module_1_time_minutes : data.module1TimeMinutes;
+    const module2Time = data.module_2_time_minutes !== undefined ? data.module_2_time_minutes : data.module2TimeMinutes;
+    const timeLimit = data.time_limit_minutes || data.duration_minutes || data.durationMinutes || (
+      isMultiModule && (module1Time || module2Time) ? ((Number(module1Time) || 0) + (Number(module2Time) || 0)) : undefined
+    );
     const titleAr = data.title_ar || data.titleAr;
     const titleEn = data.title_en || data.titleEn;
     const curr = data.curriculum;
@@ -47,6 +52,9 @@ export const updateAssessmentDtoSchema = createAssessmentBaseSchema
       ...data,
       ...(calc ? { graph_calculator: (calc === 'DESMOS' ? 'DESMOS' : 'NONE') as any } : {}),
       ...(timeLimit ? { time_limit_minutes: timeLimit } : {}),
+      ...(isMultiModule !== undefined ? { is_multi_module: isMultiModule } : {}),
+      ...(module1Time !== undefined ? { module_1_time_minutes: module1Time } : {}),
+      ...(module2Time !== undefined ? { module_2_time_minutes: module2Time } : {}),
       ...(titleAr ? { title_ar: titleAr.trim() } : {}),
       ...(titleEn ? { title_en: titleEn.trim() } : {}),
       ...(curr ? { curriculum: curr as any } : {}),

@@ -4,10 +4,12 @@ import {
   ACADEMIC_TERMS,
   CurriculumType,
   GradeLevelType,
-  AcademicTermType
+  AcademicTermType,
+  DEFAULT_CURRICULA_TRACKS
 } from '../../../common/constants/curriculum-hierarchy.constant';
 import { UnitPackageModel } from '../../../models/unit-package.model';
 import { AssessmentModel } from '../../../models/assessment.model';
+import { CmsConfigModel } from '../../../models/cms-config.model';
 import { publicCmsCache } from '../../../config/cache.config';
 
 export interface ITermTreeItem {
@@ -18,16 +20,20 @@ export interface ITermTreeItem {
 }
 
 export interface IGradeLevelTreeItem {
-  gradeLevel: GradeLevelType;
+  gradeLevel: GradeLevelType | string;
+  titleAr?: string;
+  titleEn?: string;
   terms: ITermTreeItem[];
   hasPublishedUnits: boolean;
   totalPublishedUnitsCount: number;
   hasPlacementTest: boolean;
-  isAvailable: boolean; // Dynamic availability: true if content exists, false = 'Coming Soon'
+  isAvailable: boolean; // Dynamic availability: true if content exists and grade is active
+  isActive: boolean;
 }
 
 export interface ICurriculumTreeItem {
   curriculum: CurriculumType;
+  nameAr?: string;
   gradeLevels: IGradeLevelTreeItem[];
   totalPublishedUnitsCount: number;
   hasPublishedUnits: boolean;
@@ -39,8 +45,8 @@ const CURRICULUM_TREE_CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
 export class CurriculumTreeService {
   /**
    * Generates the dynamic 5-level curriculum taxonomy tree.
-   * Hydrates availability flags directly from MongoDB indexes.
-   * Shielded by publicCmsCache (10-minute TTL) for sub-millisecond p95 latency under high concurrency.
+   * Hydrates availability flags directly from MongoDB indexes and CmsConfig active grades / curricula tracks.
+   * Shielded by publicCmsCache for sub-millisecond p95 latency under high concurrency.
    */
   public async getDynamicCurriculumTree(): Promise<ICurriculumTreeItem[]> {
     const cached = publicCmsCache.get(CURRICULUM_TREE_CACHE_KEY) as ICurriculumTreeItem[] | undefined;
@@ -48,7 +54,15 @@ export class CurriculumTreeService {
       return cached;
     }
 
-    // 1. Aggregate published unit package counts per (curriculum, grade_level, academic_term)
+    // 1. Fetch CMS configuration for active_grades and curricula_tracks
+    const cmsConfig: any = await CmsConfigModel.findOne({ singleton_key: 'MAIN_SITE_CONFIG' }).lean();
+    const activeGradesSet = new Set<string>(cmsConfig?.active_grades || ['SEC_3']);
+    const configuredTracks =
+      (cmsConfig?.curricula_tracks && Array.isArray(cmsConfig.curricula_tracks) && cmsConfig.curricula_tracks.length > 0)
+        ? cmsConfig.curricula_tracks
+        : DEFAULT_CURRICULA_TRACKS;
+
+    // 2. Aggregate published unit package counts per (curriculum, grade_level, academic_term)
     const unitStats = await UnitPackageModel.aggregate([
       { $match: { is_published: true } },
       {
@@ -71,7 +85,7 @@ export class CurriculumTreeService {
       }
     }
 
-    // 2. Check placement test availability per (curriculum, grade_level, academic_term)
+    // 3. Check placement test availability per (curriculum, grade_level, academic_term)
     const placementStats = await AssessmentModel.aggregate([
       { $match: { is_published: true } },
       {
@@ -107,16 +121,23 @@ export class CurriculumTreeService {
       }
     }
 
-    // 3. Assemble the Canonical 4-Curriculum Tree
+    // 4. Assemble the Dynamic Curricula Tree from Configured Tracks & Active Grades
     const tree: ICurriculumTreeItem[] = CURRICULUMS.map((curriculum) => {
-      const allowedGrades = GRADE_LEVELS_BY_CURRICULUM[curriculum] || [];
+      const track = configuredTracks.find((t: any) => t.code === curriculum);
+      const configuredGrades = track?.grades || (GRADE_LEVELS_BY_CURRICULUM[curriculum] || []).map((code: string) => ({
+        code,
+        titleAr: code,
+        titleEn: code
+      }));
       let curriculumTotalUnits = 0;
 
-      const gradeLevels: IGradeLevelTreeItem[] = allowedGrades.map((gradeLevel) => {
+      const gradeLevels: IGradeLevelTreeItem[] = configuredGrades.map((grade: any) => {
+        const gradeCode = grade.code;
+        const isActive = activeGradesSet.has(gradeCode);
         let gradeTotalUnits = 0;
 
         const terms: ITermTreeItem[] = ACADEMIC_TERMS.map((term) => {
-          const key = `${curriculum}:${gradeLevel}:${term}`;
+          const key = `${curriculum}:${gradeCode}:${term}`;
           const unitsCount = unitCountsMap.get(key) || 0;
           gradeTotalUnits += unitsCount;
 
@@ -131,19 +152,24 @@ export class CurriculumTreeService {
         curriculumTotalUnits += gradeTotalUnits;
 
         const hasPlacement = terms.some((t) => t.hasPlacementTest);
+        const isAvailable = isActive && (gradeTotalUnits > 0 || hasPlacement);
 
         return {
-          gradeLevel: gradeLevel as GradeLevelType,
+          gradeLevel: gradeCode as GradeLevelType,
+          titleAr: grade.titleAr,
+          titleEn: grade.titleEn,
+          isActive,
           terms,
           hasPublishedUnits: gradeTotalUnits > 0,
           totalPublishedUnitsCount: gradeTotalUnits,
           hasPlacementTest: hasPlacement,
-          isAvailable: gradeTotalUnits > 0 || hasPlacement
+          isAvailable
         };
       });
 
       return {
         curriculum,
+        nameAr: track?.nameAr,
         gradeLevels,
         totalPublishedUnitsCount: curriculumTotalUnits,
         hasPublishedUnits: curriculumTotalUnits > 0

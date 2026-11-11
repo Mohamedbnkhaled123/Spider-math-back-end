@@ -5,6 +5,11 @@ export const mcqAnswerItemDtoSchema = z.object({
   selected_option_index: z.coerce.number().int().min(0)
 });
 
+export const textAnswerItemDtoSchema = z.object({
+  question_id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid question_id ObjectId'),
+  text_answer: z.string().default('')
+});
+
 export const uploadedSolutionImgDtoSchema = z.object({
   question_id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid question_id ObjectId').optional(),
   image_url: z.string().trim().url('Must be a valid Cloudinary HTTPS image URL'),
@@ -19,6 +24,7 @@ export const submissionSyncDtoSchema = z.object({
     .or(z.string().min(10, 'idempotency_key is required')),
 
   mcq_answers: z.array(mcqAnswerItemDtoSchema).optional().default([]),
+  text_answers: z.array(textAnswerItemDtoSchema).optional().default([]),
 
   // Allow homework and question-level photo answers (WebP <= 150KB per photo)
   uploaded_solution_imgs: z
@@ -37,4 +43,3 @@ export const submissionSyncDtoSchema = z.object({
 });
 
 export type SubmissionSyncDto = z.infer<typeof submissionSyncDtoSchema>;
-

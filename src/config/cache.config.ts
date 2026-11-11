@@ -11,6 +11,8 @@ export interface ICacheStore<T extends {} = Record<string, unknown>> {
   delete(key: string): boolean;
   clear(): void;
   size(): number;
+  keys(): IterableIterator<string>;
+  deleteByPattern(pattern: RegExp | string): void;
 }
 
 /**
@@ -54,6 +56,23 @@ export class LruCacheStore<T extends {} = Record<string, unknown>> implements IC
 
   size(): number {
     return this.cache.size;
+  }
+
+  keys(): IterableIterator<string> {
+    return this.cache.keys();
+  }
+
+  deleteByPattern(pattern: RegExp | string): void {
+    const isRegex = pattern instanceof RegExp;
+    const keysToDelete: string[] = [];
+    for (const key of this.cache.keys()) {
+      if (isRegex ? (pattern as RegExp).test(key) : key.startsWith(pattern as string)) {
+        keysToDelete.push(key);
+      }
+    }
+    for (const key of keysToDelete) {
+      this.cache.delete(key);
+    }
   }
 }
 
@@ -116,11 +135,16 @@ export interface IAssessmentAnswerKeyPayload {
   minExpectedSolveSec: number;
   totalPoints: number;
   xpReward: number;
+  isMultiModule?: boolean;
+  module1TimeMinutes?: number;
+  module2TimeMinutes?: number;
   questions: Array<{
     questionId: string;
-    questionType: 'MCQ' | 'ESSAY_PHOTO';
+    questionType: 'MCQ' | 'ESSAY_PHOTO' | 'INPUT_TEXT';
     correctOptionIndex?: number;
+    acceptedAnswers?: string[];
     points: number;
+    moduleIndex?: 1 | 2;
   }>;
 }
 

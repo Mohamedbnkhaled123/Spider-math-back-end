@@ -26,7 +26,11 @@ export const questionItemDtoSchema = z
     options: z.array(z.string().trim()).optional().default([]),
     correct_option_index: z.union([z.coerce.number().int(), z.null()]).optional(),
     correctOptionIndex: z.union([z.coerce.number().int(), z.null()]).optional(),
+    accepted_answers: z.array(z.string().trim()).optional().default([]),
+    acceptedAnswers: z.array(z.string().trim()).optional(),
     points: z.coerce.number().positive().default(1),
+    module_index: z.coerce.number().int().min(1).max(2).optional(),
+    moduleIndex: z.coerce.number().int().min(1).max(2).optional(),
     model_answer_text: z.string().trim().optional(),
     explanationAr: z.string().trim().optional(),
     youtube_solution_url: z.string().trim().nullable().optional(),
@@ -90,16 +94,35 @@ export const questionItemDtoSchema = z
         });
       }
     }
+
+    if (qType === 'INPUT_TEXT' || qType === 'SHORT_ANSWER') {
+      const rawAnswers = data.accepted_answers || data.acceptedAnswers || [];
+      const validAnswers = rawAnswers.map((a: string) => (a || '').trim()).filter(Boolean);
+      if (validAnswers.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'يجب إضافة إجابة صحيحة واحدة على الأقل للسؤال النصي (الإجابات المحتملة المقبولة)',
+          path: ['accepted_answers']
+        });
+      }
+    }
   })
   .transform((data) => {
     const rawType = (data.question_type || data.type || 'MCQ').toUpperCase();
-    const qType = rawType === 'ESSAY' || rawType === 'ESSAY_PHOTO' ? 'ESSAY_PHOTO' : 'MCQ';
+    const isEssay = rawType === 'ESSAY' || rawType === 'ESSAY_PHOTO';
+    const isInputText = rawType === 'INPUT_TEXT' || rawType === 'SHORT_ANSWER';
+    const qType = isEssay ? 'ESSAY_PHOTO' : isInputText ? 'INPUT_TEXT' : 'MCQ';
     const qText = (data.question_text || data.textAr || data.text || '').trim();
     const qImg = data.question_image_url || data.questionImageUrl || null;
     const rawCorrectIdx = data.correct_option_index ?? data.correctOptionIndex;
     const correctIdx = qType === 'MCQ' ? Math.max(0, Number(rawCorrectIdx ?? 0)) : undefined;
     const options = qType === 'MCQ' ? (data.options || []).map((o) => (o || '').trim()) : [];
     const modelAns = (data.model_answer_text || data.explanationAr || '').trim();
+    const acceptedAnswers = isInputText
+      ? (data.accepted_answers || data.acceptedAnswers || []).map((a: string) => (a || '').trim()).filter(Boolean)
+      : undefined;
+    const rawModuleIdx = data.module_index ?? data.moduleIndex ?? 1;
+    const moduleIndex: 1 | 2 = Number(rawModuleIdx) === 2 ? 2 : 1;
 
     return {
       _id: data._id || data.id,
@@ -110,7 +133,9 @@ export const questionItemDtoSchema = z
       question_image_size_kb: data.question_image_size_kb || null,
       options,
       ...(correctIdx !== undefined ? { correct_option_index: correctIdx } : {}),
+      ...(acceptedAnswers !== undefined ? { accepted_answers: acceptedAnswers } : {}),
       points: data.points || 1,
+      module_index: moduleIndex,
       model_answer_text: modelAns,
       youtube_solution_url: data.youtube_solution_url || data.youtubeSolutionUrl || null
     };
@@ -142,6 +167,12 @@ export const createAssessmentBaseSchema = z.object({
   time_limit_minutes: z.coerce.number().int().positive().default(30),
   duration_minutes: z.coerce.number().int().positive().optional(),
   durationMinutes: z.coerce.number().int().positive().optional(),
+  is_multi_module: z.boolean().optional().default(false),
+  isMultiModule: z.boolean().optional(),
+  module_1_time_minutes: z.coerce.number().int().positive().optional().nullable(),
+  module1TimeMinutes: z.coerce.number().int().positive().optional().nullable(),
+  module_2_time_minutes: z.coerce.number().int().positive().optional().nullable(),
+  module2TimeMinutes: z.coerce.number().int().positive().optional().nullable(),
   pass_percentage: z.coerce.number().min(0).max(100).default(60),
   passPercentage: z.coerce.number().min(0).max(100).optional(),
   min_expected_solve_sec: z.coerce.number().int().min(5).default(30),
@@ -189,7 +220,12 @@ export const createAssessmentDtoSchema = createAssessmentBaseSchema
   const titleAr = (data.title_ar || data.titleAr || rawTitle).trim();
   const titleEn = (data.title_en || data.titleEn || rawTitle).trim();
   const assessmentType = (data.assessment_type || data.assessmentType || 'QUIZ') as any;
-  const timeLimit = data.time_limit_minutes || data.duration_minutes || data.durationMinutes || 30;
+  const isMultiModule = data.is_multi_module ?? data.isMultiModule ?? false;
+  const module1Time = data.module_1_time_minutes ?? data.module1TimeMinutes ?? null;
+  const module2Time = data.module_2_time_minutes ?? data.module2TimeMinutes ?? null;
+  const timeLimit = isMultiModule && (module1Time || module2Time)
+    ? (Number(module1Time || 0) + Number(module2Time || 0))
+    : (data.time_limit_minutes || data.duration_minutes || data.durationMinutes || 30);
   const passPercentage = data.pass_percentage ?? data.passPercentage ?? 60;
   const maxAttempts = data.max_attempts ?? data.maxAttempts ?? 1;
   const availableFrom = data.available_from ?? data.availableFrom ?? null;
@@ -216,6 +252,9 @@ export const createAssessmentDtoSchema = createAssessmentBaseSchema
     title_en: titleEn,
     assessment_type: assessmentType,
     time_limit_minutes: timeLimit,
+    is_multi_module: isMultiModule,
+    module_1_time_minutes: module1Time,
+    module_2_time_minutes: module2Time,
     pass_percentage: passPercentage,
     max_attempts: maxAttempts,
     available_from: availableFrom,
