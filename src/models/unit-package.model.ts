@@ -24,6 +24,9 @@ export interface IUnitPackage {
   package_type: PackageType;
   subject_branch: string;
   price_egp: number;
+  original_price_egp?: number | null;
+  discount_percentage?: number | null;
+  is_discounted?: boolean;
   validity_days: number;
   order_index: number;
   is_published: boolean;
@@ -118,6 +121,22 @@ const UnitPackageSchema = new Schema<IUnitPackageDocument>(
       type: Number,
       required: true,
       min: 0
+    },
+    original_price_egp: {
+      type: Number,
+      default: null,
+      min: 0
+    },
+    discount_percentage: {
+      type: Number,
+      default: null,
+      min: 0,
+      max: 100
+    },
+    is_discounted: {
+      type: Boolean,
+      default: false,
+      index: true
     },
     validity_days: {
       type: Number,
