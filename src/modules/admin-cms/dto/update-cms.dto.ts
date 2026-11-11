@@ -30,6 +30,25 @@ const contactChannelsSchema = z.object({
   telegram_url: z.string().optional()
 }).passthrough();
 
+const honorBoardItemSchema = z.object({
+  id: z.string().optional(),
+  rank: z.union([z.number(), z.string()]).optional(),
+  nameAr: z.string().optional(),
+  nameEn: z.string().optional(),
+  systemAr: z.string().optional(),
+  systemEn: z.string().optional(),
+  achievementAr: z.string().optional(),
+  achievementEn: z.string().optional(),
+  locationAr: z.string().optional(),
+  locationEn: z.string().optional(),
+  xp: z.union([z.number(), z.string()]).optional(),
+  accuracy: z.union([z.number(), z.string()]).optional(),
+  badgeAr: z.string().optional(),
+  badgeEn: z.string().optional(),
+  avatarUrl: z.string().optional(),
+  is_active: z.boolean().optional()
+}).passthrough();
+
 export const updateCmsDtoSchema = z.object({
   hero_headline_ar: z.string().optional(),
   heroHeadlineAr: z.string().optional(),
@@ -73,7 +92,21 @@ export const updateCmsDtoSchema = z.object({
   activeGrades: z.array(z.string()).optional(),
   curricula_tracks: z.array(z.any()).optional(),
   curriculaTracks: z.array(z.any()).optional(),
-  contact_channels: contactChannelsSchema.optional()
+  contact_channels: contactChannelsSchema.optional(),
+  hall_of_fame_badge_ar: z.string().optional(),
+  hallOfFameBadgeAr: z.string().optional(),
+  hall_of_fame_badge_en: z.string().optional(),
+  hallOfFameBadgeEn: z.string().optional(),
+  hall_of_fame_title_ar: z.string().optional(),
+  hallOfFameTitleAr: z.string().optional(),
+  hall_of_fame_title_en: z.string().optional(),
+  hallOfFameTitleEn: z.string().optional(),
+  hall_of_fame_subtitle_ar: z.string().optional(),
+  hallOfFameSubtitleAr: z.string().optional(),
+  hall_of_fame_subtitle_en: z.string().optional(),
+  hallOfFameSubtitleEn: z.string().optional(),
+  honor_board_list: z.array(honorBoardItemSchema).optional(),
+  honorBoardList: z.array(honorBoardItemSchema).optional()
 }).passthrough();
 
 export type UpdateCmsDto = z.infer<typeof updateCmsDtoSchema>;

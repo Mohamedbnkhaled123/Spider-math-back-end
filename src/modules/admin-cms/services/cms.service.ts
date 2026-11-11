@@ -1,4 +1,4 @@
-import { CmsConfigModel, ICmsConfig } from '../../../models/cms-config.model';
+import { CmsConfigModel, ICmsConfig, DEFAULT_HONOR_BOARD_LIST } from '../../../models/cms-config.model';
 import { UnitPackageModel } from '../../../models/unit-package.model';
 import { AssessmentModel } from '../../../models/assessment.model';
 import { DEFAULT_CURRICULA_TRACKS } from '../../../common/constants/curriculum-hierarchy.constant';
@@ -138,6 +138,14 @@ export class CmsService {
       pricingTitleEn: config.pricing_title_en || 'Transparent Tuition & Revision Packages',
       pricingSubtitleAr: config.pricing_subtitle_ar || 'خطط دراسية مرنة ومراجعات نهائية مكثفة تضمن لك التفوق بأفضل الأسعار',
       pricingSubtitleEn: config.pricing_subtitle_en || 'Flexible study units and intensive final revisions engineered for mastery',
+      hallOfFameBadgeAr: config.hall_of_fame_badge_ar || 'لوحة الشرف • أبطال الرياضيات',
+      hallOfFameBadgeEn: config.hall_of_fame_badge_en || 'Hall of Fame • Top Math Masters',
+      hallOfFameTitleAr: config.hall_of_fame_title_ar || 'لوحة الشرف والتفوق الأكاديمي',
+      hallOfFameTitleEn: config.hall_of_fame_title_en || 'Academic Hall of Fame & Honor Roll',
+      hallOfFameSubtitleAr: config.hall_of_fame_subtitle_ar || 'نخبة طلابنا الذين حققوا العلامات الكاملة وأعلى مراتب التميز والذكاء الرياضي.',
+      hallOfFameSubtitleEn: config.hall_of_fame_subtitle_en || 'Elite students who achieved perfect scores and mathematical excellence across all academic curricula.',
+      honorBoardList: (config.honor_board_list && config.honor_board_list.length > 0) ? config.honor_board_list : DEFAULT_HONOR_BOARD_LIST,
+      honor_board_list: (config.honor_board_list && config.honor_board_list.length > 0) ? config.honor_board_list : DEFAULT_HONOR_BOARD_LIST,
       activeAcademicYear: config.active_academic_year || '2026 / 2027',
       activeAcademicTerm: config.active_academic_term || 'TERM_1',
       active_academic_term: config.active_academic_term || 'TERM_1',
@@ -257,7 +265,13 @@ export class CmsService {
       ['pricing_title_ar', 'pricingTitleAr'],
       ['pricing_title_en', 'pricingTitleEn'],
       ['pricing_subtitle_ar', 'pricingSubtitleAr'],
-      ['pricing_subtitle_en', 'pricingSubtitleEn']
+      ['pricing_subtitle_en', 'pricingSubtitleEn'],
+      ['hall_of_fame_badge_ar', 'hallOfFameBadgeAr'],
+      ['hall_of_fame_badge_en', 'hallOfFameBadgeEn'],
+      ['hall_of_fame_title_ar', 'hallOfFameTitleAr'],
+      ['hall_of_fame_title_en', 'hallOfFameTitleEn'],
+      ['hall_of_fame_subtitle_ar', 'hallOfFameSubtitleAr'],
+      ['hall_of_fame_subtitle_en', 'hallOfFameSubtitleEn']
     ];
 
     for (const [snake, camel] of bilingualPairs) {
@@ -313,6 +327,28 @@ export class CmsService {
     }
     if (dto.contact_channels) {
       updatePayload.contact_channels = dto.contact_channels;
+    }
+
+    const honorBoard = (dto as any).honor_board_list ?? (dto as any).honorBoardList;
+    if (honorBoard !== undefined && Array.isArray(honorBoard)) {
+      updatePayload.honor_board_list = honorBoard.map((h: any, idx: number) => ({
+        id: h.id || `honor_${Date.now()}_${idx}`,
+        rank: Number(h.rank) || idx + 1,
+        nameAr: (h.nameAr || h.name_ar || '').trim(),
+        nameEn: (h.nameEn || h.name_en || '').trim(),
+        systemAr: (h.systemAr || h.system_ar || '').trim(),
+        systemEn: (h.systemEn || h.system_en || '').trim(),
+        achievementAr: (h.achievementAr || h.achievement_ar || '').trim(),
+        achievementEn: (h.achievementEn || h.achievement_en || '').trim(),
+        locationAr: (h.locationAr || h.location_ar || '').trim(),
+        locationEn: (h.locationEn || h.location_en || '').trim(),
+        xp: Number(h.xp) || 0,
+        accuracy: Number(h.accuracy) || 100,
+        badgeAr: (h.badgeAr || h.badge_ar || '').trim(),
+        badgeEn: (h.badgeEn || h.badge_en || '').trim(),
+        avatarUrl: (h.avatarUrl || h.avatar_url || '').trim(),
+        is_active: h.is_active ?? h.isActive ?? true
+      }));
     }
 
     const updated = await CmsConfigModel.findOneAndUpdate(

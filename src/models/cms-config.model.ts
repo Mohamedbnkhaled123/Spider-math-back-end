@@ -60,6 +60,147 @@ export interface ICurriculumTrackItem {
   grades: IGradeItem[];
 }
 
+export interface IHonorBoardItem {
+  id?: string;
+  rank: number;
+  nameAr: string;
+  nameEn?: string;
+  systemAr: string;
+  systemEn?: string;
+  achievementAr: string;
+  achievementEn?: string;
+  locationAr?: string;
+  locationEn?: string;
+  xp?: number;
+  accuracy?: number;
+  badgeAr?: string;
+  badgeEn?: string;
+  avatarUrl?: string;
+  is_active: boolean;
+}
+
+export const DEFAULT_HONOR_BOARD_LIST: IHonorBoardItem[] = [
+  {
+    id: 'honor_1',
+    rank: 1,
+    nameAr: 'سارة أحمد محمود',
+    nameEn: 'Sarah Ahmed Mahmoud',
+    systemAr: 'ثانوية عامة (علمي رياضة)',
+    systemEn: 'Egyptian Curriculum (Thanaweya)',
+    achievementAr: '100% الدرجة النهائية في التفاضل والتكامل',
+    achievementEn: '100% Final Score in Calculus & Analysis',
+    locationAr: 'القاهرة — مدرسة المتفوقين STEM',
+    locationEn: 'Cairo — STEM High School',
+    xp: 14850,
+    accuracy: 99.8,
+    badgeAr: 'المركز الأول على مستوى المنصة',
+    badgeEn: 'Rank #1 Platform Champion',
+    is_active: true
+  },
+  {
+    id: 'honor_2',
+    rank: 2,
+    nameAr: 'عمر خالد الشناوي',
+    nameEn: 'Omar Khaled El-Shenawy',
+    systemAr: 'الدبلومة الأمريكية (Digital SAT)',
+    systemEn: 'American Diploma (Digital SAT Math)',
+    achievementAr: '800 / 800 الدرجة الكاملة في الرياضيات',
+    achievementEn: '800 / 800 Perfect Math Score',
+    locationAr: 'الجيزة — مدرسة الألسن الدولية',
+    locationEn: 'Giza — Al-Alson Int. School',
+    xp: 13420,
+    accuracy: 98.5,
+    badgeAr: 'الدرجة الكاملة SAT',
+    badgeEn: 'Perfect SAT Score',
+    is_active: true
+  },
+  {
+    id: 'honor_3',
+    rank: 3,
+    nameAr: 'مريم يوسف عبد الرحمن',
+    nameEn: 'Mariam Youssef Abdel-Rahman',
+    systemAr: 'المنهج الخليجي (الصف 12 متقدم)',
+    systemEn: 'Gulf Curriculum (Grade 12 Advanced)',
+    achievementAr: '99.8% في الرياضيات المتقدمة',
+    achievementEn: '99.8% in Advanced Mathematics',
+    locationAr: 'الرياض — مدارس الرواد',
+    locationEn: 'Riyadh — Al-Rowad Schools',
+    xp: 12910,
+    accuracy: 97.2,
+    badgeAr: 'تفوق استثنائي',
+    badgeEn: 'Exceptional Mastery',
+    is_active: true
+  },
+  {
+    id: 'honor_4',
+    rank: 4,
+    nameAr: 'زياد طارق إبراهيم',
+    nameEn: 'Ziad Tarek Ibrahim',
+    systemAr: 'ثانوية عامة (الجبر والهندسة الفراغية)',
+    systemEn: 'Egyptian Curriculum (Algebra & Solid Geom)',
+    achievementAr: '100% الدرجة النهائية',
+    achievementEn: '100% Final Score',
+    locationAr: 'الإسكندرية',
+    locationEn: 'Alexandria',
+    xp: 11450,
+    accuracy: 96.5,
+    badgeAr: 'عبقري الجبر',
+    badgeEn: 'Algebra Master',
+    is_active: true
+  },
+  {
+    id: 'honor_5',
+    rank: 5,
+    nameAr: 'ياسمين حازم المهدي',
+    nameEn: 'Yasmine Hazem El-Mahdy',
+    systemAr: 'البريطاني الدولي (IGCSE Cambridge)',
+    systemEn: 'British Curriculum (IGCSE Cambridge)',
+    achievementAr: 'Grade A* في الرياضيات البحتة المتقدمة',
+    achievementEn: 'Grade A* in Further Pure Math',
+    locationAr: 'القاهرة',
+    locationEn: 'Cairo',
+    xp: 10890,
+    accuracy: 95.8,
+    badgeAr: 'امتياز كامبريدج',
+    badgeEn: 'Cambridge Distinction',
+    is_active: true
+  },
+  {
+    id: 'honor_6',
+    rank: 6,
+    nameAr: 'أحمد حسام الدين',
+    nameEn: 'Ahmed Hossam El-Din',
+    systemAr: 'الدبلومة الأمريكية (EST Math)',
+    systemEn: 'American Diploma (EST Math)',
+    achievementAr: 'المركز الأول في اختبارات EST التجريبية',
+    achievementEn: 'Rank #1 in EST Diagnostic Exams',
+    locationAr: 'طنطا',
+    locationEn: 'Tanta',
+    xp: 9940,
+    accuracy: 95.0,
+    badgeAr: 'نجم EST',
+    badgeEn: 'EST Star',
+    is_active: true
+  },
+  {
+    id: 'honor_7',
+    rank: 7,
+    nameAr: 'نور الهدى كريم',
+    nameEn: 'Nour El-Hoda Karim',
+    systemAr: 'المنهج الخليجي (الصف 11)',
+    systemEn: 'Gulf Curriculum (Grade 11)',
+    achievementAr: 'الدرجة النهائية في حساب المثلثات',
+    achievementEn: 'Perfect Score in Trigonometry',
+    locationAr: 'جدة',
+    locationEn: 'Jeddah',
+    xp: 9420,
+    accuracy: 94.5,
+    badgeAr: 'بطلة المثلثات',
+    badgeEn: 'Trig Champion',
+    is_active: true
+  }
+];
+
 export interface ICmsConfig {
   singleton_key: string; // Strictly 'MAIN_SITE_CONFIG'
   hero_headline_ar: string;
@@ -132,6 +273,16 @@ export interface ICmsConfig {
   pricing_title_en?: string;
   pricing_subtitle_ar?: string;
   pricing_subtitle_en?: string;
+
+  // Hall of Fame / Honor Board Section
+  hall_of_fame_badge_ar?: string;
+  hall_of_fame_badge_en?: string;
+  hall_of_fame_title_ar?: string;
+  hall_of_fame_title_en?: string;
+  hall_of_fame_subtitle_ar?: string;
+  hall_of_fame_subtitle_en?: string;
+  honor_board_list?: IHonorBoardItem[];
+
   teacher_profile: ITeacherProfile;
   schedules_table: IScheduleItem[];
   contact_channels: IContactChannels;
@@ -177,6 +328,28 @@ const ScheduleItemSchema = new Schema<IScheduleItem>(
     dayOfWeek: { type: String, trim: true },
     time_slot: { type: String, required: true, trim: true },
     lecture_subject: { type: String, default: 'رياضيات متقدمة', trim: true },
+    is_active: { type: Boolean, default: true }
+  },
+  { _id: true }
+);
+
+const HonorBoardItemSchema = new Schema<IHonorBoardItem>(
+  {
+    id: { type: String },
+    rank: { type: Number, required: true },
+    nameAr: { type: String, required: true, trim: true },
+    nameEn: { type: String, default: '', trim: true },
+    systemAr: { type: String, required: true, trim: true },
+    systemEn: { type: String, default: '', trim: true },
+    achievementAr: { type: String, required: true, trim: true },
+    achievementEn: { type: String, default: '', trim: true },
+    locationAr: { type: String, default: '', trim: true },
+    locationEn: { type: String, default: '', trim: true },
+    xp: { type: Number, default: 0 },
+    accuracy: { type: Number, default: 100 },
+    badgeAr: { type: String, default: '', trim: true },
+    badgeEn: { type: String, default: '', trim: true },
+    avatarUrl: { type: String, default: '', trim: true },
     is_active: { type: Boolean, default: true }
   },
   { _id: true }
@@ -483,6 +656,40 @@ const CmsConfigSchema = new Schema<ICmsConfigDocument>(
       type: String,
       default: 'Flexible study units and intensive final revisions engineered for mastery',
       trim: true
+    },
+    hall_of_fame_badge_ar: {
+      type: String,
+      default: 'لوحة الشرف • أبطال الرياضيات',
+      trim: true
+    },
+    hall_of_fame_badge_en: {
+      type: String,
+      default: 'Hall of Fame • Top Math Masters',
+      trim: true
+    },
+    hall_of_fame_title_ar: {
+      type: String,
+      default: 'لوحة الشرف والتفوق الأكاديمي',
+      trim: true
+    },
+    hall_of_fame_title_en: {
+      type: String,
+      default: 'Academic Hall of Fame & Honor Roll',
+      trim: true
+    },
+    hall_of_fame_subtitle_ar: {
+      type: String,
+      default: 'نخبة طلابنا الذين حققوا العلامات الكاملة وأعلى مراتب التميز والذكاء الرياضي.',
+      trim: true
+    },
+    hall_of_fame_subtitle_en: {
+      type: String,
+      default: 'Elite students who achieved perfect scores and mathematical excellence across all academic curricula.',
+      trim: true
+    },
+    honor_board_list: {
+      type: [HonorBoardItemSchema],
+      default: () => DEFAULT_HONOR_BOARD_LIST
     },
     active_academic_year: {
       type: String,
