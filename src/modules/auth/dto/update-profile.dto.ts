@@ -5,6 +5,7 @@ export const updateProfileDtoSchema = z.object({
   phone: z.string().min(8, 'رقم الهاتف قصير جداً').optional(),
   parentPhone: z.string().min(8, 'رقم هاتف ولي الأمر قصير جداً').optional(),
   avatarUrl: z.string().optional().nullable(),
+  avatar_url: z.string().optional().nullable(),
   governorate: z.string().optional().nullable()
 });
 

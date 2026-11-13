@@ -574,7 +574,8 @@ export class AuthService {
     if (dto.fullName) user.full_name = dto.fullName.trim();
     if (dto.phone) user.phone = dto.phone.trim();
     if (dto.parentPhone) user.parent_phone = dto.parentPhone.trim();
-    if (dto.avatarUrl !== undefined) user.avatar_url = dto.avatarUrl;
+    const avatar = dto.avatarUrl !== undefined ? dto.avatarUrl : (dto as any).avatar_url;
+    if (avatar !== undefined) user.avatar_url = avatar;
     if (dto.governorate !== undefined) user.governorate = dto.governorate as any;
 
     await user.save();
@@ -601,6 +602,7 @@ export class AuthService {
         totalXp: user.total_xp,
         total_xp: user.total_xp,
         avatarUrl: user.avatar_url,
+        avatar_url: user.avatar_url,
         isProfileCompleted: user.is_profile_completed,
         has_active_subscription: user.has_active_subscription
       }
@@ -648,15 +650,29 @@ export class AuthService {
         token,
         user: {
           _id: student._id.toString(),
+          id: student._id.toString(),
           full_name: student.full_name,
+          fullName: student.full_name,
           email: student.email,
           role: student.role,
           student_ha_code: student.student_code,
+          studentCode: student.student_code,
           curriculum: student.curriculum,
           grade_level: student.grade_level,
+          gradeLevel: student.grade_level,
           academic_term: student.academic_term,
+          academicTerm: student.academic_term,
           total_xp: student.total_xp,
-          has_active_subscription: student.has_active_subscription
+          totalXp: student.total_xp,
+          has_active_subscription: student.has_active_subscription,
+          avatar_url: student.avatar_url,
+          avatarUrl: student.avatar_url,
+          phone: student.phone,
+          parent_phone: student.parent_phone,
+          parentPhone: student.parent_phone,
+          country: student.country,
+          governorate: student.governorate,
+          isProfileCompleted: student.is_profile_completed
         }
       };
     }
@@ -913,7 +929,7 @@ export class AuthService {
     const students = await UserModel.find({
       role: { $nin: ['SUPER_ADMIN', 'ADMIN', 'TEACHER'] }
     })
-      .select('full_name student_code email phone parent_phone curriculum grade_level approved_devices total_xp has_active_subscription account_lock_status role is_profile_completed is_leaderboard_hidden createdAt')
+      .select('full_name student_code email phone parent_phone curriculum grade_level avatar_url approved_devices total_xp has_active_subscription account_lock_status role is_profile_completed is_leaderboard_hidden createdAt')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -928,6 +944,8 @@ export class AuthService {
 
     return students.map((s) => ({
       ...s,
+      avatarUrl: s.avatar_url,
+      avatar_url: s.avatar_url,
       has_active_subscription: activeSet.has(s._id.toString()) || !!s.has_active_subscription
     }));
   }
