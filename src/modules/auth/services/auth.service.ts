@@ -163,10 +163,14 @@ export class AuthService {
           token,
           user: {
             id: user._id,
+            _id: user._id.toString(),
             fullName: user.full_name,
+            full_name: user.full_name,
             email: user.email,
             role: user.role,
             avatarUrl: user.avatar_url,
+            avatar_url: user.avatar_url,
+            has_active_subscription: user.has_active_subscription,
             isProfileCompleted: false
           }
         };
@@ -226,7 +230,9 @@ export class AuthService {
         token,
         user: {
           id: user._id,
+          _id: user._id.toString(),
           fullName: user.full_name,
+          full_name: user.full_name,
           email: user.email,
           phone: user.phone,
           parentPhone: user.parent_phone,
@@ -235,6 +241,8 @@ export class AuthService {
           governorate: user.governorate,
           role: user.role,
           avatarUrl: user.avatar_url,
+          avatar_url: user.avatar_url,
+          has_active_subscription: user.has_active_subscription,
           isProfileCompleted: user.is_profile_completed
         }
       };
@@ -256,7 +264,9 @@ export class AuthService {
         token,
         user: {
           id: user._id,
+          _id: user._id.toString(),
           fullName: user.full_name,
+          full_name: user.full_name,
           email: user.email,
           phone: user.phone,
           parentPhone: user.parent_phone,
@@ -265,6 +275,8 @@ export class AuthService {
           governorate: user.governorate,
           role: user.role,
           avatarUrl: user.avatar_url,
+          avatar_url: user.avatar_url,
+          has_active_subscription: user.has_active_subscription,
           isProfileCompleted: false
         }
       };
@@ -330,8 +342,11 @@ export class AuthService {
         token,
         user: {
           id: user._id,
+          _id: user._id.toString(),
           studentCode: user.student_code,
+          student_ha_code: user.student_code,
           fullName: user.full_name,
+          full_name: user.full_name,
           email: user.email,
           phone: user.phone,
           parentPhone: user.parent_phone,
@@ -341,9 +356,14 @@ export class AuthService {
           role: user.role,
           curriculum: user.curriculum,
           gradeLevel: user.grade_level,
+          grade_level: user.grade_level,
           academicTerm: user.academic_term,
+          academic_term: user.academic_term,
           totalXp: user.total_xp,
+          total_xp: user.total_xp,
           avatarUrl: user.avatar_url,
+          avatar_url: user.avatar_url,
+          has_active_subscription: user.has_active_subscription,
           isProfileCompleted: user.is_profile_completed
         }
       };
@@ -444,17 +464,26 @@ export class AuthService {
       token,
       user: {
         id: user._id,
+        _id: user._id.toString(),
         studentCode: user.student_code,
+        student_ha_code: user.student_code,
         fullName: user.full_name,
+        full_name: user.full_name,
         phone: user.phone,
         parentPhone: user.parent_phone,
+        parent_phone: user.parent_phone,
         curriculum: user.curriculum,
         gradeLevel: user.grade_level,
+        grade_level: user.grade_level,
         academicTerm: user.academic_term,
+        academic_term: user.academic_term,
         country: user.country,
         governorate: user.governorate,
         totalXp: user.total_xp,
+        total_xp: user.total_xp,
         avatarUrl: user.avatar_url,
+        avatar_url: user.avatar_url,
+        has_active_subscription: user.has_active_subscription,
         isProfileCompleted: true
       }
     };
@@ -516,6 +545,7 @@ export class AuthService {
         email: user.email,
         phone: user.phone,
         parentPhone: user.parent_phone,
+        parent_phone: user.parent_phone,
         role: user.role,
         curriculum: user.curriculum,
         gradeLevel: user.grade_level,
@@ -527,6 +557,7 @@ export class AuthService {
         totalXp: user.total_xp,
         total_xp: user.total_xp,
         avatarUrl: user.avatar_url,
+        avatar_url: user.avatar_url,
         isProfileCompleted: true,
         has_active_subscription: false
       }
