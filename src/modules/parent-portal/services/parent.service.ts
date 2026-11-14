@@ -23,6 +23,8 @@ export interface IChildSummaryItem {
   badgeLevel: string;
   hasActiveSubscription: boolean;
   activeUnitsCount?: number;
+  lastSeenAt?: Date | null;
+  isOnline?: boolean;
   presence: IPresenceStatusResponse;
 }
 
@@ -65,13 +67,22 @@ export class ParentService {
       _id: { $in: linkedIds },
       role: ROLES.STUDENT
     })
-      .select('full_name student_code curriculum grade_level academic_term avatar_url total_xp has_active_subscription')
+      .select('full_name student_code curriculum grade_level academic_term avatar_url total_xp has_active_subscription last_seen_at')
       .lean();
 
     const children: IChildSummaryItem[] = await Promise.all(
       students.map(async (student) => {
         const studentIdStr = (student._id as Types.ObjectId).toString();
-        const presence = PresenceTrackerService.getPresence(studentIdStr);
+        const rawPresence = PresenceTrackerService.getPresence(studentIdStr);
+        const lastSeenAt = rawPresence.lastHeartbeatAt || (student as any).last_seen_at || null;
+        const diff = lastSeenAt ? Date.now() - new Date(lastSeenAt).getTime() : Infinity;
+        const isOnline = rawPresence.isOnline || (!!lastSeenAt && diff >= -60 * 1000 && diff < 3 * 60 * 1000);
+        const presence: IPresenceStatusResponse = {
+          ...rawPresence,
+          isOnline,
+          activityType: isOnline && rawPresence.activityType === 'OFFLINE' ? 'IDLE' : rawPresence.activityType,
+          lastSeenAt
+        };
         const badgeLevel = GamificationService.calculateBadgeLevel(student.total_xp);
         const activeUnitsCount = await SubscriptionModel.countDocuments({
           student_id: student._id,
@@ -91,6 +102,8 @@ export class ParentService {
           badgeLevel,
           hasActiveSubscription: student.has_active_subscription || activeUnitsCount > 0,
           activeUnitsCount,
+          lastSeenAt,
+          isOnline,
           presence
         };
       })
@@ -132,8 +145,17 @@ export class ParentService {
       }
     }
 
-    // 1. Live Presence
-    const presence = PresenceTrackerService.getPresence(studentId);
+    // 1. Live Presence & Last Seen Window
+    const rawPresence = PresenceTrackerService.getPresence(studentId);
+    const lastSeenAt = rawPresence.lastHeartbeatAt || (student as any).last_seen_at || null;
+    const diff = lastSeenAt ? Date.now() - new Date(lastSeenAt).getTime() : Infinity;
+    const isOnline = rawPresence.isOnline || (!!lastSeenAt && diff >= -60 * 1000 && diff < 3 * 60 * 1000);
+    const presence: IPresenceStatusResponse = {
+      ...rawPresence,
+      isOnline,
+      activityType: isOnline && rawPresence.activityType === 'OFFLINE' ? 'IDLE' : rawPresence.activityType,
+      lastSeenAt
+    };
 
     // 2. Active Subscriptions
     const subscriptions = await SubscriptionModel.find({
@@ -331,7 +353,9 @@ export class ParentService {
         academicTerm: student.academic_term,
         avatarUrl: student.avatar_url,
         totalXp: student.total_xp,
-        badgeLevel: GamificationService.calculateBadgeLevel(student.total_xp)
+        badgeLevel: GamificationService.calculateBadgeLevel(student.total_xp),
+        lastSeenAt,
+        isOnline
       },
       presence,
       activeSubscriptions,

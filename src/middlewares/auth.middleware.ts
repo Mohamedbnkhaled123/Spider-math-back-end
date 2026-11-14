@@ -1,8 +1,39 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { Types } from 'mongoose';
 import { env } from '../config/env.config';
 import { AppError } from '../common/utils/app-error.util';
 import { IJwtPayload } from '../common/interfaces/auth-payload.interface';
+import { UserModel } from '../models/user.model';
+
+export const lastSeenWriteThrottle = new Map<string, number>();
+export const THROTTLE_MS = 2 * 60 * 1000; // 2 minutes
+
+/**
+ * Primes the write throttle map to avoid duplicate writes immediately after login
+ */
+export function primeStudentLastSeenThrottle(studentId: string, timestamp: number = Date.now()): void {
+  lastSeenWriteThrottle.set(studentId, timestamp);
+}
+
+/**
+ * Zero Extra Requests: Throttled Student Piggyback Presence Update (2-minute throttle)
+ */
+export function recordStudentLastSeen(studentId: string): void {
+  if (!Types.ObjectId.isValid(studentId)) return;
+  const now = Date.now();
+  const lastUpdate = lastSeenWriteThrottle.get(studentId) || 0;
+  if (now - lastUpdate >= THROTTLE_MS) {
+    lastSeenWriteThrottle.set(studentId, now);
+    if (lastSeenWriteThrottle.size > 5000) {
+      const cutoff = now - THROTTLE_MS * 2;
+      for (const [id, time] of lastSeenWriteThrottle.entries()) {
+        if (time < cutoff) lastSeenWriteThrottle.delete(id);
+      }
+    }
+    UserModel.updateOne({ _id: studentId }, { $set: { last_seen_at: new Date() } }).catch(() => {});
+  }
+}
 
 /**
  * Authentication Guard Middleware
@@ -49,6 +80,11 @@ export function authenticateJwt(req: Request, _res: Response, next: NextFunction
     req.user = decoded;
     req.deviceUuid = req.header('X-Device-UUID')?.trim() || decoded.deviceUuid;
 
+    // Zero Extra Requests: Throttled Student Piggyback Presence Update (2-minute throttle)
+    if (decoded.role === 'STUDENT') {
+      recordStudentLastSeen(decoded.sub);
+    }
+
     next();
   } catch (error: any) {
     if (error instanceof jwt.TokenExpiredError) {
@@ -76,6 +112,10 @@ export function optionalAuthenticateJwt(req: Request, _res: Response, next: Next
         if (decoded && decoded.sub && decoded.role) {
           req.user = decoded;
           req.deviceUuid = req.header('X-Device-UUID')?.trim() || decoded.deviceUuid;
+
+          if (decoded.role === 'STUDENT') {
+            recordStudentLastSeen(decoded.sub);
+          }
         }
       } catch {
         // Silently proceed for optional auth if token is invalid or expired

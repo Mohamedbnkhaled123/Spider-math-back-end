@@ -21,6 +21,8 @@ import { UpdateProfileDto } from '../dto/update-profile.dto';
 import { DeviceDecisionDto } from '../dto/device-decision.dto';
 import { validatePhoneNumber, arePhoneNumbersIdentical } from '../../../common/utils/phone-validator.util';
 import { IJwtPayload } from '../../../common/interfaces/auth-payload.interface';
+import { primeStudentLastSeenThrottle } from '../../../middlewares/auth.middleware';
+import { PresenceTrackerService } from '../../parent-portal/services/presence-tracker.service';
 
 export class AuthService {
   private googleClient: OAuth2Client;
@@ -149,6 +151,10 @@ export class AuthService {
 
       // If user registered with Google but hasn't completed their profile yet
       if (!user.is_profile_completed) {
+        if (user.role === ROLES.STUDENT) {
+          primeStudentLastSeenThrottle(user._id.toString());
+          UserModel.updateOne({ _id: user._id }, { $set: { last_seen_at: new Date() } }).catch(() => {});
+        }
         const token = this.generateToken({
           sub: user._id.toString(),
           role: user.role,
@@ -198,8 +204,11 @@ export class AuthService {
         country: 'EG',
         is_profile_completed: false,
         approved_devices: [firstDevice],
-        account_lock_status: 'ACTIVE'
+        account_lock_status: 'ACTIVE',
+        last_seen_at: new Date()
       });
+
+      primeStudentLastSeenThrottle(user._id.toString());
 
       // Seed cache for instant lookup
       deviceWhitelistCache.set(
@@ -250,6 +259,10 @@ export class AuthService {
 
     // If user already exists and is in signup intent
     if (dto.intent === 'signup' && !user.is_profile_completed) {
+      if (user.role === ROLES.STUDENT) {
+        primeStudentLastSeenThrottle(user._id.toString());
+        UserModel.updateOne({ _id: user._id }, { $set: { last_seen_at: new Date() } }).catch(() => {});
+      }
       const token = this.generateToken({
         sub: user._id.toString(),
         role: user.role,
@@ -321,6 +334,11 @@ export class AuthService {
     // CASE 2: Approved Device (Return Token)
     // -------------------------------------------------------------------------
     if (isDeviceApproved) {
+      if (user.role === ROLES.STUDENT) {
+        primeStudentLastSeenThrottle(user._id.toString());
+        UserModel.updateOne({ _id: user._id }, { $set: { last_seen_at: new Date() } }).catch(() => {});
+      }
+
       // Ensure LRU cache is fresh
       deviceWhitelistCache.set(
         `device_whitelist:${user._id}`,
@@ -522,8 +540,11 @@ export class AuthService {
       approved_devices: [firstDevice],
       account_lock_status: 'ACTIVE',
       total_xp: 50,
-      has_active_subscription: false
+      has_active_subscription: false,
+      last_seen_at: new Date()
     });
+
+    primeStudentLastSeenThrottle(user._id.toString());
 
     const token = this.generateToken({
       sub: user._id.toString(),
@@ -664,6 +685,9 @@ export class AuthService {
 
     // 2. If approved, generate token and update cache
     if (isDeviceApproved) {
+      primeStudentLastSeenThrottle(student._id.toString());
+      UserModel.updateOne({ _id: student._id }, { $set: { last_seen_at: new Date() } }).catch(() => {});
+
       deviceWhitelistCache.set(
         `device_whitelist:${student._id}`,
         new Set(student.approved_devices.map((d) => d.device_uuid)),
@@ -960,7 +984,7 @@ export class AuthService {
     const students = await UserModel.find({
       role: { $nin: ['SUPER_ADMIN', 'ADMIN', 'TEACHER'] }
     })
-      .select('full_name student_code email phone parent_phone curriculum grade_level avatar_url approved_devices total_xp has_active_subscription account_lock_status role is_profile_completed is_leaderboard_hidden createdAt')
+      .select('full_name student_code email phone parent_phone curriculum grade_level avatar_url approved_devices total_xp has_active_subscription account_lock_status role is_profile_completed is_leaderboard_hidden createdAt last_seen_at')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -973,12 +997,24 @@ export class AuthService {
 
     const activeSet = new Set(activeSubs.map((sub) => sub.student_id.toString()));
 
-    return students.map((s) => ({
-      ...s,
-      avatarUrl: s.avatar_url,
-      avatar_url: s.avatar_url,
-      has_active_subscription: activeSet.has(s._id.toString()) || !!s.has_active_subscription
-    }));
+    return students.map((s) => {
+      const studentIdStr = s._id.toString();
+      const ramPresence = PresenceTrackerService.getPresence(studentIdStr);
+      const lastSeenAt = ramPresence.lastHeartbeatAt || s.last_seen_at || null;
+      const diff = lastSeenAt ? Date.now() - new Date(lastSeenAt).getTime() : Infinity;
+      const isOnline = ramPresence.isOnline || (!!lastSeenAt && diff >= -60 * 1000 && diff < 3 * 60 * 1000);
+
+      return {
+        ...s,
+        avatarUrl: s.avatar_url,
+        avatar_url: s.avatar_url,
+        has_active_subscription: activeSet.has(studentIdStr) || !!s.has_active_subscription,
+        last_seen_at: lastSeenAt,
+        lastSeenAt,
+        is_online: isOnline,
+        isOnline
+      };
+    });
   }
 
   /**

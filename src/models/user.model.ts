@@ -91,6 +91,9 @@ export interface IUser {
   // UI Preferences
   ui_preferences: IUiPreferences;
 
+  // Student Presence & Activity
+  last_seen_at?: Date | null;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -294,6 +297,13 @@ const UserSchema = new Schema<IUserDocument>(
         enum: ['light', 'dark'],
         default: 'light'
       }
+    },
+
+    // --- Student Presence & Activity ---
+    last_seen_at: {
+      type: Date,
+      default: null,
+      index: true
     }
   },
   {

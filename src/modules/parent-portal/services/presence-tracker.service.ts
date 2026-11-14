@@ -6,6 +6,7 @@ export interface IPresenceStatusResponse {
   referenceId?: string;
   referenceTitle?: string;
   lastHeartbeatAt?: Date;
+  lastSeenAt?: Date | null;
   currentPlaybackSec?: number;
 }
 
@@ -26,7 +27,8 @@ export class PresenceTrackerService {
     if (!cached) {
       return {
         isOnline: false,
-        activityType: 'OFFLINE'
+        activityType: 'OFFLINE',
+        lastSeenAt: null
       };
     }
 
@@ -36,6 +38,7 @@ export class PresenceTrackerService {
       referenceId: cached.referenceId,
       referenceTitle: cached.referenceTitle,
       lastHeartbeatAt: cached.lastHeartbeatAt,
+      lastSeenAt: cached.lastHeartbeatAt || null,
       currentPlaybackSec: cached.currentPlaybackSec
     };
   }
