@@ -7,6 +7,8 @@ import {
   isTextAnswerMatch
 } from '../factories/question-grader.factory';
 import { gradeSubmissionDtoSchema } from '../dto/grade-submission.dto';
+import { GradingService } from './grading.service';
+import { SubmissionModel } from '../../../models/submission.model';
 
 /**
  * Spider Math Educational Platform (v2.2)
@@ -389,6 +391,39 @@ assert.equal(resolvedAutoScore, 0, 'Auto score must be 0 when student scored 0 o
 
 console.log('✔ Test 10 Passed: Zero score on auto questions correctly resolves to 0 without stale fallback.');
 
-console.log('\n======================================================');
-console.log('✔ ALL USER ASSESSMENT GRADING REQUIREMENTS VERIFIED! ✔');
-console.log('======================================================');
+// =============================================================================
+// Test 11: Idempotent Approval & Duplicate Publishing Prevention
+// =============================================================================
+async function test11() {
+  console.log('--- Test 11: Idempotent Approval & Duplicate Publishing Prevention ---');
+
+  // Simulate already published submission
+  const alreadyPublishedSubmission: any = {
+    _id: new Types.ObjectId(),
+    result_visibility: 'PUBLISHED_TO_STUDENT_AND_PARENT',
+    final_total_score: 15,
+    graded_at: new Date('2026-10-01T12:00:00Z')
+  };
+
+  // Check duplicate approval safeguard condition
+  let isAlreadyPublished = alreadyPublishedSubmission.result_visibility === 'PUBLISHED_TO_STUDENT_AND_PARENT';
+  assert.equal(isAlreadyPublished, true, 'Safeguard must detect already published submission');
+
+  // Direct invocation of GradingService.prototype.approveSubmission
+  const originalFindById = (SubmissionModel as any).findById;
+  (SubmissionModel as any).findById = async () => ({ ...alreadyPublishedSubmission });
+
+  const gradingService = new GradingService();
+  const serviceResult = await gradingService.approveSubmission('admin_test_1', alreadyPublishedSubmission._id.toString());
+  assert.equal(serviceResult.result_visibility, 'PUBLISHED_TO_STUDENT_AND_PARENT', 'Real service method must return published submission');
+  assert.equal(serviceResult.graded_at?.toISOString(), '2026-10-01T12:00:00.000Z', 'graded_at timestamp must remain untouched');
+
+  (SubmissionModel as any).findById = originalFindById;
+
+  console.log('✔ Test 11 Passed: Duplicate approval safely avoided and idempotency enforced.');
+  console.log('\n======================================================');
+  console.log('✔ ALL USER ASSESSMENT GRADING REQUIREMENTS VERIFIED! ✔');
+  console.log('======================================================');
+}
+
+test11();

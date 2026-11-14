@@ -325,6 +325,12 @@ export class GradingService {
       throw new AppError('Submission not found', 404, ERROR_CODES.NOT_FOUND_404);
     }
 
+    // Guard against duplicate approvals / publishing:
+    // If already published to student & parent, return gracefully to prevent duplicate side effects, XP & notifications
+    if (submission.result_visibility === 'PUBLISHED_TO_STUDENT_AND_PARENT') {
+      return submission;
+    }
+
     const assessment = await AssessmentModel.findById(submission.assessment_id);
     if (!assessment) {
       throw new AppError('Associated assessment not found', 404, ERROR_CODES.ASSESSMENT_NOT_FOUND_404);
