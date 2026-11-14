@@ -84,7 +84,7 @@ export function parseMathNumericValue(str: string): number | null {
 
   // Fraction format e.g. "1/2" or "-3/4"
   const fractionMatch = normalizedDec.match(/^(-?\d+)\/(\d+)$/);
-  if (fractionMatch) {
+  if (fractionMatch && fractionMatch[1] && fractionMatch[2]) {
     const num = parseFloat(fractionMatch[1]);
     const den = parseFloat(fractionMatch[2]);
     if (den !== 0) return num / den;

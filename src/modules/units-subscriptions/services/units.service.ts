@@ -246,7 +246,7 @@ export class UnitsService {
     }
     const assessmentQuery = AssessmentModel.find(assessmentsFilter).sort({ createdAt: 1 });
     if (!isSuperAdmin) {
-      assessmentQuery.select('-questions.correct_option_index -questions.model_answer_text -questions.youtube_solution_url');
+      assessmentQuery.select('-questions.correct_option_index -questions.accepted_answers -questions.model_answer_text -questions.youtube_solution_url');
     }
     const assessments = await assessmentQuery.lean();
 

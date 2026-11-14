@@ -104,13 +104,11 @@ const QuestionItemSchema = new Schema<IQuestionItem>(
       default: []
     },
     correct_option_index: {
-      type: Number,
-      select: false // Zero answer leakage: hidden from student API queries by default
+      type: Number
     },
     accepted_answers: {
       type: [String],
-      default: undefined,
-      select: false // Zero answer leakage: never returned to students
+      default: undefined
     },
     points: {
       type: Number,
@@ -124,8 +122,7 @@ const QuestionItemSchema = new Schema<IQuestionItem>(
       default: 1
     },
     model_answer_text: {
-      type: String,
-      select: false
+      type: String
     },
     youtube_solution_url: {
       type: String,

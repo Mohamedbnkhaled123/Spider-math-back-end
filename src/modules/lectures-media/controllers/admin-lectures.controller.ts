@@ -202,7 +202,7 @@ export class AdminLecturesController {
           is_print_allowed: p.is_print_allowed !== undefined ? !!p.is_print_allowed : (p.isPrintAllowed !== undefined ? !!p.isPrintAllowed : !!lecture.is_print_allowed),
           pages_count: Number(p.pages_count || p.pagesCount || 1)
         })).filter((p: any) => p.storage_file_id);
-        if (lecture.pdf_materials.length > 0) {
+        if (lecture.pdf_materials.length > 0 && lecture.pdf_materials[0]) {
           lecture.google_drive_pdf_id = lecture.pdf_materials[0].storage_file_id;
         }
       } else if (googleDrivePdfFileId !== undefined) {

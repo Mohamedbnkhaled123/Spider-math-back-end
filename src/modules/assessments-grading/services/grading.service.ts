@@ -1,5 +1,5 @@
 import { Types } from 'mongoose';
-import { SubmissionModel, ISubmissionDocument } from '../../../models/submission.model';
+import { SubmissionModel, ISubmissionDocument, IEssayAnswer } from '../../../models/submission.model';
 import { AssessmentModel, IAssessmentDocument } from '../../../models/assessment.model';
 import { UserModel, IUserDocument } from '../../../models/user.model';
 import { NotificationModel } from '../../../models/notification.model';
@@ -87,7 +87,7 @@ export class GradingService {
         .populate<{ student_id: IUserDocument }>('student_id', 'full_name student_code phone_number parent_phone curriculum grade_level email')
         .populate<{ assessment_id: IAssessmentDocument }>(
           'assessment_id',
-          'title_ar title_en total_points assessment_type questions has_essay_questions xp_reward +questions.correct_option_index +questions.accepted_answers +questions.model_answer_text +questions.youtube_solution_url'
+          'title_ar title_en total_points assessment_type questions has_essay_questions xp_reward'
         )
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -139,7 +139,7 @@ export class GradingService {
         .populate<{ student_id: IUserDocument }>('student_id', 'full_name student_code phone_number curriculum grade_level')
         .populate<{ assessment_id: IAssessmentDocument }>(
           'assessment_id',
-          'title_ar title_en total_points assessment_type questions +questions.correct_option_index +questions.accepted_answers +questions.model_answer_text +questions.youtube_solution_url'
+          'title_ar title_en total_points assessment_type questions has_essay_questions xp_reward'
         )
         .sort({ createdAt: -1 })
         .skip(skip)

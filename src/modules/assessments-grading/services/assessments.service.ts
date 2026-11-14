@@ -1297,7 +1297,8 @@ export class AssessmentsService {
         points: q.points || 1,
         awardedPoints,
         youtubeSolutionUrl: isPublished ? (q.youtube_solution_url || customNote?.youtube_solution_url || null) : null,
-        teacherNote: customNote ? customNote.error_note : null
+        teacherNote: customNote ? customNote.error_note : null,
+        acceptedAnswers: isPublished && isInputText ? (q.accepted_answers || []) : undefined
       });
     });
 

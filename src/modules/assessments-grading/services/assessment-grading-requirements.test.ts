@@ -2,9 +2,6 @@ import assert from 'node:assert/strict';
 import { Types } from 'mongoose';
 import {
   QuestionGraderFactory,
-  InputTextQuestionGrader,
-  McqQuestionGrader,
-  normalizeTextAnswer,
   normalizeDigits,
   parseMathNumericValue,
   isTextAnswerMatch
@@ -159,14 +156,14 @@ const studentSubmissionAnswers = {
 // Simulate backend processing
 const q1Graded = mcqGrader.grade(
   { questionId: 'q1_mcq', questionType: 'MCQ', correctOptionIndex: 1, points: 5 },
-  { selectedOptionIndex: studentSubmissionAnswers.mcq[0].selected_option_index }
+  { selectedOptionIndex: studentSubmissionAnswers.mcq[0]!.selected_option_index }
 );
 assert.equal(q1Graded.isCorrect, false);
 assert.equal(q1Graded.pointsEarned, 0);
 
 const q2Graded = textGrader.grade(
   { questionId: 'q2_text', questionType: 'INPUT_TEXT', acceptedAnswers: ['5'], points: 5 },
-  { textAnswer: studentSubmissionAnswers.text[0].text_answer }
+  { textAnswer: studentSubmissionAnswers.text[0]!.text_answer }
 );
 assert.equal(q2Graded.isCorrect, true);
 assert.equal(q2Graded.pointsEarned, 5);
@@ -209,8 +206,8 @@ const mappedReviewQuestions = [
 
 const sumAwarded = mappedReviewQuestions.reduce((sum, q) => sum + q.pointsEarned, 0);
 assert.equal(sumAwarded, initialFinalScore, 'Sum of question awarded points must strictly equal header score (5 = 5)');
-assert.equal(mappedReviewQuestions[1].isCorrect, true, 'Question 2 must display as correct');
-assert.equal(mappedReviewQuestions[2].isPendingManualGrading, true, 'Question 3 must be pending manual review');
+assert.equal(mappedReviewQuestions[1]!.isCorrect, true, 'Question 2 must display as correct');
+assert.equal(mappedReviewQuestions[2]!.isPendingManualGrading, true, 'Question 3 must be pending manual review');
 
 console.log('✔ Test 4 Passed: 5 / 15 score mismatch resolved — individual questions strictly sum to 5.');
 
@@ -274,7 +271,7 @@ const validGradePayload = {
 const parsedGradeDto = gradeSubmissionDtoSchema.parse(validGradePayload);
 assert.equal(parsedGradeDto.essay_manual_score, 5);
 assert.equal(parsedGradeDto.essay_answers?.length, 1);
-assert.equal(parsedGradeDto.essay_answers?.[0].decision, 'FULL');
+assert.equal(parsedGradeDto.essay_answers?.[0]?.decision, 'FULL');
 
 console.log('✔ Test 6 Passed: GradeSubmissionDto validates essay_answers and decisions successfully.');
 
