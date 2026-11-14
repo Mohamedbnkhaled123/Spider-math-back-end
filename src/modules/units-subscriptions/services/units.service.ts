@@ -306,7 +306,9 @@ export class UnitsService {
       const effectiveGoogleDrivePdfId = primaryPdf
         ? (primaryPdf.storage_file_id || primaryPdf._id?.toString() || '')
         : (trialData ? trialData.google_drive_pdf_id : lec.google_drive_pdf_id) || '';
-      const effectivePrintAllowed = primaryPdf ? !!primaryPdf.is_print_allowed : false;
+      const effectivePrintAllowed = primaryPdf
+        ? !!primaryPdf.is_print_allowed
+        : (lec.is_print_allowed !== undefined ? !!lec.is_print_allowed : false);
 
       return {
         ...lec,

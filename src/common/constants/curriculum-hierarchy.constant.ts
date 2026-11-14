@@ -36,10 +36,14 @@ export const GRADE_LEVELS_BY_CURRICULUM: Record<CurriculumType, readonly string[
     'GRADE_10', 'GRADE_11', 'GRADE_12'
   ],
 
-  // 3. المناهج الدولية (IGCSE / British — من Year 1 إلى A-Level)
+  // 3. المناهج الدولية (American Curriculum & British Curriculum — Gr 1-12 & Year 1-13)
   INTERNATIONAL: [
+    'US_GRADE_1', 'US_GRADE_2', 'US_GRADE_3', 'US_GRADE_4', 'US_GRADE_5',
+    'US_GRADE_6', 'US_GRADE_7', 'US_GRADE_8',
+    'US_GRADE_9', 'US_GRADE_10', 'US_GRADE_11', 'US_GRADE_12',
     'IGCSE_YEAR_1', 'IGCSE_YEAR_2', 'IGCSE_YEAR_3', 'IGCSE_YEAR_4', 'IGCSE_YEAR_5', 'IGCSE_YEAR_6',
     'IGCSE_YEAR_7', 'IGCSE_YEAR_8', 'IGCSE_YEAR_9',
+    'IGCSE_YEAR_10', 'IGCSE_YEAR_11', 'IGCSE_YEAR_12', 'IGCSE_YEAR_13',
     'IGCSE_OL', 'IGCSE_AS', 'IGCSE_AL'
   ],
 
@@ -65,12 +69,15 @@ export const ALL_GRADE_LEVELS = [
   'GRADE_10', 'GRADE_11', 'GRADE_12',
 
   // International
+  'US_GRADE_1', 'US_GRADE_2', 'US_GRADE_3', 'US_GRADE_4', 'US_GRADE_5',
+  'US_GRADE_6', 'US_GRADE_7', 'US_GRADE_8',
+  'US_GRADE_9', 'US_GRADE_10', 'US_GRADE_11', 'US_GRADE_12',
   'IGCSE_YEAR_1', 'IGCSE_YEAR_2', 'IGCSE_YEAR_3', 'IGCSE_YEAR_4', 'IGCSE_YEAR_5', 'IGCSE_YEAR_6',
   'IGCSE_YEAR_7', 'IGCSE_YEAR_8', 'IGCSE_YEAR_9',
+  'IGCSE_YEAR_10', 'IGCSE_YEAR_11', 'IGCSE_YEAR_12', 'IGCSE_YEAR_13',
   'IGCSE_OL', 'IGCSE_AS', 'IGCSE_AL',
 
   // American
-  'US_GRADE_1', 'US_GRADE_2', 'US_GRADE_3', 'US_GRADE_4', 'US_GRADE_5', 'US_GRADE_6', 'US_GRADE_7', 'US_GRADE_8',
   'SAT_1', 'SAT_2', 'SAT_MATH',
   'EST_1', 'EST_2', 'EST_MATH',
   'ACT_1', 'ACT_2', 'ACT_MATH'
@@ -78,10 +85,23 @@ export const ALL_GRADE_LEVELS = [
 
 export type GradeLevelType = (typeof ALL_GRADE_LEVELS)[number];
 
+export interface ICurriculumDivisionDefinition {
+  code: string;
+  nameAr: string;
+  nameEn?: string;
+  iconName?: string;
+  stages?: Array<{
+    code: string;
+    nameAr: string;
+    nameEn?: string;
+  }>;
+}
+
 export interface ICurriculumTrackDefinition {
   code: CurriculumType;
   nameAr: string;
   nameEn?: string;
+  divisions?: ICurriculumDivisionDefinition[];
   grades: Array<{
     code: string;
     titleAr: string;
@@ -130,12 +150,43 @@ export const DEFAULT_CURRICULA_TRACKS: ICurriculumTrackDefinition[] = [
   },
   {
     code: 'INTERNATIONAL',
-    nameAr: 'IGCSE / البريطانية',
-    nameEn: 'British Curriculum (IGCSE)',
+    nameAr: 'المناهج الدولية',
+    nameEn: 'International Curriculum',
+    divisions: [
+      {
+        code: 'AMERICAN_CURRICULUM',
+        nameAr: 'المنهج الأمريكي',
+        nameEn: 'American Curriculum',
+        iconName: 'award',
+        stages: [
+          { code: 'ELEMENTARY_SCHOOL', nameAr: 'المرحلة الابتدائية (Elementary School)', nameEn: 'Elementary School' },
+          { code: 'MIDDLE_SCHOOL', nameAr: 'المرحلة المتوسطة (Middle School)', nameEn: 'Middle School' },
+          { code: 'HIGH_SCHOOL', nameAr: 'المرحلة الثانوية (High School)', nameEn: 'High School' }
+        ]
+      },
+      {
+        code: 'BRITISH_CURRICULUM',
+        nameAr: 'المنهج البريطاني',
+        nameEn: 'British Curriculum',
+        iconName: 'graduation-cap',
+        stages: [
+          { code: 'PRIMARY_KS1', nameAr: 'المرحلة الابتدائية (Primary Key Stage 1)', nameEn: 'Primary Key Stage 1' },
+          { code: 'PRIMARY_KS2', nameAr: 'المرحلة الابتدائية (Primary Key Stage 2)', nameEn: 'Primary Key Stage 2' },
+          { code: 'SECONDARY_KS3', nameAr: 'المرحلة الثانوية الدنيا (Secondary Key Stage 3)', nameEn: 'Secondary Key Stage 3' },
+          { code: 'KS4_IGCSE', nameAr: 'مرحلة IGCSE (Key Stage 4 IGCSE)', nameEn: 'Key Stage 4 IGCSE' },
+          { code: 'SIXTH_FORM_ALEVEL', nameAr: 'المرحلة المتقدمة (Sixth Form A-Level)', nameEn: 'Sixth Form A-Level' }
+        ]
+      }
+    ],
     grades: [
+      // British Curriculum
       { code: 'IGCSE_AL', titleAr: 'A-Level Mathematics (9709)', titleEn: 'Cambridge / Edexcel A-Level' },
       { code: 'IGCSE_AS', titleAr: 'AS-Level Pure & Mechanics', titleEn: 'AS-Level Math' },
+      { code: 'IGCSE_YEAR_13', titleAr: 'السنة الثالثة عشرة (Sixth Form - Year 13)', titleEn: 'Year 13' },
+      { code: 'IGCSE_YEAR_12', titleAr: 'السنة الثانية عشرة (Sixth Form - Year 12)', titleEn: 'Year 12' },
       { code: 'IGCSE_OL', titleAr: 'O-Level Extended Math (0580)', titleEn: 'IGCSE O-Level' },
+      { code: 'IGCSE_YEAR_11', titleAr: 'السنة الحادية عشرة (Key Stage 4 - Year 11)', titleEn: 'Year 11' },
+      { code: 'IGCSE_YEAR_10', titleAr: 'السنة العاشرة (Key Stage 4 - Year 10)', titleEn: 'Year 10' },
       { code: 'IGCSE_YEAR_9', titleAr: 'السنة التاسعة (Year 9 / Checkpoint)', titleEn: 'Year 9' },
       { code: 'IGCSE_YEAR_8', titleAr: 'السنة الثامنة (Year 8)', titleEn: 'Year 8' },
       { code: 'IGCSE_YEAR_7', titleAr: 'السنة السابعة (Year 7)', titleEn: 'Year 7' },
@@ -144,7 +195,20 @@ export const DEFAULT_CURRICULA_TRACKS: ICurriculumTrackDefinition[] = [
       { code: 'IGCSE_YEAR_4', titleAr: 'السنة الرابعة (Year 4)', titleEn: 'Year 4' },
       { code: 'IGCSE_YEAR_3', titleAr: 'السنة الثالثة (Year 3)', titleEn: 'Year 3' },
       { code: 'IGCSE_YEAR_2', titleAr: 'السنة الثانية (Year 2)', titleEn: 'Year 2' },
-      { code: 'IGCSE_YEAR_1', titleAr: 'السنة الأولى (Year 1)', titleEn: 'Year 1' }
+      { code: 'IGCSE_YEAR_1', titleAr: 'السنة الأولى (Year 1)', titleEn: 'Year 1' },
+      // American Curriculum
+      { code: 'US_GRADE_12', titleAr: 'الصف الثاني عشر الأمريكي (Grade 12)', titleEn: 'Grade 12' },
+      { code: 'US_GRADE_11', titleAr: 'الصف الحادي عشر الأمريكي (Grade 11)', titleEn: 'Grade 11' },
+      { code: 'US_GRADE_10', titleAr: 'الصف العاشر الأمريكي (Grade 10)', titleEn: 'Grade 10' },
+      { code: 'US_GRADE_9', titleAr: 'الصف التاسع الأمريكي (Grade 9)', titleEn: 'Grade 9' },
+      { code: 'US_GRADE_8', titleAr: 'الصف الثامن الأمريكي (Grade 8)', titleEn: 'Grade 8' },
+      { code: 'US_GRADE_7', titleAr: 'الصف السابع الأمريكي (Grade 7)', titleEn: 'Grade 7' },
+      { code: 'US_GRADE_6', titleAr: 'الصف السادس الأمريكي (Grade 6)', titleEn: 'Grade 6' },
+      { code: 'US_GRADE_5', titleAr: 'الصف الخامس الأمريكي (Grade 5)', titleEn: 'Grade 5' },
+      { code: 'US_GRADE_4', titleAr: 'الصف الرابع الأمريكي (Grade 4)', titleEn: 'Grade 4' },
+      { code: 'US_GRADE_3', titleAr: 'الصف الثالث الأمريكي (Grade 3)', titleEn: 'Grade 3' },
+      { code: 'US_GRADE_2', titleAr: 'الصف الثاني الأمريكي (Grade 2)', titleEn: 'Grade 2' },
+      { code: 'US_GRADE_1', titleAr: 'الصف الأول الأمريكي (Grade 1)', titleEn: 'Grade 1' }
     ]
   },
   {

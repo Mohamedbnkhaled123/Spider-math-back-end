@@ -377,6 +377,22 @@ export class CmsService {
     let curriculaTracks = (config as any).curricula_tracks || (config as any).curriculaTracks;
     if (!curriculaTracks || !Array.isArray(curriculaTracks) || curriculaTracks.length === 0) {
       curriculaTracks = CmsService.DEFAULT_TRACKS;
+    } else {
+      curriculaTracks = curriculaTracks.map((t: any) => {
+        if (t.code === 'INTERNATIONAL') {
+          const defaultIntl = DEFAULT_CURRICULA_TRACKS.find((d) => d.code === 'INTERNATIONAL');
+          const isLegacyName = !t.nameAr || t.nameAr.includes('البريطانية');
+          const hasIncompleteGrades = !t.grades || t.grades.length <= 4;
+          return {
+            ...t,
+            nameAr: isLegacyName ? 'المناهج الدولية' : t.nameAr,
+            nameEn: isLegacyName ? 'International Curriculum' : (t.nameEn || 'International Curriculum'),
+            divisions: (!t.divisions || t.divisions.length === 0) ? defaultIntl?.divisions : t.divisions,
+            grades: hasIncompleteGrades ? defaultIntl?.grades : t.grades
+          };
+        }
+        return t;
+      });
     }
     return { activeGrades, curriculaTracks };
   }

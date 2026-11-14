@@ -46,8 +46,20 @@ export class AdminLecturesController {
       // Count existing lectures for order index
       const existingCount = await LectureMaterialModel.countDocuments({ unit_package_id: unit._id });
 
-      const pdfMaterials = [];
-      if (googleDrivePdfFileId && googleDrivePdfFileId.trim()) {
+      const pdfMaterials: any[] = [];
+      if (Array.isArray(req.body.pdfMaterials) && req.body.pdfMaterials.length > 0) {
+        pdfMaterials.push(
+          ...req.body.pdfMaterials
+            .map((p: any) => ({
+              title: p.title || `ملخص ومذكرة: ${titleAr.trim()}`,
+              storage_file_id: (p.storage_file_id || p.storageFileId || p.fileId || '').trim(),
+              google_drive_url: (p.google_drive_url || p.googleDriveUrl || '').trim(),
+              is_print_allowed: p.is_print_allowed !== undefined ? !!p.is_print_allowed : (p.isPrintAllowed !== undefined ? !!p.isPrintAllowed : !!isPrintAllowed),
+              pages_count: Number(p.pages_count || p.pagesCount || 1)
+            }))
+            .filter((p: any) => p.storage_file_id)
+        );
+      } else if (googleDrivePdfFileId && googleDrivePdfFileId.trim()) {
         pdfMaterials.push({
           title: `ملخص ومذكرة: ${titleAr.trim()}`,
           storage_file_id: googleDrivePdfFileId.trim(),
@@ -59,7 +71,7 @@ export class AdminLecturesController {
       const rawYoutube = youtubeUrl ? youtubeUrl.trim() : '';
       let cleanVideoId = '';
       let encryptedYoutube = '';
-      let durationSec = durationMinutes ? Math.max(0, Math.round(Number(durationMinutes) * 60)) : 0;
+      let durationSec = 0;
 
       if (rawYoutube) {
         cleanVideoId = CryptoProxyService.extractYoutubeId(rawYoutube);
@@ -67,9 +79,7 @@ export class AdminLecturesController {
           throw new AppError('يرجى إدخال رابط يوتيوب صالح للشرح (YouTube Video URL is invalid)', 400, ERROR_CODES.BAD_REQUEST_400);
         }
         encryptedYoutube = CryptoProxyService.encrypt(cleanVideoId);
-        if (!durationSec) {
-          durationSec = 300;
-        }
+        durationSec = durationMinutes ? Math.max(0, Math.round(Number(durationMinutes) * 60)) : 300;
         try {
           const ytDuration = await fetchYouTubeVideoDurationSec(cleanVideoId);
           if (ytDuration && ytDuration > 0) {
@@ -174,19 +184,28 @@ export class AdminLecturesController {
             }
           }
         } else {
-          // YouTube URL was intentionally cleared
+          // YouTube URL was intentionally cleared -> lecture has no video (files only)
           lecture.youtube_encrypted_id = '';
           lecture.youtube_video_id = '';
           lecture.youtube_url = '';
-          if (durationMinutes) {
-            lecture.video_duration_sec = Math.round(Number(durationMinutes) * 60);
-          }
+          lecture.video_duration_sec = 0;
         }
-      } else if (durationMinutes) {
+      } else if (durationMinutes && (lecture.youtube_video_id || lecture.youtube_url)) {
         lecture.video_duration_sec = Math.round(Number(durationMinutes) * 60);
       }
 
-      if (googleDrivePdfFileId !== undefined) {
+      if (req.body.pdfMaterials !== undefined && Array.isArray(req.body.pdfMaterials)) {
+        lecture.pdf_materials = req.body.pdfMaterials.map((p: any) => ({
+          title: p.title || `ملخص ومذكرة: ${lecture.lecture_title_ar}`,
+          storage_file_id: (p.storage_file_id || p.storageFileId || p.fileId || '').trim(),
+          google_drive_url: (p.google_drive_url || p.googleDriveUrl || '').trim(),
+          is_print_allowed: p.is_print_allowed !== undefined ? !!p.is_print_allowed : (p.isPrintAllowed !== undefined ? !!p.isPrintAllowed : !!lecture.is_print_allowed),
+          pages_count: Number(p.pages_count || p.pagesCount || 1)
+        })).filter((p: any) => p.storage_file_id);
+        if (lecture.pdf_materials.length > 0) {
+          lecture.google_drive_pdf_id = lecture.pdf_materials[0].storage_file_id;
+        }
+      } else if (googleDrivePdfFileId !== undefined) {
         lecture.google_drive_pdf_id = googleDrivePdfFileId ? googleDrivePdfFileId.trim() : '';
         if (googleDrivePdfFileId && googleDrivePdfFileId.trim()) {
           lecture.pdf_materials = [

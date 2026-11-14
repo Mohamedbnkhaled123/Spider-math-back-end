@@ -189,6 +189,7 @@ async function runTests() {
     assert.strictEqual(updatedLecture.youtube_encrypted_id, '');
     assert.strictEqual(updatedLecture.youtube_video_id, '');
     assert.strictEqual(updatedLecture.youtube_url, '');
+    assert.strictEqual(updatedLecture.video_duration_sec, 0, 'video_duration_sec should be reset to 0 when clearing youtubeUrl');
     console.log('✔ Test 4 Passed: updateLecture allows clearing youtubeUrl to empty string.');
   }
 
@@ -316,6 +317,64 @@ async function runTests() {
     assert.strictEqual(playbackResult.pdfMaterials.length, 1);
     assert.strictEqual(playbackResult.pdfMaterials[0].storageFileId, 'drive_id_123');
     console.log('✔ Test 7 Passed: getSecurePlayback safely returns empty video strings when lecture has no video.');
+  }
+
+  // Test 8: createLecture with pdfMaterials array and durationMinutes without youtubeUrl
+  {
+    const dummyUnitId = new Types.ObjectId().toHexString();
+    let savedLectureData: any = null;
+
+    (UnitPackageModel as any).findById = async () => ({
+      _id: dummyUnitId,
+      curriculum: 'THANWEYA_AMMA',
+      grade_level: 'SEC_3',
+      academic_term: 'TERM_1',
+      lectures_count: 2,
+      save: async () => {}
+    });
+    (LectureMaterialModel as any).countDocuments = async () => 2;
+    (LectureMaterialModel as any).create = async (doc: any) => {
+      savedLectureData = doc;
+      return { _id: new Types.ObjectId(), ...doc };
+    };
+
+    let responseStatus = 0;
+    let capturedError: any = null;
+
+    const req: any = {
+      body: {
+        unitId: dummyUnitId,
+        titleAr: 'درس أوراق عمل وتمارين فقط',
+        youtubeUrl: '',
+        durationMinutes: 45, // default from UI should not create phantom video duration
+        pdfMaterials: [
+          { title: 'ورقة عمل 1', storageFileId: 'drive_file_abc_1', isPrintAllowed: true },
+          { title: 'تمارين محلولة', storageFileId: 'drive_file_abc_2', isPrintAllowed: false }
+        ],
+        xpReward: 50
+      }
+    };
+    const res: any = {
+      status: (code: number) => {
+        responseStatus = code;
+        return { json: () => {} };
+      }
+    };
+    const next = (err: any) => {
+      capturedError = err;
+    };
+
+    await controller.createLecture(req, res, next);
+
+    assert.strictEqual(capturedError, null);
+    assert.strictEqual(responseStatus, 201);
+    assert.strictEqual(savedLectureData.youtube_encrypted_id, '');
+    assert.strictEqual(savedLectureData.youtube_video_id, '');
+    assert.strictEqual(savedLectureData.video_duration_sec, 0, 'video_duration_sec must be 0 for lecture without video');
+    assert.strictEqual(savedLectureData.pdf_materials.length, 2);
+    assert.strictEqual(savedLectureData.pdf_materials[0].storage_file_id, 'drive_file_abc_1');
+    assert.strictEqual(savedLectureData.pdf_materials[1].storage_file_id, 'drive_file_abc_2');
+    console.log('✔ Test 8 Passed: createLecture supports pdfMaterials array and ensures 0 video duration when video is absent.');
   }
 
   console.log('All AdminLecturesController unit tests PASSED successfully!');
