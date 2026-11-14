@@ -321,6 +321,7 @@ export class AssessmentsService {
             questionId: (q._id as Types.ObjectId).toString(),
             questionType: 'INPUT_TEXT',
             acceptedAnswers: q.accepted_answers,
+            modelAnswerText: q.model_answer_text,
             points: q.points
           },
           { textAnswer: ans.text_answer }
@@ -341,14 +342,14 @@ export class AssessmentsService {
 
       const totalAutoScore = newMcqScore + newTextScore;
 
-      if (answersModified || sub.mcq_auto_score !== newMcqScore || sub.final_total_score !== (totalAutoScore + sub.essay_manual_score)) {
+      if (answersModified || sub.mcq_auto_score !== totalAutoScore || sub.final_total_score !== (totalAutoScore + sub.essay_manual_score)) {
         const oldScore = sub.final_total_score;
         const newTotalScore = totalAutoScore + sub.essay_manual_score;
         const scoreDelta = newTotalScore - oldScore;
 
         sub.mcq_answers = updatedMcqAnswers;
         sub.text_answers = updatedTextAnswers;
-        sub.mcq_auto_score = newMcqScore;
+        sub.mcq_auto_score = totalAutoScore;
         sub.final_total_score = newTotalScore;
         await sub.save();
 
@@ -575,7 +576,7 @@ export class AssessmentsService {
 
     if (!cachedPayload) {
       const assessment = await AssessmentModel.findById(assessmentId)
-        .select('+questions.correct_option_index +questions.accepted_answers')
+        .select('+questions.correct_option_index +questions.accepted_answers +questions.model_answer_text')
         .lean();
 
       if (!assessment) {
@@ -602,6 +603,7 @@ export class AssessmentsService {
           questionType: q.question_type,
           correctOptionIndex: q.correct_option_index,
           acceptedAnswers: q.accepted_answers || [],
+          modelAnswerText: q.model_answer_text || '',
           points: q.points,
           moduleIndex: (q.module_index as 1 | 2) || 1
         }))
@@ -855,7 +857,7 @@ export class AssessmentsService {
             })),
             result_visibility: resultVisibility,
             graded_at: resultVisibility === 'PUBLISHED_TO_STUDENT_AND_PARENT' ? new Date() : null,
-            mcq_auto_score: mcqAutoScore,
+            mcq_auto_score: totalAutoScore,
             essay_manual_score: 0,
             final_total_score: finalTotalScore
           }
@@ -908,7 +910,7 @@ export class AssessmentsService {
             })),
             result_visibility: resultVisibility,
             graded_at: resultVisibility === 'PUBLISHED_TO_STUDENT_AND_PARENT' ? new Date() : null,
-            mcq_auto_score: mcqAutoScore,
+            mcq_auto_score: totalAutoScore,
             essay_manual_score: 0,
             final_total_score: finalTotalScore,
             custom_mistake_cases: []
@@ -924,7 +926,7 @@ export class AssessmentsService {
       idempotencyKey: submission.idempotency_key,
       syncQueueStatus: 'SYNCED_ONLINE',
       resultVisibility: submission.result_visibility,
-      mcqAutoScore,
+      mcqAutoScore: totalAutoScore,
       finalTotalScore,
       isSuspiciousFastSolve: auditResult.isSuspiciousFastSolve,
       clockTamperDetected: auditResult.clockTamperDetected,
@@ -1140,7 +1142,7 @@ export class AssessmentsService {
     }
 
     // Fetch full assessment with correct options, accepted answers, and solution URLs
-    const fullAssessment = await AssessmentModel.findById(assessment._id).select('+questions.correct_option_index +questions.accepted_answers +questions.youtube_solution_url').lean();
+    const fullAssessment = await AssessmentModel.findById(assessment._id).select('+questions.correct_option_index +questions.accepted_answers +questions.model_answer_text +questions.youtube_solution_url').lean();
     const questions = fullAssessment?.questions || [];
     const questionMap = new Map(questions.map((q: any) => [q._id.toString(), q]));
 
@@ -1149,6 +1151,9 @@ export class AssessmentsService {
     );
     const textAnswersMap = new Map<string, any>(
       (submission.text_answers || []).map((ans: any) => [ans.question_id.toString(), ans])
+    );
+    const essayAnswersMap = new Map<string, any>(
+      (submission.essay_answers || []).map((ans: any) => [ans.question_id.toString(), ans])
     );
 
     const mistakeCases: any[] = [];
@@ -1223,15 +1228,36 @@ export class AssessmentsService {
     questions.forEach((q: any, idx: number) => {
       const isMcq = q.question_type === 'MCQ';
       const isInputText = q.question_type === 'INPUT_TEXT';
+      const isEssay = q.question_type === 'ESSAY_PHOTO';
 
       const mcqAns: any = isMcq ? mcqAnswersMap.get(q._id.toString()) : null;
       const textAns: any = isInputText ? textAnswersMap.get(q._id.toString()) : null;
+      const essayAns: any = isEssay ? essayAnswersMap.get(q._id.toString()) : null;
 
-      const isCorrect = isMcq
-        ? (mcqAns ? !!mcqAns.is_correct : false)
-        : isInputText
-        ? (textAns ? !!textAns.is_correct : false)
-        : false;
+      let isCorrect: boolean | undefined = undefined;
+      let awardedPoints: number | undefined = undefined;
+
+      if (isMcq) {
+        isCorrect = mcqAns ? !!mcqAns.is_correct : false;
+        awardedPoints = isCorrect ? (q.points || 1) : 0;
+      } else if (isInputText) {
+        isCorrect = textAns ? !!textAns.is_correct : false;
+        awardedPoints = isCorrect ? (q.points || 1) : 0;
+      } else if (isEssay) {
+        if (essayAns) {
+          awardedPoints = essayAns.points_earned;
+          isCorrect = essayAns.points_earned > 0;
+        } else if (isPublished && submission.essay_manual_score !== undefined && submission.essay_manual_score !== null) {
+          const totalEssay = questions.filter((x: any) => x.question_type === 'ESSAY_PHOTO').length;
+          if (totalEssay === 1) {
+            awardedPoints = submission.essay_manual_score;
+            isCorrect = submission.essay_manual_score > 0;
+          } else if (totalEssay > 1) {
+            awardedPoints = Math.round((submission.essay_manual_score / totalEssay) * 10) / 10;
+            isCorrect = awardedPoints > 0;
+          }
+        }
+      }
 
       const selectedIdx = mcqAns ? mcqAns.selected_option_index : null;
       const selectedText = isMcq
@@ -1247,6 +1273,8 @@ export class AssessmentsService {
           ? q.options[q.correct_option_index]
           : isInputText && q.accepted_answers?.length
           ? q.accepted_answers.join(' / ')
+          : isInputText && q.model_answer_text
+          ? q.model_answer_text
           : '')
         : '';
 
@@ -1265,9 +1293,9 @@ export class AssessmentsService {
         studentAnswerText: selectedText,
         correctOptionIndex: isPublished ? q.correct_option_index : undefined,
         correctAnswerText: correctText,
-        isCorrect: (isMcq || isInputText) ? isCorrect : undefined,
+        isCorrect,
         points: q.points || 1,
-        awardedPoints: (isMcq || isInputText) ? (isCorrect ? (q.points || 1) : 0) : undefined,
+        awardedPoints,
         youtubeSolutionUrl: isPublished ? (q.youtube_solution_url || customNote?.youtube_solution_url || null) : null,
         teacherNote: customNote ? customNote.error_note : null
       });

@@ -143,6 +143,7 @@ export interface IAssessmentAnswerKeyPayload {
     questionType: 'MCQ' | 'ESSAY_PHOTO' | 'INPUT_TEXT';
     correctOptionIndex?: number;
     acceptedAnswers?: string[];
+    modelAnswerText?: string;
     points: number;
     moduleIndex?: 1 | 2;
   }>;

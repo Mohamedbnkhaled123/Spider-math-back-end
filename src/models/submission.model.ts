@@ -23,6 +23,13 @@ export interface ITextAnswer {
   points_earned: number;
 }
 
+export interface IEssayAnswer {
+  question_id: Types.ObjectId;
+  points_earned: number;
+  decision?: 'FULL' | 'HALF' | 'ZERO';
+  teacher_note?: string;
+}
+
 export interface IUploadedSolutionImg {
   question_id?: Types.ObjectId;
   image_url: string; // Cloudinary HTTPS URL in 'spider-math-homework/'
@@ -63,6 +70,7 @@ export interface ISubmission {
 
   mcq_answers: IMcqAnswer[];
   text_answers: ITextAnswer[];
+  essay_answers?: IEssayAnswer[];
   uploaded_solution_imgs: IUploadedSolutionImg[]; // Max 2 images (<= 150KB WebP)
 
   result_visibility: ResultVisibilityStatus;
@@ -95,6 +103,16 @@ const TextAnswerSchema = new Schema<ITextAnswer>(
     text_answer: { type: String, default: '', trim: true },
     is_correct: { type: Boolean, default: false },
     points_earned: { type: Number, default: 0 }
+  },
+  { _id: false }
+);
+
+const EssayAnswerSchema = new Schema<IEssayAnswer>(
+  {
+    question_id: { type: Schema.Types.ObjectId, required: true },
+    points_earned: { type: Number, default: 0 },
+    decision: { type: String, enum: ['FULL', 'HALF', 'ZERO'], default: null },
+    teacher_note: { type: String, default: '', trim: true }
   },
   { _id: false }
 );
@@ -208,6 +226,10 @@ const SubmissionSchema = new Schema<ISubmissionDocument>(
     },
     text_answers: {
       type: [TextAnswerSchema],
+      default: []
+    },
+    essay_answers: {
+      type: [EssayAnswerSchema],
       default: []
     },
     uploaded_solution_imgs: {

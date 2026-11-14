@@ -85,7 +85,10 @@ export class GradingService {
     const [submissions, total, totalPending, totalPublished, totalInProgress] = await Promise.all([
       SubmissionModel.find(filter)
         .populate<{ student_id: IUserDocument }>('student_id', 'full_name student_code phone_number parent_phone curriculum grade_level email')
-        .populate<{ assessment_id: IAssessmentDocument }>('assessment_id', 'title_ar title_en total_points assessment_type questions has_essay_questions xp_reward')
+        .populate<{ assessment_id: IAssessmentDocument }>(
+          'assessment_id',
+          'title_ar title_en total_points assessment_type questions has_essay_questions xp_reward +questions.correct_option_index +questions.accepted_answers +questions.model_answer_text +questions.youtube_solution_url'
+        )
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -134,7 +137,10 @@ export class GradingService {
     const [submissions, total] = await Promise.all([
       SubmissionModel.find(filter)
         .populate<{ student_id: IUserDocument }>('student_id', 'full_name student_code phone_number curriculum grade_level')
-        .populate<{ assessment_id: IAssessmentDocument }>('assessment_id', 'title_ar title_en total_points assessment_type questions')
+        .populate<{ assessment_id: IAssessmentDocument }>(
+          'assessment_id',
+          'title_ar title_en total_points assessment_type questions +questions.correct_option_index +questions.accepted_answers +questions.model_answer_text +questions.youtube_solution_url'
+        )
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -182,72 +188,115 @@ export class GradingService {
       youtube_solution_url: validateAndNormalizeYouTubeUrl(c.youtube_solution_url)
     }));
 
-    const finalTotalScore = submission.mcq_auto_score + dto.essay_manual_score;
+    // Calculate total auto score dynamically from all auto-graded questions (MCQ + Text answers)
+    const mcqPoints = (submission.mcq_answers || []).reduce((sum, a) => sum + (a.points_earned || 0), 0);
+    const textPoints = (submission.text_answers || []).reduce((sum, a) => sum + (a.points_earned || 0), 0);
+    const hasAutoAnswers = (submission.mcq_answers && submission.mcq_answers.length > 0) ||
+                           (submission.text_answers && submission.text_answers.length > 0);
+    const totalAutoScore = hasAutoAnswers
+      ? (mcqPoints + textPoints)
+      : (submission.mcq_auto_score || 0);
 
-    submission.essay_manual_score = dto.essay_manual_score;
+    let essayScore = dto.essay_manual_score;
+    if (dto.essay_answers && dto.essay_answers.length > 0) {
+      const existingMap = new Map<string, IEssayAnswer>(
+        (submission.essay_answers || []).map((ea: any) => [ea.question_id.toString(), ea])
+      );
+      for (const ea of dto.essay_answers) {
+        existingMap.set(ea.question_id, {
+          question_id: new Types.ObjectId(ea.question_id),
+          points_earned: ea.points_earned,
+          decision: ea.decision,
+          teacher_note: ea.teacher_note || ''
+        });
+      }
+      submission.essay_answers = Array.from(existingMap.values());
+      essayScore = submission.essay_answers.reduce((sum: number, ea: any) => sum + ea.points_earned, 0);
+    }
+
+    const finalTotalScore = totalAutoScore + essayScore;
+
+    submission.mcq_auto_score = totalAutoScore;
+    submission.essay_manual_score = essayScore;
     submission.final_total_score = finalTotalScore;
     submission.teacher_feedback_notes = dto.teacher_feedback_notes;
     submission.custom_mistake_cases = sanitizedMistakes;
-    submission.result_visibility = 'PUBLISHED_TO_STUDENT_AND_PARENT';
-    submission.graded_at = new Date();
+
+    const essayQuestions = (assessment.questions || []).filter((q: any) => q.question_type === 'ESSAY_PHOTO');
+    const totalEssayCount = essayQuestions.length;
+
+    let shouldPublish = false;
+    if (dto.publish !== undefined) {
+      shouldPublish = dto.publish;
+    } else if (dto.essay_answers && dto.essay_answers.length > 0 && totalEssayCount > 0) {
+      shouldPublish = (submission.essay_answers || []).length >= totalEssayCount;
+    } else {
+      shouldPublish = true;
+    }
+
+    if (shouldPublish) {
+      submission.result_visibility = 'PUBLISHED_TO_STUDENT_AND_PARENT';
+      submission.graded_at = new Date();
+    }
 
     await submission.save();
 
-    // Calculate & award XP if not already awarded
-    const existingXpLog = await GamificationLogModel.findOne({
-      student_id: student._id,
-      reference_id: submission._id
-    });
-
-    if (!existingXpLog) {
-      const scorePercentage = assessment.total_points > 0 ? (finalTotalScore / assessment.total_points) * 100 : 0;
-      const xpStrategy = new HomeworkGradedXpStrategy();
-      const xpToAward = xpStrategy.calculateDelta({
-        baseXpReward: assessment.xp_reward,
-        scorePercentage
+    if (shouldPublish) {
+      // Calculate & award XP if not already awarded
+      const existingXpLog = await GamificationLogModel.findOne({
+        student_id: student._id,
+        reference_id: submission._id
       });
 
-      if (xpToAward > 0) {
-        await UserModel.findByIdAndUpdate(student._id, {
-          $inc: { total_xp: xpToAward }
+      if (!existingXpLog) {
+        const scorePercentage = assessment.total_points > 0 ? (finalTotalScore / assessment.total_points) * 100 : 0;
+        const xpStrategy = new HomeworkGradedXpStrategy();
+        const xpToAward = xpStrategy.calculateDelta({
+          baseXpReward: assessment.xp_reward,
+          scorePercentage
         });
 
-        await GamificationLogModel.create({
-          student_id: student._id,
-          xp_delta: xpToAward,
-          action_type: 'HOMEWORK_SUBMITTED',
-          reference_id: submission._id,
-          reason_note: `Graded homework "${assessment.title_ar}"`
-        });
+        if (xpToAward > 0) {
+          await UserModel.findByIdAndUpdate(student._id, {
+            $inc: { total_xp: xpToAward }
+          });
+
+          await GamificationLogModel.create({
+            student_id: student._id,
+            xp_delta: xpToAward,
+            action_type: 'HOMEWORK_SUBMITTED',
+            reference_id: submission._id,
+            reason_note: `Graded homework "${assessment.title_ar}"`
+          });
+        }
       }
-    }
 
-    // Pick first YouTube solution URL if available for notification
-    const firstSolutionUrl = sanitizedMistakes.find((m) => m.youtube_solution_url)?.youtube_solution_url ?? null;
+      // Pick first YouTube solution URL if available for notification
+      const firstSolutionUrl = sanitizedMistakes.find((m) => m.youtube_solution_url)?.youtube_solution_url ?? null;
 
-    // Dispatch instant notification to Student with feedback viewer link
-    const studentAlert = NotificationFactory.createHomeworkGradedAlert({
-      recipientId: student._id as Types.ObjectId,
-      recipientRole: ROLES.STUDENT,
-      assessmentTitleAr: assessment.title_ar,
-      assessmentTitleEn: assessment.title_en,
-      score: finalTotalScore,
-      totalPoints: assessment.total_points,
-      youtubeSolutionUrl: firstSolutionUrl,
-      submissionId: submission._id
-    });
-    await NotificationModel.create(studentAlert);
+      // Dispatch instant notification to Student with feedback viewer link
+      const studentAlert = NotificationFactory.createHomeworkGradedAlert({
+        recipientId: student._id as Types.ObjectId,
+        recipientRole: ROLES.STUDENT,
+        assessmentTitleAr: assessment.title_ar,
+        assessmentTitleEn: assessment.title_en,
+        score: finalTotalScore,
+        totalPoints: assessment.total_points,
+        youtubeSolutionUrl: firstSolutionUrl,
+        submissionId: submission._id
+      });
+      await NotificationModel.create(studentAlert);
 
-    // If student has a linked parent or parent phone, notify parent
-    const parentQuery: any[] = [{ linked_children: student._id }];
-    if (student.parent_phone) {
-      parentQuery.push({ phone: student.parent_phone });
-      parentQuery.push({ phone_number: student.parent_phone });
-    }
-    const parentUser = await UserModel.findOne({
-      role: ROLES.PARENT,
-      $or: parentQuery
-    }).select('_id').lean();
+      // If student has a linked parent or parent phone, notify parent
+      const parentQuery: any[] = [{ linked_children: student._id }];
+      if (student.parent_phone) {
+        parentQuery.push({ phone: student.parent_phone });
+        parentQuery.push({ phone_number: student.parent_phone });
+      }
+      const parentUser = await UserModel.findOne({
+        role: ROLES.PARENT,
+        $or: parentQuery
+      }).select('_id').lean();
 
       if (parentUser) {
         const parentAlert = NotificationFactory.createHomeworkGradedAlert({
@@ -262,6 +311,7 @@ export class GradingService {
         });
         await NotificationModel.create(parentAlert);
       }
+    }
 
     return submission;
   }
@@ -285,7 +335,16 @@ export class GradingService {
       throw new AppError('Student account not found', 404, ERROR_CODES.STUDENT_NOT_FOUND_404);
     }
 
-    const finalTotalScore = (submission.mcq_auto_score || 0) + (submission.essay_manual_score || 0);
+    const mcqPoints = (submission.mcq_answers || []).reduce((sum, a) => sum + (a.points_earned || 0), 0);
+    const textPoints = (submission.text_answers || []).reduce((sum, a) => sum + (a.points_earned || 0), 0);
+    const hasAutoAnswers = (submission.mcq_answers && submission.mcq_answers.length > 0) ||
+                           (submission.text_answers && submission.text_answers.length > 0);
+    const totalAutoScore = hasAutoAnswers
+      ? (mcqPoints + textPoints)
+      : (submission.mcq_auto_score || 0);
+
+    const finalTotalScore = totalAutoScore + (submission.essay_manual_score || 0);
+    submission.mcq_auto_score = totalAutoScore;
     submission.final_total_score = finalTotalScore;
     submission.result_visibility = 'PUBLISHED_TO_STUDENT_AND_PARENT';
     submission.graded_at = new Date();
