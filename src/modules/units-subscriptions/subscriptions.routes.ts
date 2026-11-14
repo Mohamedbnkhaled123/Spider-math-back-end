@@ -50,3 +50,21 @@ adminSubscriptionsRouter.patch(
   validateBody(updateSubscriptionStatusDtoSchema),
   subscriptionsController.updateSubscriptionStatus
 );
+
+/**
+ * GET /api/v1/admin/subscriptions/student/:studentId
+ * Fetches all unit subscriptions for student.
+ */
+adminSubscriptionsRouter.get(
+  '/student/:studentId',
+  subscriptionsController.getStudentSubscriptions
+);
+
+/**
+ * POST /api/v1/admin/subscriptions/revoke
+ * Revokes / cancels student's subscription to a specific unit.
+ */
+adminSubscriptionsRouter.post(
+  '/revoke',
+  subscriptionsController.revokeSubscription
+);

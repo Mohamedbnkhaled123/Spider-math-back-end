@@ -40,16 +40,26 @@ export class LecturesService {
     }
 
     // Decrypt the raw YouTube video ID using master cipher secret and extract 11-char ID
-    const decryptedString = CryptoProxyService.decrypt(lecture.youtube_encrypted_id);
-    const rawVideoId = CryptoProxyService.extractYoutubeId(decryptedString);
+    let rawVideoId = '';
+    let sessionVideoToken = '';
+    if (lecture.youtube_encrypted_id) {
+      const decryptedString = CryptoProxyService.decrypt(lecture.youtube_encrypted_id);
+      rawVideoId = CryptoProxyService.extractYoutubeId(decryptedString) || '';
+    }
+
+    if (!rawVideoId && (lecture.youtube_video_id || lecture.youtube_url)) {
+      rawVideoId = CryptoProxyService.extractYoutubeId(lecture.youtube_video_id || lecture.youtube_url || '') || '';
+    }
 
     // Create a short-lived session-encrypted token bound to this student & device (expires in 5 minutes)
-    const sessionVideoToken = CryptoProxyService.createSessionPlaybackToken({
-      rawVideoId,
-      studentId: params.studentId,
-      deviceUuid: params.deviceUuid,
-      expiresInSec: 300
-    });
+    if (rawVideoId) {
+      sessionVideoToken = CryptoProxyService.createSessionPlaybackToken({
+        rawVideoId,
+        studentId: params.studentId,
+        deviceUuid: params.deviceUuid,
+        expiresInSec: 300
+      });
+    }
 
     // Dynamic anti-screen-recording watermark payload
     const ip = params.ipAddress || '127.0.0.1';

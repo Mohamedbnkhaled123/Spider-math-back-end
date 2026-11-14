@@ -11,7 +11,7 @@
     "k6:cleanup": "node ../docs-and-testing/load-tests/cleanup-k6-fixtures.js",
     "lint": "eslint src/**/*.ts",
     "type-check": "tsc --noEmit",
-    "test": "ts-node --transpile-only src/modules/assessments-grading/services/ai-question-extraction.service.test.ts && ts-node --transpile-only src/modules/assessments-grading/services/free-content-toggle.test.ts"
+    "test": "ts-node --transpile-only src/modules/assessments-grading/services/ai-question-extraction.service.test.ts && ts-node --transpile-only src/modules/assessments-grading/services/free-content-toggle.test.ts && ts-node --transpile-only src/modules/lectures-media/controllers/admin-lectures.controller.test.ts && ts-node --transpile-only src/modules/units-subscriptions/services/user-requirements-verification.test.ts"
   },
   "keywords": [
     "mean-stack",

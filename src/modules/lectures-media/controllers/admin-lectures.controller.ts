@@ -57,16 +57,27 @@ export class AdminLecturesController {
       }
 
       const rawYoutube = youtubeUrl ? youtubeUrl.trim() : '';
-      const cleanVideoId = CryptoProxyService.extractYoutubeId(rawYoutube);
-      if (!cleanVideoId) {
-        throw new AppError('يرجى إدخال رابط يوتيوب صالح للشرح (YouTube Video URL is required)', 400, ERROR_CODES.BAD_REQUEST_400);
-      }
-      const encryptedYoutube = CryptoProxyService.encrypt(cleanVideoId);
+      let cleanVideoId = '';
+      let encryptedYoutube = '';
+      let durationSec = durationMinutes ? Math.max(0, Math.round(Number(durationMinutes) * 60)) : 0;
 
-      let durationSec = durationMinutes ? Math.max(1, Math.round(Number(durationMinutes) * 60)) : 300;
-      const ytDuration = await fetchYouTubeVideoDurationSec(cleanVideoId);
-      if (ytDuration && ytDuration > 0) {
-        durationSec = ytDuration;
+      if (rawYoutube) {
+        cleanVideoId = CryptoProxyService.extractYoutubeId(rawYoutube);
+        if (!cleanVideoId) {
+          throw new AppError('يرجى إدخال رابط يوتيوب صالح للشرح (YouTube Video URL is invalid)', 400, ERROR_CODES.BAD_REQUEST_400);
+        }
+        encryptedYoutube = CryptoProxyService.encrypt(cleanVideoId);
+        if (!durationSec) {
+          durationSec = 300;
+        }
+        try {
+          const ytDuration = await fetchYouTubeVideoDurationSec(cleanVideoId);
+          if (ytDuration && ytDuration > 0) {
+            durationSec = ytDuration;
+          }
+        } catch {
+          // Keep durationSec fallback
+        }
       }
 
       const lecture = await LectureMaterialModel.create({
@@ -140,38 +151,63 @@ export class AdminLecturesController {
       if (isPublished !== undefined) lecture.is_published = isPublished;
       if (xpReward !== undefined) lecture.xp_reward_on_complete = Number(xpReward);
 
-      if (youtubeUrl) {
-        const cleanVideoId = CryptoProxyService.extractYoutubeId(youtubeUrl.trim());
-        if (!cleanVideoId) {
-          throw new AppError('يرجى إدخال رابط يوتيوب صالح للشرح (YouTube Video URL is invalid or ID could not be extracted)', 400, ERROR_CODES.BAD_REQUEST_400);
-        }
-        lecture.youtube_encrypted_id = CryptoProxyService.encrypt(cleanVideoId);
-        lecture.youtube_video_id = cleanVideoId;
-        lecture.youtube_url = youtubeUrl.trim();
-        const ytDuration = await fetchYouTubeVideoDurationSec(cleanVideoId);
-        if (ytDuration && ytDuration > 0) {
-          lecture.video_duration_sec = ytDuration;
-        } else if (durationMinutes) {
-          lecture.video_duration_sec = durationMinutes * 60;
+      if (youtubeUrl !== undefined) {
+        const rawYt = youtubeUrl ? youtubeUrl.trim() : '';
+        if (rawYt) {
+          const cleanVideoId = CryptoProxyService.extractYoutubeId(rawYt);
+          if (!cleanVideoId) {
+            throw new AppError('يرجى إدخال رابط يوتيوب صالح للشرح (YouTube Video URL is invalid or ID could not be extracted)', 400, ERROR_CODES.BAD_REQUEST_400);
+          }
+          lecture.youtube_encrypted_id = CryptoProxyService.encrypt(cleanVideoId);
+          lecture.youtube_video_id = cleanVideoId;
+          lecture.youtube_url = rawYt;
+          try {
+            const ytDuration = await fetchYouTubeVideoDurationSec(cleanVideoId);
+            if (ytDuration && ytDuration > 0) {
+              lecture.video_duration_sec = ytDuration;
+            } else if (durationMinutes) {
+              lecture.video_duration_sec = Math.round(Number(durationMinutes) * 60);
+            }
+          } catch {
+            if (durationMinutes) {
+              lecture.video_duration_sec = Math.round(Number(durationMinutes) * 60);
+            }
+          }
+        } else {
+          // YouTube URL was intentionally cleared
+          lecture.youtube_encrypted_id = '';
+          lecture.youtube_video_id = '';
+          lecture.youtube_url = '';
+          if (durationMinutes) {
+            lecture.video_duration_sec = Math.round(Number(durationMinutes) * 60);
+          }
         }
       } else if (durationMinutes) {
-        lecture.video_duration_sec = durationMinutes * 60;
+        lecture.video_duration_sec = Math.round(Number(durationMinutes) * 60);
       }
 
       if (googleDrivePdfFileId !== undefined) {
         lecture.google_drive_pdf_id = googleDrivePdfFileId ? googleDrivePdfFileId.trim() : '';
-        if (isPrintAllowed !== undefined) lecture.is_print_allowed = !!isPrintAllowed;
         if (googleDrivePdfFileId && googleDrivePdfFileId.trim()) {
           lecture.pdf_materials = [
             {
               title: `ملخص ومذكرة: ${lecture.lecture_title_ar}`,
               storage_file_id: googleDrivePdfFileId.trim(),
-              is_print_allowed: isPrintAllowed !== undefined ? !!isPrintAllowed : true,
+              is_print_allowed: isPrintAllowed !== undefined ? !!isPrintAllowed : (lecture.is_print_allowed ?? true),
               pages_count: 1
             } as any
           ];
         } else {
           lecture.pdf_materials = [];
+        }
+      }
+
+      if (isPrintAllowed !== undefined) {
+        lecture.is_print_allowed = !!isPrintAllowed;
+        if (lecture.pdf_materials && lecture.pdf_materials.length > 0) {
+          lecture.pdf_materials.forEach((p: any) => {
+            p.is_print_allowed = !!isPrintAllowed;
+          });
         }
       }
 

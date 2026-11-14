@@ -81,6 +81,7 @@ export type GradeLevelType = (typeof ALL_GRADE_LEVELS)[number];
 export interface ICurriculumTrackDefinition {
   code: CurriculumType;
   nameAr: string;
+  nameEn?: string;
   grades: Array<{
     code: string;
     titleAr: string;
@@ -92,6 +93,7 @@ export const DEFAULT_CURRICULA_TRACKS: ICurriculumTrackDefinition[] = [
   {
     code: 'EGYPTIAN',
     nameAr: 'المنهج المصري',
+    nameEn: 'Egyptian Curriculum',
     grades: [
       { code: 'SEC_3', titleAr: 'الصف الثالث الثانوي (Thanaweya)', titleEn: 'Secondary 3' },
       { code: 'SEC_2', titleAr: 'الصف الثاني الثانوي', titleEn: 'Secondary 2' },
@@ -110,6 +112,7 @@ export const DEFAULT_CURRICULA_TRACKS: ICurriculumTrackDefinition[] = [
   {
     code: 'GULF',
     nameAr: 'المنهج الخليجي',
+    nameEn: 'Gulf Curriculum',
     grades: [
       { code: 'GRADE_12', titleAr: 'الصف الثاني عشر (توجيهي)', titleEn: 'Grade 12' },
       { code: 'GRADE_11', titleAr: 'الصف الحادي عشر', titleEn: 'Grade 11' },
@@ -128,6 +131,7 @@ export const DEFAULT_CURRICULA_TRACKS: ICurriculumTrackDefinition[] = [
   {
     code: 'INTERNATIONAL',
     nameAr: 'IGCSE / البريطانية',
+    nameEn: 'British Curriculum (IGCSE)',
     grades: [
       { code: 'IGCSE_AL', titleAr: 'A-Level Mathematics (9709)', titleEn: 'Cambridge / Edexcel A-Level' },
       { code: 'IGCSE_AS', titleAr: 'AS-Level Pure & Mechanics', titleEn: 'AS-Level Math' },
@@ -146,6 +150,7 @@ export const DEFAULT_CURRICULA_TRACKS: ICurriculumTrackDefinition[] = [
   {
     code: 'AMERICAN',
     nameAr: 'SAT / الأمريكية',
+    nameEn: 'American Diploma (SAT)',
     grades: [
       { code: 'SAT_MATH', titleAr: 'Digital SAT Math (Hard Modules)', titleEn: 'SAT Digital Math' },
       { code: 'ACT_MATH', titleAr: 'ACT Math Mastery', titleEn: 'ACT Mathematics' },

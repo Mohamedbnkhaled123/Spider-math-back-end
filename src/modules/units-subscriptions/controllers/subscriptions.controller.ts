@@ -43,6 +43,36 @@ export class SubscriptionsController {
       next(error);
     }
   }
+  /**
+   * GET /api/v1/admin/subscriptions/student/:studentId
+   */
+  public async getStudentSubscriptions(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const studentId = req.params.studentId!;
+      const list = await subscriptionsService.getStudentSubscriptions(studentId);
+      res.status(200).json(createSuccessResponse(list));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/admin/subscriptions/revoke
+   */
+  public async revokeSubscription(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { student_id, studentId, unit_id, unitId, subscription_id, subscriptionId, reason } = req.body;
+      const result = await subscriptionsService.revokeSubscription({
+        studentId: studentId || student_id,
+        unitId: unitId || unit_id,
+        subscriptionId: subscriptionId || subscription_id,
+        reason
+      });
+      res.status(200).json(createSuccessResponse(result));
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const subscriptionsController = new SubscriptionsController();

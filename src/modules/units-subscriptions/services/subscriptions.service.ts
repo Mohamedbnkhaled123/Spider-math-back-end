@@ -143,6 +143,98 @@ export class SubscriptionsService {
   }
 
   /**
+   * Super Admin: Fetches all unit subscriptions for a specific student.
+   */
+  public async getStudentSubscriptions(studentId: string) {
+    if (!Types.ObjectId.isValid(studentId)) {
+      throw new AppError('Invalid studentId format', 400, ERROR_CODES.BAD_REQUEST_400);
+    }
+
+    const subscriptions = await SubscriptionModel.find({ student_id: new Types.ObjectId(studentId) })
+      .populate('unit_package_id', 'title_ar title_en curriculum grade_level academic_term price_egp is_published')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return subscriptions.map((sub: any) => ({
+      _id: sub._id,
+      id: sub._id,
+      studentId: sub.student_id,
+      unitPackageId: sub.unit_package_id?._id || sub.unit_package_id,
+      unitTitleAr: sub.unit_package_id?.title_ar || sub.title_ar || 'وحدة دراسية',
+      unitTitleEn: sub.unit_package_id?.title_en || sub.title_en || 'Study Unit',
+      curriculum: sub.curriculum || sub.unit_package_id?.curriculum,
+      gradeLevel: sub.grade_level || sub.unit_package_id?.grade_level,
+      academicTerm: sub.academic_term || sub.unit_package_id?.academic_term,
+      subscriptionStatus: sub.subscription_status,
+      accessScope: sub.access_scope || 'FULL',
+      pricePaidEgp: sub.price_paid_egp,
+      expiresAt: sub.expires_at,
+      isExpired: sub.expires_at ? new Date(sub.expires_at) < new Date() : false,
+      activatedAt: sub.activated_at,
+      createdAt: sub.createdAt
+    }));
+  }
+
+  /**
+   * Super Admin: Revokes / cancels a student's subscription to a specific unit.
+   */
+  public async revokeSubscription(params: {
+    studentId?: string;
+    unitId?: string;
+    subscriptionId?: string;
+    reason?: string;
+  }) {
+    const { studentId, unitId, subscriptionId, reason } = params;
+
+    let subscription = null;
+    if (subscriptionId && Types.ObjectId.isValid(subscriptionId)) {
+      subscription = await SubscriptionModel.findById(subscriptionId);
+    }
+
+    if (!subscription && studentId && unitId && Types.ObjectId.isValid(studentId) && Types.ObjectId.isValid(unitId)) {
+      subscription = await SubscriptionModel.findOne({
+        student_id: new Types.ObjectId(studentId),
+        unit_package_id: new Types.ObjectId(unitId),
+        subscription_status: { $in: ['ACTIVE', 'FROZEN'] }
+      }).sort({ createdAt: -1 });
+
+      if (!subscription) {
+        subscription = await SubscriptionModel.findOne({
+          student_id: new Types.ObjectId(studentId),
+          unit_package_id: new Types.ObjectId(unitId)
+        }).sort({ createdAt: -1 });
+      }
+    }
+
+    if (!subscription) {
+      throw new AppError('Subscription record not found for revocation', 404, ERROR_CODES.RESOURCE_NOT_FOUND_404);
+    }
+
+    subscription.subscription_status = 'CANCELLED';
+    subscription.expires_at = new Date();
+    subscription.freeze_reason = reason || 'إلغاء اشتراك الوحدة بواسطة الإدارة';
+    await subscription.save();
+
+    // Recalculate remaining active subscriptions for student
+    const remainingActive = await SubscriptionModel.countDocuments({
+      student_id: subscription.student_id,
+      subscription_status: 'ACTIVE',
+      expires_at: { $gt: new Date() }
+    });
+
+    await UserModel.findByIdAndUpdate(subscription.student_id, {
+      $set: { has_active_subscription: remainingActive > 0 }
+    });
+
+    return {
+      success: true,
+      subscription,
+      remainingActiveCount: remainingActive,
+      hasActiveSubscription: remainingActive > 0
+    };
+  }
+
+  /**
    * Super Admin: Updates subscription status enforcing the Subscription State Pattern.
    */
   public async updateSubscriptionStatus(subscriptionId: string, nextStatus: SubscriptionStatus, freezeReason?: string) {
@@ -150,7 +242,15 @@ export class SubscriptionsService {
       throw new AppError('Invalid subscriptionId format', 400, ERROR_CODES.BAD_REQUEST_400);
     }
 
-    const subscription = await SubscriptionModel.findById(subscriptionId);
+    let subscription = await SubscriptionModel.findById(subscriptionId);
+    if (!subscription) {
+      const studentSubs = await SubscriptionModel.find({
+        student_id: new Types.ObjectId(subscriptionId)
+      }).sort({ createdAt: -1 });
+      if (studentSubs && studentSubs.length > 0) {
+        subscription = studentSubs.find((s: any) => s.subscription_status === 'ACTIVE' || s.subscription_status === 'FROZEN') || studentSubs[0] || null;
+      }
+    }
     if (!subscription) {
       throw new AppError('Subscription record not found', 404, ERROR_CODES.RESOURCE_NOT_FOUND_404);
     }

@@ -148,13 +148,6 @@ export class UnitsService {
       throw new AppError('Unit package not found', 404, ERROR_CODES.RESOURCE_NOT_FOUND_404);
     }
 
-    if (!isSuperAdmin && studentId && Types.ObjectId.isValid(studentId)) {
-      const student = await UserModel.findById(studentId).select('grade_level curriculum');
-      if (student && student.grade_level && unit.grade_level && unit.grade_level !== student.grade_level) {
-        throw new AppError('عذراً، هذه الوحدة التعليمية مخصصة لصف دراسي آخر فقط.', 403, ERROR_CODES.FORBIDDEN_403);
-      }
-    }
-
     // Check subscription status
     let isSubscribed = !!isSuperAdmin;
     let accessScope: 'FULL' | 'ASSESSMENTS_ONLY' | null = isSuperAdmin ? 'FULL' : null;
@@ -176,6 +169,40 @@ export class UnitsService {
         } else {
           isSubscribed = false;
           isExpired = true;
+        }
+      }
+    }
+
+    // Check grade-level compatibility if not subscribed
+    if (!isSubscribed && studentId && Types.ObjectId.isValid(studentId)) {
+      const student = await UserModel.findById(studentId).select('grade_level curriculum');
+      if (student && student.grade_level && unit.grade_level) {
+        const normStudentGrade = (student.grade_level || '').trim().toUpperCase();
+        const normUnitGrade = (unit.grade_level || '').trim().toUpperCase();
+        const normalizeGrade = (g: string) => {
+          if (g.includes('SEC_1') || g.includes('الأول الثانوي') || g.includes('SECONDARY 1') || g.includes('1ST SEC')) return 'SEC_1';
+          if (g.includes('SEC_2') || g.includes('الثاني الثانوي') || g.includes('SECONDARY 2') || g.includes('2ND SEC')) return 'SEC_2';
+          if (g.includes('SEC_3') || g.includes('الثالث الثانوي') || g.includes('SECONDARY 3') || g.includes('THANAWEYA') || g.includes('3RD SEC')) return 'SEC_3';
+          if (g.includes('PREP_1') || g.includes('الأول الإعدادي')) return 'PREP_1';
+          if (g.includes('PREP_2') || g.includes('الثاني الإعدادي')) return 'PREP_2';
+          if (g.includes('PREP_3') || g.includes('الثالث الإعدادي')) return 'PREP_3';
+          if (g.includes('GRADE_12') || g.includes('الثاني عشر') || g.includes('توجيهي')) return 'GRADE_12';
+          if (g.includes('GRADE_11') || g.includes('الحادي عشر')) return 'GRADE_11';
+          if (g.includes('GRADE_10') || g.includes('العاشر')) return 'GRADE_10';
+          if (g.includes('GRADE_9') || g.includes('التاسع')) return 'GRADE_9';
+          return g;
+        };
+
+        if (normalizeGrade(normUnitGrade) !== normalizeGrade(normStudentGrade)) {
+          // Check if this unit has free trial lectures - all registered students are allowed to preview free trial lectures
+          const hasFreeLectures = await LectureMaterialModel.exists({
+            unit_package_id: unitId,
+            is_published: true,
+            $or: [{ is_free: true }, { is_free_trial: true }]
+          });
+          if (!hasFreeLectures) {
+            throw new AppError('عذراً، هذه الوحدة التعليمية مخصصة لصف دراسي آخر فقط.', 403, ERROR_CODES.FORBIDDEN_403);
+          }
         }
       }
     }

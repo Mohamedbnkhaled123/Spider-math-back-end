@@ -57,6 +57,7 @@ export interface IGradeItem {
 export interface ICurriculumTrackItem {
   code: CurriculumType;
   nameAr: string;
+  nameEn?: string;
   grades: IGradeItem[];
 }
 
@@ -742,6 +743,7 @@ const CmsConfigSchema = new Schema<ICmsConfigDocument>(
         {
           code: { type: String, required: true },
           nameAr: { type: String, required: true },
+          nameEn: { type: String, default: '' },
           grades: [
             {
               code: { type: String, required: true },
