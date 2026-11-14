@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { authService } from '../services/auth.service';
 import { createSuccessResponse, createErrorResponse } from '../../../common/interfaces/api-response.interface';
 import { ERROR_CODES } from '../../../common/constants/error-codes.constant';
-import { AppError } from '../../../common/utils/app-error.util';
+import { UserModel } from '../../../models/user.model';
 
 export class AuthController {
   /**
@@ -164,18 +164,35 @@ export class AuthController {
   /**
    * GET /api/v1/auth/device-status
    * POST /api/v1/auth/check-device-status
+   * Checks approval state of calling device. Works with JWT or device UUID.
    */
   public async checkDeviceStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const studentId = req.user?.sub;
+      let studentId = req.user?.sub || (req.query && (req.query.studentId as string)) || (req.body && req.body.studentId);
+      const deviceUuid = req.deviceUuid || req.header('X-Device-UUID') || (req.body && req.body.deviceUuid) || (req.query && (req.query.deviceUuid as string));
+
+      if (!studentId && deviceUuid) {
+        const student = await UserModel.findOne({
+          $or: [
+            { 'pending_device_req.device_uuid': deviceUuid },
+            { 'approved_devices.device_uuid': deviceUuid }
+          ]
+        });
+        if (student) {
+          studentId = student._id.toString();
+        }
+      }
+
       if (!studentId) {
-        throw new AppError('Unauthorized', 401, ERROR_CODES.UNAUTHORIZED_401);
+        res.status(200).json(createSuccessResponse({
+          isApproved: false,
+          status: 'PENDING',
+          message: 'الجهاز قيد انتظار موافقة المهندسة هبة عبدالوهاب.'
+        }));
+        return;
       }
-      const deviceUuid = req.deviceUuid || req.header('X-Device-UUID') || (req.body && req.body.deviceUuid);
-      if (!deviceUuid) {
-        throw new AppError('Missing device UUID', 400, ERROR_CODES.INVALID_DEVICE_HEADER_400);
-      }
-      const result = await authService.checkDeviceStatus(studentId, deviceUuid);
+
+      const result = await authService.checkDeviceStatus(studentId, deviceUuid || '');
       res.status(200).json(createSuccessResponse(result));
     } catch (error) {
       next(error);

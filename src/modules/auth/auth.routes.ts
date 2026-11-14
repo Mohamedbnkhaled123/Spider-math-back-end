@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authController } from './controllers/auth.controller';
 import { validateBody } from '../../middlewares/validate.middleware';
-import { authenticateJwt } from '../../middlewares/auth.middleware';
+import { authenticateJwt, optionalAuthenticateJwt } from '../../middlewares/auth.middleware';
 import { deviceLockGuard } from '../../middlewares/device-lock.middleware';
 import { requireRoles } from '../../middlewares/role.middleware';
 import { ROLES } from '../../common/constants/roles.constant';
@@ -114,16 +114,17 @@ authRouter.post(
  * GET /api/v1/auth/device-status
  * POST /api/v1/auth/check-device-status
  * Checks if the calling device has been approved by Eng. Heba Abdel-Wahab.
+ * Optional authentication allows unapproved devices waiting for approval to query status via X-Device-UUID.
  */
 authRouter.get(
   '/device-status',
-  authenticateJwt,
+  optionalAuthenticateJwt,
   authController.checkDeviceStatus
 );
 
 authRouter.post(
   '/check-device-status',
-  authenticateJwt,
+  optionalAuthenticateJwt,
   authController.checkDeviceStatus
 );
 
