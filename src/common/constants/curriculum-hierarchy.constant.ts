@@ -133,6 +133,52 @@ export const DEFAULT_CURRICULA_TRACKS: ICurriculumTrackDefinition[] = [
     code: 'GULF',
     nameAr: 'المنهج الخليجي',
     nameEn: 'Gulf Curriculum',
+    divisions: [
+      {
+        code: 'SA',
+        nameAr: 'المملكة العربية السعودية',
+        nameEn: 'Saudi Arabia',
+        iconName: 'flag',
+        stages: [
+          { code: 'SECONDARY', nameAr: 'المرحلة الثانوية', nameEn: 'Secondary Stage' },
+          { code: 'INTERMEDIATE', nameAr: 'المرحلة المتوسطة', nameEn: 'Intermediate Stage' },
+          { code: 'PRIMARY', nameAr: 'المرحلة الابتدائية', nameEn: 'Primary Stage' }
+        ]
+      },
+      {
+        code: 'QA',
+        nameAr: 'دولة قطر',
+        nameEn: 'Qatar',
+        iconName: 'flag',
+        stages: [
+          { code: 'SECONDARY', nameAr: 'المرحلة الثانوية', nameEn: 'Secondary Stage' },
+          { code: 'PREPARATORY', nameAr: 'المرحلة الإعدادية', nameEn: 'Preparatory Stage' },
+          { code: 'PRIMARY', nameAr: 'المرحلة الابتدائية', nameEn: 'Primary Stage' }
+        ]
+      },
+      {
+        code: 'AE',
+        nameAr: 'الإمارات العربية المتحدة',
+        nameEn: 'United Arab Emirates',
+        iconName: 'flag',
+        stages: [
+          { code: 'CYCLE_3', nameAr: 'الحلقة 3 (المرحلة الثانوية)', nameEn: 'Cycle 3' },
+          { code: 'CYCLE_2', nameAr: 'الحلقة 2 (المرحلة المتوسطة)', nameEn: 'Cycle 2' },
+          { code: 'CYCLE_1', nameAr: 'الحلقة 1 (المرحلة الابتدائية)', nameEn: 'Cycle 1' }
+        ]
+      },
+      {
+        code: 'KW',
+        nameAr: 'دولة الكويت',
+        nameEn: 'Kuwait',
+        iconName: 'flag',
+        stages: [
+          { code: 'SECONDARY', nameAr: 'المرحلة الثانوية', nameEn: 'Secondary Stage' },
+          { code: 'INTERMEDIATE', nameAr: 'المرحلة المتوسطة', nameEn: 'Intermediate Stage' },
+          { code: 'PRIMARY', nameAr: 'المرحلة الابتدائية', nameEn: 'Primary Stage' }
+        ]
+      }
+    ],
     grades: [
       { code: 'GRADE_12', titleAr: 'الصف الثاني عشر (توجيهي)', titleEn: 'Grade 12' },
       { code: 'GRADE_11', titleAr: 'الصف الحادي عشر', titleEn: 'Grade 11' },
