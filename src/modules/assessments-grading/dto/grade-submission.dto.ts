@@ -1,15 +1,15 @@
 import { z } from 'zod';
 
 export const customMistakeCaseDtoSchema = z.object({
-  question_id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid question_id ObjectId').optional(),
-  error_note: z.string().trim().min(1, 'Error note is required').max(1000, 'Error note must not exceed 1000 characters'),
+  question_id: z.string().optional(),
+  error_note: z.string().trim().max(1000).optional().default(''),
   youtube_solution_url: z.string().trim().url('Must be a valid YouTube URL').nullable().optional().or(z.literal('')).or(z.null())
 });
 
 export const essayAnswerDtoSchema = z.object({
-  question_id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid question_id ObjectId'),
+  question_id: z.string().min(1, 'Question ID is required'),
   points_earned: z.coerce.number().min(0, 'Score cannot be negative').default(0),
-  decision: z.enum(['FULL', 'HALF', 'ZERO']).optional(),
+  decision: z.enum(['FULL', 'HALF', 'ZERO', 'CUSTOM']).optional(),
   teacher_note: z.string().trim().max(1000).optional().default('')
 });
 

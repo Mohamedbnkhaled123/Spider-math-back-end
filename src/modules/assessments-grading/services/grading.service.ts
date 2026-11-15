@@ -183,8 +183,8 @@ export class GradingService {
 
     // Sanitize custom mistake cases: strictly text note + unprotected YouTube solution URL
     const sanitizedMistakes = dto.custom_mistake_cases.map((c) => ({
-      question_id: c.question_id ? new Types.ObjectId(c.question_id) : undefined,
-      error_note: c.error_note.trim(),
+      question_id: c.question_id && Types.ObjectId.isValid(c.question_id) ? new Types.ObjectId(c.question_id) : undefined,
+      error_note: (c.error_note || '').trim(),
       youtube_solution_url: validateAndNormalizeYouTubeUrl(c.youtube_solution_url)
     }));
 
@@ -203,8 +203,11 @@ export class GradingService {
         (submission.essay_answers || []).map((ea: any) => [ea.question_id.toString(), ea])
       );
       for (const ea of dto.essay_answers) {
+        const validQId = Types.ObjectId.isValid(ea.question_id)
+          ? new Types.ObjectId(ea.question_id)
+          : ((assessment.questions?.[0]?._id as Types.ObjectId) || new Types.ObjectId());
         existingMap.set(ea.question_id, {
-          question_id: new Types.ObjectId(ea.question_id),
+          question_id: validQId,
           points_earned: ea.points_earned,
           decision: ea.decision,
           teacher_note: ea.teacher_note || ''

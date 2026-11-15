@@ -26,7 +26,7 @@ export interface ITextAnswer {
 export interface IEssayAnswer {
   question_id: Types.ObjectId;
   points_earned: number;
-  decision?: 'FULL' | 'HALF' | 'ZERO';
+  decision?: 'FULL' | 'HALF' | 'ZERO' | 'CUSTOM';
   teacher_note?: string;
 }
 
@@ -111,7 +111,7 @@ const EssayAnswerSchema = new Schema<IEssayAnswer>(
   {
     question_id: { type: Schema.Types.ObjectId, required: true },
     points_earned: { type: Number, default: 0 },
-    decision: { type: String, enum: ['FULL', 'HALF', 'ZERO'], default: null },
+    decision: { type: String, enum: ['FULL', 'HALF', 'ZERO', 'CUSTOM'], default: null },
     teacher_note: { type: String, default: '', trim: true }
   },
   { _id: false }
