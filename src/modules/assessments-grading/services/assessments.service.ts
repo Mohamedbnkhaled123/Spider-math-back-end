@@ -1325,9 +1325,23 @@ export class AssessmentsService {
       sizeKb: img.size_kb
     }));
 
+    const completedAttemptsCount = assessment
+      ? await SubmissionModel.countDocuments({
+          student_id: submission.student_id,
+          assessment_id: assessment._id,
+          sync_queue_status: 'SYNCED_ONLINE'
+        })
+      : 1;
+    const maxAttempts = assessment?.max_attempts || 1;
+    const canRetake = assessment ? (completedAttemptsCount < maxAttempts) : false;
+
     return {
       submissionId: submission._id.toString(),
       assessmentId: assessment ? assessment._id.toString() : '',
+      unitId: unitPackage ? unitPackage._id.toString() : (assessment?.unit_package_id ? assessment.unit_package_id.toString() : ''),
+      maxAttempts,
+      completedAttemptsCount,
+      canRetake,
       assessmentTitleAr: assessment ? assessment.title_ar : 'تقييم تدريبي',
       assessmentTitleEn: assessment ? assessment.title_en : 'Assessment',
       unitTitleAr: unitPackage ? unitPackage.title_ar : 'الوحدة الدراسية',
@@ -1387,6 +1401,8 @@ export class AssessmentsService {
         id: sub._id.toString(),
         submissionId: sub._id.toString(),
         assessmentId: assessment ? assessment._id.toString() : '',
+        maxAttempts: assessment?.max_attempts || 1,
+        attemptNumber: sub.attempt_number || 1,
         titleAr: assessment ? assessment.title_ar : 'تقييم دراسي',
         unitTitleAr: unit ? unit.title_ar : (assessment?.title_ar || 'الوحدة الدراسية'),
         score,
