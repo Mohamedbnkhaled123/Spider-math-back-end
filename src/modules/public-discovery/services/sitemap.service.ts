@@ -8,7 +8,7 @@ export class SitemapService {
    * Adheres to RULES.md Section 5.6 (100% code-driven SSR SEO).
    */
   public async generateSitemapXml(): Promise<string> {
-    const baseUrl = env.CLIENT_ORIGIN.replace(/\/$/, '');
+    const baseUrl = (env.CLIENT_ORIGIN.split(',').find((o) => o.includes('spider-math.com')) || env.CLIENT_ORIGIN.split(',')[0] || 'https://www.spider-math.com').trim().replace(/\/$/, '');
     const today = new Date().toISOString().split('T')[0];
 
     // 1. Canonical Static Public Routes
