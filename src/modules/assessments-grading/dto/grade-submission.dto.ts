@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const customMistakeCaseDtoSchema = z.object({
   question_id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid question_id ObjectId').optional(),
   error_note: z.string().trim().min(1, 'Error note is required').max(1000, 'Error note must not exceed 1000 characters'),
-  youtube_solution_url: z.string().trim().url('Must be a valid YouTube URL').nullable().optional()
+  youtube_solution_url: z.string().trim().url('Must be a valid YouTube URL').nullable().optional().or(z.literal('')).or(z.null())
 });
 
 export const essayAnswerDtoSchema = z.object({

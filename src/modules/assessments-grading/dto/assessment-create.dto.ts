@@ -236,6 +236,7 @@ export const createAssessmentDtoSchema = createAssessmentBaseSchema
   const isFree = assessmentType === 'HOMEWORK' ? false : (data.is_free ?? data.isFree ?? false);
   const isPublished = data.is_published ?? data.isPublished ?? true;
   const unitId = data.unit_package_id || data.unitPackageId || null;
+  const lectureId = data.lecture_id || data.lectureId || null;
 
   const questions = data.questions || [];
   const totalPoints = questions.reduce((sum, q) => sum + (q.points || 1), 0);
@@ -268,6 +269,7 @@ export const createAssessmentDtoSchema = createAssessmentBaseSchema
     is_free: isFree,
     is_published: isPublished,
     unit_package_id: unitId && /^[0-9a-fA-F]{24}$/.test(unitId) ? unitId : null,
+    lecture_id: lectureId && /^[0-9a-fA-F]{24}$/.test(lectureId) ? lectureId : null,
     questions
   };
 });

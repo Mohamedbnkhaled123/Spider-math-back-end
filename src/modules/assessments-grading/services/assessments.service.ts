@@ -187,6 +187,12 @@ export class AssessmentsService {
       }
       if (dto.xp_reward !== undefined) assessment.xp_reward = dto.xp_reward;
       if (dto.is_published !== undefined) assessment.is_published = dto.is_published;
+      if (dto.unit_package_id !== undefined) {
+        assessment.unit_package_id = (dto.unit_package_id && Types.ObjectId.isValid(dto.unit_package_id)) ? new Types.ObjectId(dto.unit_package_id) : null;
+      }
+      if (dto.lecture_id !== undefined) {
+        assessment.lecture_id = (dto.lecture_id && Types.ObjectId.isValid(dto.lecture_id)) ? new Types.ObjectId(dto.lecture_id) : null;
+      }
 
       if (dto.questions) {
         const sanitizedQuestions = dto.questions.map((q) => ({
@@ -258,6 +264,12 @@ export class AssessmentsService {
     if (dto.reference_sheet_url !== undefined) assessment.reference_sheet_url = dto.reference_sheet_url;
     if (dto.xp_reward !== undefined) assessment.xp_reward = dto.xp_reward;
     if (dto.is_published !== undefined) assessment.is_published = dto.is_published;
+    if (dto.unit_package_id !== undefined) {
+      assessment.unit_package_id = (dto.unit_package_id && Types.ObjectId.isValid(dto.unit_package_id)) ? new Types.ObjectId(dto.unit_package_id) : null;
+    }
+    if (dto.lecture_id !== undefined) {
+      assessment.lecture_id = (dto.lecture_id && Types.ObjectId.isValid(dto.lecture_id)) ? new Types.ObjectId(dto.lecture_id) : null;
+    }
 
     await assessment.save();
     assessmentAnswerKeyCache.delete(assessmentId);
@@ -982,6 +994,7 @@ export class AssessmentsService {
    */
   async getAssessments(query: {
     unitPackageId?: string;
+    lectureId?: string;
     curriculum?: string;
     gradeLevel?: string;
     academicTerm?: string;
@@ -1009,6 +1022,9 @@ export class AssessmentsService {
     if (query.unitPackageId && Types.ObjectId.isValid(query.unitPackageId)) {
       filter.unit_package_id = new Types.ObjectId(query.unitPackageId);
     }
+    if (query.lectureId && Types.ObjectId.isValid(query.lectureId)) {
+      filter.lecture_id = new Types.ObjectId(query.lectureId);
+    }
     if (query.academicTerm) {
       filter.$or = [
         { academic_term: query.academicTerm },
@@ -1024,6 +1040,7 @@ export class AssessmentsService {
 
     const queryBuilder = AssessmentModel.find(filter)
       .populate('unit_package_id', 'title_ar title_en order_index')
+      .populate('lecture_id', 'lecture_title_ar lecture_title_en order_index')
       .sort({ createdAt: -1 });
 
     if (!isSuperAdmin) {

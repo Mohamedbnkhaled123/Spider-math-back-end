@@ -164,6 +164,7 @@ export class AssessmentsController {
       const assessments = await this.assessmentsService.getAssessments(
         {
           unitPackageId: (req.query.unitPackageId || req.query.unit_package_id) as string,
+          lectureId: (req.query.lectureId || req.query.lecture_id) as string,
           curriculum: req.query.curriculum as string,
           gradeLevel: (req.query.gradeLevel || req.query.grade_level) as string,
           academicTerm: (req.query.academicTerm || req.query.academic_term || req.query.term) as string,

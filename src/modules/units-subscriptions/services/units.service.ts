@@ -271,6 +271,11 @@ export class UnitsService {
       const prog = progressMap.get(lec._id.toString());
       const isLectureAllowed = (isSubscribed && accessScope !== 'ASSESSMENTS_ONLY') || !!lec.is_free || !!lec.is_free_trial;
       const trialData = freeTrialLectureMap.get(lec._id.toString());
+      const linkedAssessment = assessments.find((a: any) =>
+        (a.lecture_id && (a.lecture_id._id || a.lecture_id).toString() === lec._id.toString()) ||
+        (a.lectureId && a.lectureId.toString() === lec._id.toString())
+      );
+      const linkedAssessmentId = linkedAssessment ? (linkedAssessment._id || linkedAssessment.id).toString() : null;
 
       // If lecture is not authorized, zero-out sensitive DRM video & PDF credentials
       if (!isLectureAllowed) {
@@ -294,7 +299,9 @@ export class UnitsService {
           youtube_url: '',
           google_drive_pdf_id: '',
           pdf_materials: [],
-          is_print_allowed: false
+          is_print_allowed: false,
+          hasAssessment: !!linkedAssessmentId,
+          linked_assessment_id: linkedAssessmentId
         };
       }
 
@@ -320,7 +327,9 @@ export class UnitsService {
         youtube_url: effectiveYoutubeUrl,
         google_drive_pdf_id: effectiveGoogleDrivePdfId,
         pdf_materials: effectivePdfMaterials,
-        is_print_allowed: effectivePrintAllowed
+        is_print_allowed: effectivePrintAllowed,
+        hasAssessment: !!linkedAssessmentId,
+        linked_assessment_id: linkedAssessmentId
       };
     });
 

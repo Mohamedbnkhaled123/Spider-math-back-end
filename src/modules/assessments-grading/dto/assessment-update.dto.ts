@@ -39,6 +39,8 @@ export const updateAssessmentDtoSchema = createAssessmentBaseSchema
     const isPublished = data.is_published ?? data.isPublished;
     const assessmentType = data.assessment_type || data.assessmentType;
     const refSheet = data.reference_sheet_url !== undefined ? data.reference_sheet_url : data.referenceSheetUrl;
+    const unitPackageId = data.unit_package_id !== undefined ? data.unit_package_id : data.unitPackageId;
+    const lectureId = data.lecture_id !== undefined ? data.lecture_id : data.lectureId;
     const rawRequiresReview = (data as any).requires_teacher_review !== undefined
       ? (data as any).requires_teacher_review
       : ((data as any).requiresTeacherReview !== undefined
@@ -69,6 +71,8 @@ export const updateAssessmentDtoSchema = createAssessmentBaseSchema
       ...(isPlacement !== undefined ? { is_placement_test: isPlacement } : {}),
       ...(isFree !== undefined ? { is_free: isFree } : {}),
       ...(refSheet !== undefined ? { reference_sheet_url: refSheet } : {}),
+      ...(unitPackageId !== undefined ? { unit_package_id: unitPackageId && /^[0-9a-fA-F]{24}$/.test(unitPackageId) ? unitPackageId : null } : {}),
+      ...(lectureId !== undefined ? { lecture_id: lectureId && /^[0-9a-fA-F]{24}$/.test(lectureId) ? lectureId : null } : {}),
       ...(rawRequiresReview !== undefined || hasEssayInQuestions ? {
         requires_teacher_review: hasEssayInQuestions ? true : !!rawRequiresReview
       } : {}),

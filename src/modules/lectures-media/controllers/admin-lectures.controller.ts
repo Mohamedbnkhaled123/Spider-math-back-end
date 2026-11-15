@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { Types } from 'mongoose';
 import { LectureMaterialModel } from '../../../models/lecture-material.model';
 import { UnitPackageModel } from '../../../models/unit-package.model';
+import { AssessmentModel } from '../../../models/assessment.model';
 import { AppError } from '../../../common/utils/app-error.util';
 import { ERROR_CODES } from '../../../common/constants/error-codes.constant';
 import { CryptoProxyService } from '../../../common/utils/crypto.util';
@@ -255,6 +256,7 @@ export class AdminLecturesController {
 
       const unitId = lecture.unit_package_id;
       await LectureMaterialModel.findByIdAndDelete(lectureId);
+      await AssessmentModel.updateMany({ lecture_id: lecture._id }, { $set: { lecture_id: null } });
 
       // Decrement count in UnitPackage
       await UnitPackageModel.findByIdAndUpdate(unitId, {

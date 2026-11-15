@@ -2,6 +2,7 @@ import assert from 'assert';
 import { AdminLecturesController } from './admin-lectures.controller';
 import { UnitPackageModel } from '../../../models/unit-package.model';
 import { LectureMaterialModel } from '../../../models/lecture-material.model';
+import { AssessmentModel } from '../../../models/assessment.model';
 import { Types } from 'mongoose';
 
 async function runTests() {
@@ -375,6 +376,50 @@ async function runTests() {
     assert.strictEqual(savedLectureData.pdf_materials[0].storage_file_id, 'drive_file_abc_1');
     assert.strictEqual(savedLectureData.pdf_materials[1].storage_file_id, 'drive_file_abc_2');
     console.log('✔ Test 8 Passed: createLecture supports pdfMaterials array and ensures 0 video duration when video is absent.');
+  }
+
+  // Test 9: deleteLecture unlinks linked assessments (sets lecture_id = null)
+  {
+    const dummyLectureId = new Types.ObjectId().toHexString();
+    const dummyUnitId = new Types.ObjectId().toHexString();
+    let unlinkedAssessmentFilter: any = null;
+    let unlinkedAssessmentUpdate: any = null;
+
+    (LectureMaterialModel as any).findById = async () => ({
+      _id: dummyLectureId,
+      unit_package_id: dummyUnitId
+    });
+    (LectureMaterialModel as any).findByIdAndDelete = async () => true;
+    (UnitPackageModel as any).findByIdAndUpdate = async () => true;
+    (AssessmentModel as any).updateMany = async (filter: any, update: any) => {
+      unlinkedAssessmentFilter = filter;
+      unlinkedAssessmentUpdate = update;
+      return { modifiedCount: 1 };
+    };
+
+    let responseStatus = 0;
+    let capturedError: any = null;
+
+    const req: any = {
+      params: { id: dummyLectureId }
+    };
+    const res: any = {
+      status: (code: number) => {
+        responseStatus = code;
+        return { json: () => {} };
+      }
+    };
+    const next = (err: any) => {
+      capturedError = err;
+    };
+
+    await controller.deleteLecture(req, res, next);
+
+    assert.strictEqual(capturedError, null);
+    assert.strictEqual(responseStatus, 200);
+    assert.deepStrictEqual(unlinkedAssessmentFilter, { lecture_id: dummyLectureId });
+    assert.deepStrictEqual(unlinkedAssessmentUpdate, { $set: { lecture_id: null } });
+    console.log('✔ Test 9 Passed: deleteLecture unlinks assessments by setting lecture_id to null.');
   }
 
   console.log('All AdminLecturesController unit tests PASSED successfully!');

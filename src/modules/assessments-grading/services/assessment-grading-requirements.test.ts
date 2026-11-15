@@ -259,7 +259,23 @@ console.log('--- Test 6: Grade Submission DTO Schema Validation ---');
 const validGradePayload = {
   essay_manual_score: 5,
   teacher_feedback_notes: 'حل ممتاز للخطوات الرياضية في المسألة المقالية',
-  custom_mistake_cases: [],
+  custom_mistake_cases: [
+    {
+      question_id: new Types.ObjectId().toString(),
+      error_note: 'خطأ في إشارة الحد الثاني عند الاشتقاق',
+      youtube_solution_url: '' // optional empty string
+    },
+    {
+      question_id: new Types.ObjectId().toString(),
+      error_note: 'نسيان إضافة ثابت التكامل',
+      youtube_solution_url: null // optional null
+    },
+    {
+      question_id: new Types.ObjectId().toString(),
+      error_note: 'إهمال توحيد المقامات'
+      // youtube_solution_url omitted entirely
+    }
+  ],
   essay_answers: [
     {
       question_id: new Types.ObjectId().toString(),
@@ -274,6 +290,9 @@ const parsedGradeDto = gradeSubmissionDtoSchema.parse(validGradePayload);
 assert.equal(parsedGradeDto.essay_manual_score, 5);
 assert.equal(parsedGradeDto.essay_answers?.length, 1);
 assert.equal(parsedGradeDto.essay_answers?.[0]?.decision, 'FULL');
+assert.equal(parsedGradeDto.custom_mistake_cases?.length, 3);
+assert.equal(parsedGradeDto.custom_mistake_cases?.[0]?.error_note, 'خطأ في إشارة الحد الثاني عند الاشتقاق');
+assert.equal(parsedGradeDto.custom_mistake_cases?.[2]?.youtube_solution_url, undefined);
 
 console.log('✔ Test 6 Passed: GradeSubmissionDto validates essay_answers and decisions successfully.');
 
