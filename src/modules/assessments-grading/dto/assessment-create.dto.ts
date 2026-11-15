@@ -26,7 +26,7 @@ export const questionItemDtoSchema = z
     options: z.array(z.string().trim()).optional().default([]),
     correct_option_index: z.union([z.coerce.number().int(), z.null()]).optional(),
     correctOptionIndex: z.union([z.coerce.number().int(), z.null()]).optional(),
-    accepted_answers: z.array(z.string().trim()).optional().default([]),
+    accepted_answers: z.array(z.string().trim()).optional(),
     acceptedAnswers: z.array(z.string().trim()).optional(),
     points: z.coerce.number().positive().default(1),
     module_index: z.coerce.number().int().min(1).max(2).optional(),
@@ -124,8 +124,11 @@ export const questionItemDtoSchema = z
     const rawModuleIdx = data.module_index ?? data.moduleIndex ?? 1;
     const moduleIndex: 1 | 2 = Number(rawModuleIdx) === 2 ? 2 : 1;
 
+    const rawId = data._id || data.id;
+    const validId = rawId && /^[0-9a-fA-F]{24}$/.test(rawId) ? rawId : undefined;
+
     return {
-      _id: data._id || data.id,
+      _id: validId,
       order: data.order,
       question_type: qType,
       question_text: qText,

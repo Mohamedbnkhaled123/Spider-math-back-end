@@ -179,7 +179,6 @@ export class AssessmentsService {
       if (dto.available_from !== undefined) assessment.available_from = dto.available_from ? new Date(dto.available_from) : null;
       if (dto.available_until !== undefined) assessment.available_until = dto.available_until ? new Date(dto.available_until) : null;
       if (dto.graph_calculator !== undefined) assessment.graph_calculator = dto.graph_calculator as any;
-    if (dto.reference_sheet_url !== undefined) assessment.reference_sheet_url = dto.reference_sheet_url;
       if (dto.reference_sheet_url !== undefined) assessment.reference_sheet_url = dto.reference_sheet_url;
       if ((dto as any).is_placement_test !== undefined) assessment.is_placement_test = (dto as any).is_placement_test;
       if ((dto as any).is_free !== undefined) {
@@ -195,16 +194,28 @@ export class AssessmentsService {
       }
 
       if (dto.questions) {
-        const sanitizedQuestions = dto.questions.map((q) => ({
-          ...q,
-          youtube_solution_url: validateAndNormalizeYouTubeUrl(q.youtube_solution_url)
-        }));
+        const sanitizedQuestions = dto.questions.map((q) => {
+          const rawId = (q as any)._id || (q as any).id;
+          const validId = rawId && Types.ObjectId.isValid(rawId) ? new Types.ObjectId(rawId) : undefined;
+          return {
+            ...q,
+            _id: validId,
+            youtube_solution_url: validateAndNormalizeYouTubeUrl(q.youtube_solution_url)
+          };
+        });
         assessment.questions = sanitizedQuestions as unknown as IQuestionItem[];
         assessment.total_points = sanitizedQuestions.reduce((sum, q) => sum + (q.points || 1), 0);
         assessment.has_essay_questions = sanitizedQuestions.some((q) => q.question_type === 'ESSAY_PHOTO');
       }
 
-      await assessment.save();
+      try {
+        await assessment.save();
+      } catch (saveErr: any) {
+        if (saveErr && saveErr.name === 'VersionError') {
+          return this.updateAssessment(_adminId, assessmentId, dto);
+        }
+        throw saveErr;
+      }
       assessmentAnswerKeyCache.delete(assessmentId);
       publicCmsCache.clear();
       return assessment;
@@ -240,10 +251,15 @@ export class AssessmentsService {
       }
 
       // Update questions array with normalized items
-      const sanitizedQuestions = dto.questions.map((q) => ({
-        ...q,
-        youtube_solution_url: validateAndNormalizeYouTubeUrl(q.youtube_solution_url)
-      }));
+      const sanitizedQuestions = dto.questions.map((q) => {
+        const rawId = (q as any)._id || (q as any).id;
+        const validId = rawId && Types.ObjectId.isValid(rawId) ? new Types.ObjectId(rawId) : undefined;
+        return {
+          ...q,
+          _id: validId,
+          youtube_solution_url: validateAndNormalizeYouTubeUrl(q.youtube_solution_url)
+        };
+      });
       assessment.questions = sanitizedQuestions as unknown as IQuestionItem[];
       assessment.total_points = sanitizedQuestions.reduce((sum, q) => sum + (q.points || 1), 0);
       assessment.has_essay_questions = sanitizedQuestions.some((q) => q.question_type === 'ESSAY_PHOTO');
@@ -271,7 +287,14 @@ export class AssessmentsService {
       assessment.lecture_id = (dto.lecture_id && Types.ObjectId.isValid(dto.lecture_id)) ? new Types.ObjectId(dto.lecture_id) : null;
     }
 
-    await assessment.save();
+    try {
+      await assessment.save();
+    } catch (saveErr: any) {
+      if (saveErr && saveErr.name === 'VersionError') {
+        return this.updateAssessment(_adminId, assessmentId, dto);
+      }
+      throw saveErr;
+    }
     assessmentAnswerKeyCache.delete(assessmentId);
     publicCmsCache.clear();
 
@@ -294,7 +317,9 @@ export class AssessmentsService {
     // Create lookup map of questions
     const questionMap = new Map<string, IQuestionItem>();
     assessment.questions.forEach((q) => {
-      questionMap.set((q._id as Types.ObjectId).toString(), q);
+      if (q._id) {
+        questionMap.set((q._id as Types.ObjectId).toString(), q);
+      }
     });
 
     const textGrader = QuestionGraderFactory.getGrader('INPUT_TEXT');
@@ -304,8 +329,9 @@ export class AssessmentsService {
       let newTextScore = 0;
       let answersModified = false;
 
-      const updatedMcqAnswers: IMcqAnswer[] = sub.mcq_answers.map((ans) => {
-        const q = questionMap.get(ans.question_id.toString());
+      const updatedMcqAnswers: IMcqAnswer[] = (sub.mcq_answers || []).map((ans) => {
+        const qId = ans.question_id ? ans.question_id.toString() : '';
+        const q = qId ? questionMap.get(qId) : undefined;
         if (!q || q.question_type !== 'MCQ') return ans;
 
         const isCorrect = ans.selected_option_index === q.correct_option_index;
@@ -325,12 +351,13 @@ export class AssessmentsService {
       });
 
       const updatedTextAnswers: ITextAnswer[] = (sub.text_answers || []).map((ans) => {
-        const q = questionMap.get(ans.question_id.toString());
+        const qId = ans.question_id ? ans.question_id.toString() : '';
+        const q = qId ? questionMap.get(qId) : undefined;
         if (!q || q.question_type !== 'INPUT_TEXT') return ans;
 
         const gradeRes = textGrader.grade(
           {
-            questionId: (q._id as Types.ObjectId).toString(),
+            questionId: q._id ? (q._id as Types.ObjectId).toString() : '',
             questionType: 'INPUT_TEXT',
             acceptedAnswers: q.accepted_answers,
             modelAnswerText: q.model_answer_text,
