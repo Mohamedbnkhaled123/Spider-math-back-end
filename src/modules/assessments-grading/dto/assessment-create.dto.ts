@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import {
   CURRICULUMS,
-  ALL_GRADE_LEVELS,
   ACADEMIC_TERMS
 } from '../../../common/constants/curriculum-hierarchy.constant';
 import {
@@ -155,7 +154,7 @@ export const createAssessmentBaseSchema = z.object({
   isFree: z.boolean().optional(),
 
   curriculum: z.enum(CURRICULUMS),
-  grade_level: z.enum(ALL_GRADE_LEVELS).or(z.string()),
+  grade_level: z.string({ required_error: 'grade_level is required' }).min(1, 'grade_level is required'),
   gradeLevel: z.string().optional(),
   academic_term: z.enum(ACADEMIC_TERMS).or(z.string()).default('TERM_1'),
   term: z.string().optional(),

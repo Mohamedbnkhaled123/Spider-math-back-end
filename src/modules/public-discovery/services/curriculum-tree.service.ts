@@ -23,6 +23,12 @@ export interface IGradeLevelTreeItem {
   gradeLevel: GradeLevelType | string;
   titleAr?: string;
   titleEn?: string;
+  stageCode?: string;
+  stageAr?: string;
+  stageEn?: string;
+  countryCode?: string;
+  divisionCode?: string;
+  isCustom?: boolean;
   terms: ITermTreeItem[];
   hasPublishedUnits: boolean;
   totalPublishedUnitsCount: number;
@@ -124,11 +130,19 @@ export class CurriculumTreeService {
     // 4. Assemble the Dynamic Curricula Tree from Configured Tracks & Active Grades
     const tree: ICurriculumTreeItem[] = CURRICULUMS.map((curriculum) => {
       const track = configuredTracks.find((t: any) => t.code === curriculum);
-      const configuredGrades = track?.grades || (GRADE_LEVELS_BY_CURRICULUM[curriculum] || []).map((code: string) => ({
+      const canonicalCodes = (GRADE_LEVELS_BY_CURRICULUM[curriculum] || []).map((code: string) => ({
         code,
         titleAr: code,
         titleEn: code
       }));
+      const canonicalCodeSet = new Set(canonicalCodes.map((c: any) => c.code));
+      const configuredMap = new Map((track?.grades || []).map((g: any) => [g.code, g]));
+      const mergedCanonical = canonicalCodes.map((c: any) => {
+        const conf = configuredMap.get(c.code);
+        return conf ? { ...c, ...conf } : c;
+      });
+      const extraCustom = (track?.grades || []).filter((g: any) => !canonicalCodeSet.has(g.code));
+      const configuredGrades = [...mergedCanonical, ...extraCustom];
       let curriculumTotalUnits = 0;
 
       const gradeLevels: IGradeLevelTreeItem[] = configuredGrades.map((grade: any) => {
@@ -158,6 +172,12 @@ export class CurriculumTreeService {
           gradeLevel: gradeCode as GradeLevelType,
           titleAr: grade.titleAr,
           titleEn: grade.titleEn,
+          stageCode: grade.stageCode,
+          stageAr: grade.stageAr,
+          stageEn: grade.stageEn,
+          countryCode: grade.countryCode,
+          divisionCode: grade.divisionCode,
+          isCustom: grade.isCustom ?? false,
           isActive,
           terms,
           hasPublishedUnits: gradeTotalUnits > 0,

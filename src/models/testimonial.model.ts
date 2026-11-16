@@ -1,7 +1,6 @@
 import { Schema, model, Document, Types } from 'mongoose';
 import {
   CURRICULUMS,
-  ALL_GRADE_LEVELS,
   CurriculumType,
   GradeLevelType
 } from '../common/constants/curriculum-hierarchy.constant';
@@ -59,8 +58,8 @@ const TestimonialSchema = new Schema<ITestimonialDocument>(
     },
     grade_level: {
       type: String,
-      enum: ALL_GRADE_LEVELS,
       required: true,
+      trim: true,
       index: true
     },
     student_stage: {

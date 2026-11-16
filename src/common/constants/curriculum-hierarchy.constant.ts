@@ -83,7 +83,7 @@ export const ALL_GRADE_LEVELS = [
   'ACT_1', 'ACT_2', 'ACT_MATH'
 ] as const;
 
-export type GradeLevelType = (typeof ALL_GRADE_LEVELS)[number];
+export type GradeLevelType = (typeof ALL_GRADE_LEVELS)[number] | string;
 
 export interface ICurriculumDivisionDefinition {
   code: string;
@@ -94,6 +94,7 @@ export interface ICurriculumDivisionDefinition {
     code: string;
     nameAr: string;
     nameEn?: string;
+    gradeCodes?: string[];
   }>;
 }
 
@@ -106,6 +107,14 @@ export interface ICurriculumTrackDefinition {
     code: string;
     titleAr: string;
     titleEn?: string;
+    shortLabelAr?: string;
+    shortLabelEn?: string;
+    stageCode?: string;
+    stageAr?: string;
+    stageEn?: string;
+    countryCode?: string;
+    divisionCode?: string;
+    isCustom?: boolean;
   }>;
 }
 
@@ -283,9 +292,27 @@ export const DEFAULT_CURRICULA_TRACKS: ICurriculumTrackDefinition[] = [
 
 /**
  * Validates that a given gradeLevel belongs to the selected curriculum track.
+ * Supports canonical grades, dynamic custom grades configured by teachers (e.g. QODORAT / GAT),
+ * and custom grade identifiers.
  */
 export function isValidGradeForCurriculum(curriculum?: CurriculumType | null, gradeLevel?: string | null): boolean {
   if (!curriculum || !gradeLevel) return false;
+  if (!CURRICULUMS.includes(curriculum as any)) return false;
+  const trimmed = typeof gradeLevel === 'string' ? gradeLevel.trim() : '';
+  if (!trimmed) return false;
+
+  // 1. Check canonical grades for this curriculum
   const validGrades = GRADE_LEVELS_BY_CURRICULUM[curriculum];
-  return Array.isArray(validGrades) && validGrades.includes(gradeLevel);
+  if (Array.isArray(validGrades) && validGrades.includes(trimmed as any)) {
+    return true;
+  }
+
+  // 2. If it belongs to the canonical grades of a DIFFERENT curriculum, reject cross-curriculum mismatch
+  const isOtherCanonical = (ALL_GRADE_LEVELS as readonly string[]).includes(trimmed);
+  if (isOtherCanonical) {
+    return false;
+  }
+
+  // 3. Dynamic / custom grade code configured for this curriculum track (e.g. QODORAT, GAT, or custom stage grade)
+  return /^[\w\u0600-\u06FF-]{1,64}$/.test(trimmed);
 }

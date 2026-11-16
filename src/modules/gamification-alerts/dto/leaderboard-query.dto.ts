@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import {
   CURRICULUMS,
-  ALL_GRADE_LEVELS,
   ACADEMIC_TERMS,
   isValidGradeForCurriculum
 } from '../../../common/constants/curriculum-hierarchy.constant';
@@ -11,9 +10,7 @@ export const leaderboardQueryDtoSchema = z
     curriculum: z.enum(CURRICULUMS, {
       required_error: 'curriculum query parameter is required'
     }),
-    gradeLevel: z.enum(ALL_GRADE_LEVELS, {
-      required_error: 'gradeLevel query parameter is required'
-    }),
+    gradeLevel: z.string({ required_error: 'gradeLevel query parameter is required' }).min(1, 'gradeLevel query parameter is required'),
     term: z.enum(ACADEMIC_TERMS).optional(),
     limit: z.coerce.number().int().min(1).max(100).default(20)
   })

@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import {
   CURRICULUMS,
-  ALL_GRADE_LEVELS,
   ACADEMIC_TERMS,
   isValidGradeForCurriculum,
   CurriculumType
@@ -12,9 +11,7 @@ export const submitPlacementDtoSchema = z
     curriculum: z.enum(CURRICULUMS, {
       required_error: 'curriculum is required'
     }),
-    gradeLevel: z.enum(ALL_GRADE_LEVELS, {
-      required_error: 'gradeLevel is required'
-    }),
+    gradeLevel: z.string({ required_error: 'gradeLevel is required' }).min(1, 'gradeLevel is required'),
     academicTerm: z.enum(ACADEMIC_TERMS).default('TERM_1'),
     answers: z
       .array(

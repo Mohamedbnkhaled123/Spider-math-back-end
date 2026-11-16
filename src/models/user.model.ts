@@ -3,7 +3,6 @@ import { ROLES, UserRole } from '../common/constants/roles.constant';
 import { GOVERNORATE_CODES, GovernorateCode } from '../common/constants/governorates.constant';
 import {
   CURRICULUMS,
-  ALL_GRADE_LEVELS,
   ACADEMIC_TERMS,
   isValidGradeForCurriculum,
   CurriculumType,
@@ -194,7 +193,7 @@ const UserSchema = new Schema<IUserDocument>(
     },
     grade_level: {
       type: String,
-      enum: ALL_GRADE_LEVELS,
+      trim: true,
       required: function (this: IUserDocument) {
         return this.role === ROLES.STUDENT && this.is_profile_completed === true;
       },

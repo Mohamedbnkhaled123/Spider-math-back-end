@@ -52,12 +52,21 @@ export interface IGradeItem {
   code: string;
   titleAr: string;
   titleEn?: string;
+  shortLabelAr?: string;
+  shortLabelEn?: string;
+  stageCode?: string;
+  stageAr?: string;
+  stageEn?: string;
+  countryCode?: string;
+  divisionCode?: string;
+  isCustom?: boolean;
 }
 
 export interface ICurriculumStageItem {
   code: string;
   nameAr: string;
   nameEn?: string;
+  gradeCodes?: string[];
 }
 
 export interface ICurriculumDivisionItem {
@@ -769,7 +778,8 @@ const CmsConfigSchema = new Schema<ICmsConfigDocument>(
                 {
                   code: { type: String, required: true },
                   nameAr: { type: String, required: true },
-                  nameEn: { type: String, default: '' }
+                  nameEn: { type: String, default: '' },
+                  gradeCodes: { type: [String], default: [] }
                 }
               ]
             }
@@ -779,7 +789,15 @@ const CmsConfigSchema = new Schema<ICmsConfigDocument>(
               code: { type: String, required: true },
               titleAr: { type: String, required: true },
               titleEn: { type: String, default: '' },
-              nameAr: { type: String }
+              nameAr: { type: String },
+              shortLabelAr: { type: String },
+              shortLabelEn: { type: String },
+              stageCode: { type: String },
+              stageAr: { type: String },
+              stageEn: { type: String },
+              countryCode: { type: String },
+              divisionCode: { type: String },
+              isCustom: { type: Boolean, default: false }
             }
           ]
         }

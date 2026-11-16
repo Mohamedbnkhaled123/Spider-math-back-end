@@ -3,7 +3,6 @@ import { AppError } from '../common/utils/app-error.util';
 import { ERROR_CODES } from '../common/constants/error-codes.constant';
 import {
   CURRICULUMS,
-  ALL_GRADE_LEVELS,
   ACADEMIC_TERMS,
   CurriculumType,
   GradeLevelType,
@@ -109,8 +108,8 @@ const SubscriptionSchema = new Schema<ISubscriptionDocument>(
     },
     grade_level: {
       type: String,
-      enum: ALL_GRADE_LEVELS,
-      required: true
+      required: true,
+      trim: true
     },
     academic_term: {
       type: String,

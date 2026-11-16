@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import {
   CURRICULUMS,
-  ALL_GRADE_LEVELS,
   ACADEMIC_TERMS,
   isValidGradeForCurriculum,
   CurriculumType
@@ -39,9 +38,7 @@ export const directRegisterStudentDtoSchema = z
       required_error: 'المسار الدراسي مطلوب'
     }),
 
-    gradeLevel: z.enum(ALL_GRADE_LEVELS, {
-      required_error: 'الصف الدراسي مطلوب'
-    }),
+    gradeLevel: z.string({ required_error: 'الصف الدراسي مطلوب' }).min(1, 'الصف الدراسي مطلوب'),
 
     academicTerm: z.enum(ACADEMIC_TERMS).default('TERM_1'),
 

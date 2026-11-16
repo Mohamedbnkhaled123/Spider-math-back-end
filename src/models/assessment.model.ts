@@ -1,7 +1,6 @@
 import { Schema, model, Document, Types } from 'mongoose';
 import {
   CURRICULUMS,
-  ALL_GRADE_LEVELS,
   ACADEMIC_TERMS,
   CurriculumType,
   GradeLevelType,
@@ -163,8 +162,8 @@ const AssessmentSchema = new Schema<IAssessmentDocument>(
     },
     grade_level: {
       type: String,
-      enum: ALL_GRADE_LEVELS,
       required: true,
+      trim: true,
       index: true
     },
     academic_term: {

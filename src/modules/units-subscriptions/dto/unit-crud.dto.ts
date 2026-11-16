@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import {
   CURRICULUMS,
-  ALL_GRADE_LEVELS,
   ACADEMIC_TERMS,
   isValidGradeForCurriculum,
   CurriculumType
@@ -10,7 +9,7 @@ import { PACKAGE_TYPES } from '../../../models/unit-package.model';
 
 const unitPackageBaseObject = z.object({
   curriculum: z.enum(CURRICULUMS, { required_error: 'curriculum track is required' }),
-  grade_level: z.enum(ALL_GRADE_LEVELS, { required_error: 'grade_level is required' }),
+  grade_level: z.string({ required_error: 'grade_level is required' }).min(1, 'grade_level is required'),
   academic_term: z.enum(ACADEMIC_TERMS).default('TERM_1'),
   title_ar: z.string().min(2, 'title_ar must be at least 2 characters').max(150),
   title_en: z.string().max(150).optional(),

@@ -1,7 +1,6 @@
 import { Schema, model, Document, Types } from 'mongoose';
 import {
   CURRICULUMS,
-  ALL_GRADE_LEVELS,
   ACADEMIC_TERMS,
   isValidGradeForCurriculum,
   CurriculumType,
@@ -52,8 +51,8 @@ const UnitPackageSchema = new Schema<IUnitPackageDocument>(
     // Level 2: الصف الدراسي
     grade_level: {
       type: String,
-      enum: ALL_GRADE_LEVELS,
       required: true,
+      trim: true,
       validate: {
         validator: function (this: IUnitPackageDocument, val: string | null | undefined): boolean {
           return isValidGradeForCurriculum(this.curriculum, val);
