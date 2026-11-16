@@ -9,7 +9,7 @@ export const customMistakeCaseDtoSchema = z.object({
 export const essayAnswerDtoSchema = z.object({
   question_id: z.string().min(1, 'Question ID is required'),
   points_earned: z.coerce.number().min(0, 'Score cannot be negative').default(0),
-  decision: z.enum(['FULL', 'HALF', 'ZERO', 'CUSTOM']).optional(),
+  decision: z.enum(['FULL', 'HALF', 'ZERO', 'CUSTOM']).nullable().optional(),
   teacher_note: z.string().trim().max(1000).optional().default('')
 });
 

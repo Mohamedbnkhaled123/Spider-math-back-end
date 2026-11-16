@@ -26,7 +26,7 @@ export interface ITextAnswer {
 export interface IEssayAnswer {
   question_id: Types.ObjectId;
   points_earned: number;
-  decision?: 'FULL' | 'HALF' | 'ZERO' | 'CUSTOM';
+  decision?: 'FULL' | 'HALF' | 'ZERO' | 'CUSTOM' | null;
   teacher_note?: string;
 }
 
@@ -110,8 +110,8 @@ const TextAnswerSchema = new Schema<ITextAnswer>(
 const EssayAnswerSchema = new Schema<IEssayAnswer>(
   {
     question_id: { type: Schema.Types.ObjectId, required: true },
-    points_earned: { type: Number, default: 0 },
-    decision: { type: String, enum: ['FULL', 'HALF', 'ZERO', 'CUSTOM'], default: null },
+    points_earned: { type: Number, default: 0, min: 0 },
+    decision: { type: String, enum: ['FULL', 'HALF', 'ZERO', 'CUSTOM', null], default: null },
     teacher_note: { type: String, default: '', trim: true }
   },
   { _id: false }
@@ -119,7 +119,12 @@ const EssayAnswerSchema = new Schema<IEssayAnswer>(
 
 const UploadedSolutionImgSchema = new Schema<IUploadedSolutionImg>(
   {
-    question_id: { type: Schema.Types.ObjectId },
+    question_id: {
+      type: Schema.Types.ObjectId,
+      required: false,
+      default: null,
+      set: (v: any) => (!v || !Types.ObjectId.isValid(v) ? null : v)
+    },
     image_url: { type: String, required: true, trim: true },
     size_kb: { type: Number },
     rotation_deg: { type: Number, default: 0 }
@@ -129,7 +134,12 @@ const UploadedSolutionImgSchema = new Schema<IUploadedSolutionImg>(
 
 const CustomMistakeCaseSchema = new Schema<ICustomMistakeCase>(
   {
-    question_id: { type: Schema.Types.ObjectId },
+    question_id: {
+      type: Schema.Types.ObjectId,
+      required: false,
+      default: null,
+      set: (v: any) => (!v || !Types.ObjectId.isValid(v) ? null : v)
+    },
     error_note: { type: String, required: true, trim: true, maxlength: 1000 },
     youtube_solution_url: { type: String, default: null, trim: true }
   },
@@ -236,8 +246,8 @@ const SubmissionSchema = new Schema<ISubmissionDocument>(
       type: [UploadedSolutionImgSchema],
       default: [],
       validate: [
-        (val: IUploadedSolutionImg[]) => val.length <= 2,
-        'uploaded_solution_imgs cannot exceed 2 images per submission'
+        (val: IUploadedSolutionImg[]) => val.length <= 50,
+        'uploaded_solution_imgs cannot exceed 50 images per submission'
       ]
     },
 

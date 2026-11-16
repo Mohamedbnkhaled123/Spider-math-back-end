@@ -166,7 +166,11 @@ export class GradingService {
    * Flips result_visibility to PUBLISHED_TO_STUDENT_AND_PARENT, awards XP, and dispatches notifications.
    */
   async gradeSubmission(_adminId: string, submissionId: string, dto: GradeSubmissionDto): Promise<ISubmissionDocument> {
-    const submission = await SubmissionModel.findById(submissionId);
+    const cleanId = String(submissionId || '').trim();
+    if (!cleanId || !Types.ObjectId.isValid(cleanId)) {
+      throw new AppError('Invalid submission ID format', 400, ERROR_CODES.BAD_REQUEST_400);
+    }
+    const submission = await SubmissionModel.findById(cleanId);
     if (!submission) {
       throw new AppError('Submission not found', 404, ERROR_CODES.NOT_FOUND_404);
     }
@@ -189,15 +193,15 @@ export class GradingService {
     }));
 
     // Calculate total auto score dynamically from all auto-graded questions (MCQ + Text answers)
-    const mcqPoints = (submission.mcq_answers || []).reduce((sum, a) => sum + (a.points_earned || 0), 0);
-    const textPoints = (submission.text_answers || []).reduce((sum, a) => sum + (a.points_earned || 0), 0);
+    const mcqPoints = (submission.mcq_answers || []).reduce((sum, a) => sum + (Number(a.points_earned) || 0), 0);
+    const textPoints = (submission.text_answers || []).reduce((sum, a) => sum + (Number(a.points_earned) || 0), 0);
     const hasAutoAnswers = (submission.mcq_answers && submission.mcq_answers.length > 0) ||
                            (submission.text_answers && submission.text_answers.length > 0);
     const totalAutoScore = hasAutoAnswers
       ? (mcqPoints + textPoints)
-      : (submission.mcq_auto_score || 0);
+      : (Number(submission.mcq_auto_score) || 0);
 
-    let essayScore = dto.essay_manual_score;
+    let essayScore = Number(dto.essay_manual_score) || 0;
     if (dto.essay_answers && dto.essay_answers.length > 0) {
       const existingMap = new Map<string, IEssayAnswer>(
         (submission.essay_answers || []).map((ea: any) => [ea.question_id.toString(), ea])
@@ -208,13 +212,17 @@ export class GradingService {
           : ((assessment.questions?.[0]?._id as Types.ObjectId) || new Types.ObjectId());
         existingMap.set(ea.question_id, {
           question_id: validQId,
-          points_earned: ea.points_earned,
-          decision: ea.decision,
+          points_earned: Number(ea.points_earned) || 0,
+          decision: ea.decision || null,
           teacher_note: ea.teacher_note || ''
         });
       }
       submission.essay_answers = Array.from(existingMap.values());
-      essayScore = submission.essay_answers.reduce((sum: number, ea: any) => sum + ea.points_earned, 0);
+      const fromAnswers = submission.essay_answers.reduce((sum: number, ea: any) => sum + (Number(ea.points_earned) || 0), 0);
+      essayScore = Math.max(essayScore, fromAnswers);
+    } else if (submission.essay_answers && submission.essay_answers.length > 0) {
+      const fromAnswers = submission.essay_answers.reduce((sum: number, ea: any) => sum + (Number(ea.points_earned) || 0), 0);
+      essayScore = Math.max(essayScore, fromAnswers);
     }
 
     const finalTotalScore = totalAutoScore + essayScore;
@@ -224,6 +232,21 @@ export class GradingService {
     submission.final_total_score = finalTotalScore;
     submission.teacher_feedback_notes = dto.teacher_feedback_notes;
     submission.custom_mistake_cases = sanitizedMistakes;
+
+    // Defensive guards for legacy or offline submissions
+    if (!submission.server_started_at) {
+      submission.server_started_at = (submission as any).createdAt || new Date();
+    }
+    if (!submission.client_started_at) {
+      submission.client_started_at = submission.server_started_at;
+    }
+    if (Array.isArray(submission.uploaded_solution_imgs)) {
+      submission.uploaded_solution_imgs.forEach((img: any) => {
+        if (img.question_id && !Types.ObjectId.isValid(img.question_id)) {
+          img.question_id = undefined;
+        }
+      });
+    }
 
     const essayQuestions = (assessment.questions || []).filter((q: any) => q.question_type === 'ESSAY_PHOTO');
     const totalEssayCount = essayQuestions.length;
@@ -242,36 +265,41 @@ export class GradingService {
       submission.graded_at = new Date();
     }
 
-    await submission.save();
+    await submission.save({ validateModifiedOnly: true });
 
     if (shouldPublish) {
-      // Calculate & award XP if not already awarded
-      const existingXpLog = await GamificationLogModel.findOne({
-        student_id: student._id,
-        reference_id: submission._id
-      });
-
-      if (!existingXpLog) {
-        const scorePercentage = assessment.total_points > 0 ? (finalTotalScore / assessment.total_points) * 100 : 0;
-        const xpStrategy = new HomeworkGradedXpStrategy();
-        const xpToAward = xpStrategy.calculateDelta({
-          baseXpReward: assessment.xp_reward,
-          scorePercentage
+      try {
+        // Calculate & award XP if not already awarded
+        const existingXpLog = await GamificationLogModel.findOne({
+          student_id: student._id,
+          reference_id: submission._id
         });
 
-        if (xpToAward > 0) {
-          await UserModel.findByIdAndUpdate(student._id, {
-            $inc: { total_xp: xpToAward }
+        if (!existingXpLog) {
+          const scorePercentage = assessment.total_points > 0 ? (finalTotalScore / assessment.total_points) * 100 : 0;
+          const xpStrategy = new HomeworkGradedXpStrategy();
+          const xpToAward = xpStrategy.calculateDelta({
+            baseXpReward: Number(assessment.xp_reward) || 30,
+            scorePercentage
           });
 
-          await GamificationLogModel.create({
-            student_id: student._id,
-            xp_delta: xpToAward,
-            action_type: 'HOMEWORK_SUBMITTED',
-            reference_id: submission._id,
-            reason_note: `Graded homework "${assessment.title_ar}"`
-          });
+          if (xpToAward > 0 && !isNaN(xpToAward)) {
+            await UserModel.findByIdAndUpdate(student._id, {
+              $inc: { total_xp: xpToAward }
+            });
+
+            const titleSnippet = (assessment.title_ar || assessment.title_en || 'الواجب').slice(0, 100);
+            await GamificationLogModel.create({
+              student_id: student._id,
+              xp_delta: xpToAward,
+              action_type: 'HOMEWORK_SUBMITTED',
+              reference_id: submission._id,
+              reason_note: `Graded homework "${titleSnippet}"`
+            });
+          }
         }
+      } catch (xpErr) {
+        console.warn('Failed to record gamification XP on homework grade:', xpErr);
       }
 
       // Pick first YouTube solution URL if available for notification
@@ -323,7 +351,12 @@ export class GradingService {
    * Approves and publishes any pending submission with a single click.
    */
   async approveSubmission(_adminId: string, submissionId: string): Promise<ISubmissionDocument> {
-    const submission = await SubmissionModel.findById(submissionId);
+    const cleanId = String(submissionId || '').trim();
+    if (!cleanId || !Types.ObjectId.isValid(cleanId)) {
+      throw new AppError('Invalid submission ID format', 400, ERROR_CODES.BAD_REQUEST_400);
+    }
+
+    const submission = await SubmissionModel.findById(cleanId);
     if (!submission) {
       throw new AppError('Submission not found', 404, ERROR_CODES.NOT_FOUND_404);
     }
@@ -344,60 +377,96 @@ export class GradingService {
       throw new AppError('Student account not found', 404, ERROR_CODES.STUDENT_NOT_FOUND_404);
     }
 
-    const mcqPoints = (submission.mcq_answers || []).reduce((sum, a) => sum + (a.points_earned || 0), 0);
-    const textPoints = (submission.text_answers || []).reduce((sum, a) => sum + (a.points_earned || 0), 0);
+    const mcqPoints = (submission.mcq_answers || []).reduce((sum, a) => sum + (Number(a.points_earned) || 0), 0);
+    const textPoints = (submission.text_answers || []).reduce((sum, a) => sum + (Number(a.points_earned) || 0), 0);
     const hasAutoAnswers = (submission.mcq_answers && submission.mcq_answers.length > 0) ||
                            (submission.text_answers && submission.text_answers.length > 0);
     const totalAutoScore = hasAutoAnswers
       ? (mcqPoints + textPoints)
-      : (submission.mcq_auto_score || 0);
+      : (Number(submission.mcq_auto_score) || 0);
 
-    const finalTotalScore = totalAutoScore + (submission.essay_manual_score || 0);
+    const essayAnswersScore = (submission.essay_answers || []).reduce(
+      (sum: number, ea: any) => sum + (Number(ea.points_earned) || 0),
+      0
+    );
+    const effectiveEssayScore = Math.max(Number(submission.essay_manual_score) || 0, essayAnswersScore);
+    const finalTotalScore = totalAutoScore + effectiveEssayScore;
+
+    // Defensive guards for legacy or offline submissions
+    if (!submission.server_started_at) {
+      submission.server_started_at = (submission as any).createdAt || new Date();
+    }
+    if (!submission.client_started_at) {
+      submission.client_started_at = submission.server_started_at;
+    }
+    if (Array.isArray(submission.uploaded_solution_imgs)) {
+      submission.uploaded_solution_imgs.forEach((img: any) => {
+        if (img.question_id && !Types.ObjectId.isValid(img.question_id)) {
+          img.question_id = undefined;
+        }
+      });
+    }
+    if (Array.isArray(submission.custom_mistake_cases)) {
+      submission.custom_mistake_cases.forEach((m: any) => {
+        if (m.question_id && !Types.ObjectId.isValid(m.question_id)) {
+          m.question_id = undefined;
+        }
+      });
+    }
+
     submission.mcq_auto_score = totalAutoScore;
+    submission.essay_manual_score = effectiveEssayScore;
     submission.final_total_score = finalTotalScore;
     submission.result_visibility = 'PUBLISHED_TO_STUDENT_AND_PARENT';
     submission.graded_at = new Date();
-    await submission.save();
+    await submission.save({ validateModifiedOnly: true });
 
     // Award XP if not already awarded
-    const existingXpLog = await GamificationLogModel.findOne({
-      student_id: student._id,
-      reference_id: submission._id
-    });
-
-    if (!existingXpLog) {
-      const scorePercentage = assessment.total_points > 0 ? (finalTotalScore / assessment.total_points) * 100 : 0;
-      const xpStrategy = new QuizPassedXpStrategy();
-      const xpToAward = xpStrategy.calculateDelta({
-        baseXpReward: assessment.xp_reward,
-        scorePercentage,
-        isSuspiciousFastSolve: submission.is_suspicious_fast_solve,
-        clockTamperDetected: submission.clock_tamper_detected
+    try {
+      const existingXpLog = await GamificationLogModel.findOne({
+        student_id: student._id,
+        reference_id: submission._id
       });
 
-      if (xpToAward > 0) {
-        await UserModel.findByIdAndUpdate(student._id, {
-          $inc: { total_xp: xpToAward }
+      if (!existingXpLog) {
+        const scorePercentage = assessment.total_points > 0 ? (finalTotalScore / assessment.total_points) * 100 : 0;
+        const xpStrategy = new QuizPassedXpStrategy();
+        const xpToAward = xpStrategy.calculateDelta({
+          baseXpReward: Number(assessment.xp_reward) || 30,
+          scorePercentage,
+          isSuspiciousFastSolve: !!submission.is_suspicious_fast_solve,
+          clockTamperDetected: !!submission.clock_tamper_detected
         });
 
-        await GamificationLogModel.create({
-          student_id: student._id,
-          xp_delta: xpToAward,
-          action_type: 'QUIZ_PASSED',
-          reference_id: submission._id,
-          reason_note: `Approved assessment "${assessment.title_ar}"`
-        });
+        if (xpToAward > 0 && !isNaN(xpToAward)) {
+          await UserModel.findByIdAndUpdate(student._id, {
+            $inc: { total_xp: xpToAward }
+          });
+
+          const titleSnippet = (assessment.title_ar || assessment.title_en || 'التقييم').slice(0, 100);
+          await GamificationLogModel.create({
+            student_id: student._id,
+            xp_delta: xpToAward,
+            action_type: 'QUIZ_PASSED',
+            reference_id: submission._id,
+            reason_note: `Approved assessment "${titleSnippet}"`
+          });
+        }
       }
+    } catch (xpErr) {
+      console.warn('Failed to record gamification XP on approval:', xpErr);
     }
 
     try {
+      const titleAr = assessment.title_ar || 'التقييم الدراسي';
+      const titleEn = assessment.title_en || 'Academic Assessment';
       const studentAlert = NotificationFactory.createHomeworkGradedAlert({
         recipientId: student._id as Types.ObjectId,
         recipientRole: ROLES.STUDENT,
-        assessmentTitleAr: assessment.title_ar,
-        assessmentTitleEn: assessment.title_en,
+        assessmentTitleAr: titleAr,
+        assessmentTitleEn: titleEn,
         score: finalTotalScore,
-        totalPoints: assessment.total_points,
+        totalPoints: assessment.total_points || 1,
         youtubeSolutionUrl: null,
         submissionId: submission._id
       });
@@ -413,19 +482,19 @@ export class GradingService {
         $or: parentQuery
       }).select('_id').lean();
 
-        if (parentUser) {
-          const parentAlert = NotificationFactory.createHomeworkGradedAlert({
-            recipientId: parentUser._id as Types.ObjectId,
-            recipientRole: ROLES.PARENT,
-            assessmentTitleAr: assessment.title_ar,
-            assessmentTitleEn: assessment.title_en,
-            score: finalTotalScore,
-            totalPoints: assessment.total_points,
-            youtubeSolutionUrl: null,
-            submissionId: submission._id
-          });
-          await NotificationModel.create(parentAlert);
-        }
+      if (parentUser) {
+        const parentAlert = NotificationFactory.createHomeworkGradedAlert({
+          recipientId: parentUser._id as Types.ObjectId,
+          recipientRole: ROLES.PARENT,
+          assessmentTitleAr: titleAr,
+          assessmentTitleEn: titleEn,
+          score: finalTotalScore,
+          totalPoints: assessment.total_points || 1,
+          youtubeSolutionUrl: null,
+          submissionId: submission._id
+        });
+        await NotificationModel.create(parentAlert);
+      }
     } catch (notifErr) {
       console.warn('Failed to dispatch notifications on approval:', notifErr);
     }

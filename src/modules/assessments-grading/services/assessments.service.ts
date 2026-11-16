@@ -889,7 +889,7 @@ export class AssessmentsService {
             mcq_answers: gradedMcqAnswers,
             text_answers: gradedTextAnswers,
             uploaded_solution_imgs: dto.uploaded_solution_imgs.map((img) => ({
-              question_id: img.question_id ? new Types.ObjectId(img.question_id) : undefined,
+              question_id: img.question_id && Types.ObjectId.isValid(img.question_id) ? new Types.ObjectId(img.question_id) : undefined,
               image_url: img.image_url,
               size_kb: img.size_kb,
               rotation_deg: img.rotation_deg ?? 0
@@ -926,7 +926,7 @@ export class AssessmentsService {
             idempotency_key: dto.idempotency_key,
             assessment_id: new Types.ObjectId(assessmentId),
             student_id: new Types.ObjectId(studentId),
-            unit_package_id: new Types.ObjectId(),
+            unit_package_id: cachedPayload.unitPackageId && Types.ObjectId.isValid(cachedPayload.unitPackageId) ? new Types.ObjectId(cachedPayload.unitPackageId) : null,
             attempt_number: nextAttempt,
             is_offline_cached: dto.is_offline_cached,
             sync_queue_status: 'SYNCED_ONLINE',
@@ -942,7 +942,7 @@ export class AssessmentsService {
             mcq_answers: gradedMcqAnswers,
             text_answers: gradedTextAnswers,
             uploaded_solution_imgs: dto.uploaded_solution_imgs.map((img) => ({
-              question_id: img.question_id ? new Types.ObjectId(img.question_id) : undefined,
+              question_id: img.question_id && Types.ObjectId.isValid(img.question_id) ? new Types.ObjectId(img.question_id) : undefined,
               image_url: img.image_url,
               size_kb: img.size_kb,
               rotation_deg: img.rotation_deg ?? 0
@@ -1166,7 +1166,7 @@ export class AssessmentsService {
     const unitPackage = submission.unit_package_id;
     const totalPoints = assessment ? assessment.total_points : 0;
     const isPublished = submission.result_visibility === 'PUBLISHED_TO_STUDENT_AND_PARENT';
-    const scorePercentage = totalPoints > 0 ? Math.round((submission.final_total_score / totalPoints) * 100) : 0;
+    const scorePercentage = (totalPoints > 0 && isPublished) ? Math.round((submission.final_total_score / totalPoints) * 100) : null;
     const hasEssayQuestions = !!assessment?.has_essay_questions || (submission.uploaded_solution_imgs && submission.uploaded_solution_imgs.length > 0);
 
     // 3-Day Review Window Policy for Essay Quizzes:
@@ -1373,9 +1373,9 @@ export class AssessmentsService {
       assessmentTitleEn: assessment ? assessment.title_en : 'Assessment',
       unitTitleAr: unitPackage ? unitPackage.title_ar : 'الوحدة الدراسية',
       resultVisibility: submission.result_visibility,
-      mcqAutoScore: submission.mcq_auto_score,
-      essayManualScore: submission.essay_manual_score,
-      finalTotalScore: submission.final_total_score,
+      mcqAutoScore: isPublished ? submission.mcq_auto_score : null,
+      essayManualScore: isPublished ? submission.essay_manual_score : null,
+      finalTotalScore: isPublished ? submission.final_total_score : null,
       maxScore: totalPoints,
       scorePercentage,
       gradedAt: submission.graded_at ? submission.graded_at.toISOString() : (submission.createdAt ? submission.createdAt.toISOString() : ''),
@@ -1408,15 +1408,16 @@ export class AssessmentsService {
       const unit = sub.unit_package_id;
       const totalPoints = assessment ? assessment.total_points : 0;
       const isPublished = sub.result_visibility === 'PUBLISHED_TO_STUDENT_AND_PARENT';
-      const score = isPublished ? sub.final_total_score : 0;
-      const percentage = (totalPoints > 0 && isPublished) ? Math.round((sub.final_total_score / totalPoints) * 100) : 0;
       const isPending = sub.result_visibility === 'HIDDEN_PENDING_TEACHER';
+      const score = isPublished ? (sub.final_total_score ?? 0) : null;
+      const percentage = (totalPoints > 0 && isPublished) ? Math.round(((sub.final_total_score ?? 0) / totalPoints) * 100) : null;
 
-      let gradeLabelAr = 'قيد التصحيح';
+      let gradeLabelAr = isPending ? 'في انتظار التصحيح اليدوي' : 'قيد التصحيح';
       if (isPublished) {
-        if (percentage >= 85) gradeLabelAr = 'ممتاز (Mastery)';
-        else if (percentage >= 65) gradeLabelAr = 'جيد جداً (Proficient)';
-        else if (percentage >= 50) gradeLabelAr = 'جيد (Developing)';
+        const pct = percentage ?? 0;
+        if (pct >= 85) gradeLabelAr = 'ممتاز (Mastery)';
+        else if (pct >= 65) gradeLabelAr = 'جيد جداً (Proficient)';
+        else if (pct >= 50) gradeLabelAr = 'جيد (Developing)';
         else gradeLabelAr = 'يحتاج لمراجعة';
       }
 
@@ -1437,7 +1438,8 @@ export class AssessmentsService {
         percentage,
         gradeLabelAr,
         status: isPending ? 'PENDING_REVIEW' : (isPublished ? 'PUBLISHED' : sub.result_visibility),
-        gradedBy: 'م/ هبة عبدالوهاب',
+        isPending,
+        gradedBy: isPending ? 'في انتظار التصحيح اليدوي' : 'م/ هبة عبدالوهاب',
         gradedDateAr: formattedDate,
         feedbackUrl: `/student/submissions/${sub._id}/feedback`
       };
