@@ -161,6 +161,9 @@ export class AdminLecturesController {
       }
       if (isPublished !== undefined) lecture.is_published = isPublished;
       if (xpReward !== undefined) lecture.xp_reward_on_complete = Number(xpReward);
+      if (req.body.order_index !== undefined || req.body.order !== undefined) {
+        lecture.order_index = Number(req.body.order_index ?? req.body.order);
+      }
 
       if (youtubeUrl !== undefined) {
         const rawYt = youtubeUrl ? youtubeUrl.trim() : '';
@@ -297,6 +300,50 @@ export class AdminLecturesController {
           ? 'تم تفعيل إتاحة المحاضرة مجاناً لجميع الطلاب'
           : 'تم قفل المحاضرة لتكون خاصة بالطلاب المشتركين فقط'
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PUT /api/v1/admin/lectures/reorder
+   * POST /api/v1/admin/lectures/reorder
+   */
+  public async reorderLectures(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { lectureIds, items } = req.body;
+      let updates: { id: string; order_index: number }[] = [];
+      if (Array.isArray(req.body)) {
+        if (typeof req.body[0] === 'string') {
+          updates = (req.body as string[]).map((id, idx) => ({ id, order_index: idx + 1 }));
+        } else {
+          updates = (req.body as any[]).map((it, idx) => ({
+            id: it.id || it._id,
+            order_index: Math.max(1, it.order_index ?? it.order ?? (idx + 1))
+          }));
+        }
+      } else if (Array.isArray(lectureIds)) {
+        updates = lectureIds.map((id: string, idx: number) => ({ id, order_index: idx + 1 }));
+      } else if (Array.isArray(items)) {
+        updates = items.map((it: any, idx: number) => ({
+          id: it.id || it._id,
+          order_index: Math.max(1, it.order_index ?? it.order ?? (idx + 1))
+        }));
+      }
+
+      const validUpdates = updates.filter(u => u.id && Types.ObjectId.isValid(u.id));
+      if (validUpdates.length > 0) {
+        const bulkOps = validUpdates.map(u => ({
+          updateOne: {
+            filter: { _id: new Types.ObjectId(u.id) },
+            update: { $set: { order_index: u.order_index } }
+          }
+        }));
+        await LectureMaterialModel.bulkWrite(bulkOps);
+        publicCmsCache.clear();
+      }
+
+      res.status(200).json(createSuccessResponse({ success: true, count: validUpdates.length }));
     } catch (error) {
       next(error);
     }

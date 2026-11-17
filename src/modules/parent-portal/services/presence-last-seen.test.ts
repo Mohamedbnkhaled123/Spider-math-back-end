@@ -29,7 +29,7 @@ const t121s = (primeTime || Date.now()) + 121 * 1000;
 const diff121s = t121s - (lastSeenWriteThrottle.get(studentId1) || 0);
 assert.ok(diff121s >= THROTTLE_MS, 'Request after 2 minutes should not be throttled');
 
-console.log('✔ Test 1 Passed: In-memory write throttle map correctly throttles at 2-minute boundary and supports priming.');
+console.log('[PASS] Test 1 Passed: In-memory write throttle map correctly throttles at 2-minute boundary and supports priming.');
 
 // --- Test 2: Time-Window Online Calculation Rule with Clock Skew Protection ---
 const ONLINE_THRESHOLD_MS = 3 * 60 * 1000;
@@ -72,7 +72,7 @@ assert.strictEqual(computeIsOnline(oneHourFuture, false), false, 'Far-future tim
 const tenSecFuture = new Date(Date.now() + 10 * 1000);
 assert.strictEqual(computeIsOnline(tenSecFuture, false), true, 'Slight clock skew (10s future) should remain online');
 
-console.log('✔ Test 2 Passed: Time-window rule (3 minutes) evaluates online status with clock skew protection.');
+console.log('[PASS] Test 2 Passed: Time-window rule (3 minutes) evaluates online status with clock skew protection.');
 
 // --- Test 3: Last Seen Timestamp & Activity Type Resolution ---
 function resolvePresence(rawPresence: { isOnline: boolean; activityType: string; lastHeartbeatAt?: Date }, studentLastSeen: Date | null | undefined) {
@@ -99,7 +99,7 @@ const watchingPresence = resolvePresence({ isOnline: true, activityType: 'WATCHI
 assert.strictEqual(watchingPresence.isOnline, true);
 assert.strictEqual(watchingPresence.activityType, 'WATCHING_LECTURE');
 
-console.log('✔ Test 3 Passed: Activity type cleanly resolves to IDLE when online via HTTP window and preserves live heartbeats.');
+console.log('[PASS] Test 3 Passed: Activity type cleanly resolves to IDLE when online via HTTP window and preserves live heartbeats.');
 
 // --- Test 4: Super Admin Students List Mapping with RAM Presence Priority ---
 const testStudentId = new Types.ObjectId().toString();
@@ -131,8 +131,8 @@ assert.strictEqual(ramPresence.isOnline, true, 'RAM presence must report isOnlin
 assert.strictEqual(studentIsOnline, true, 'Admin mapping must recognize active video watching student as online even if DB last_seen_at is old');
 assert.strictEqual(resolvedLastSeenAt, ramPresence.lastHeartbeatAt, 'Admin mapping must use latest RAM heartbeat as lastSeenAt');
 
-console.log('✔ Test 4 Passed: Admin student list correctly incorporates RAM presence cache.');
+console.log('[PASS] Test 4 Passed: Admin student list correctly incorporates RAM presence cache.');
 
 console.log('\n======================================================');
-console.log('✔ ALL PRESENCE AND LAST-SEEN TESTS PASSED SUCCESSFULLY! ✔');
+console.log('[PASS] ALL PRESENCE AND LAST-SEEN TESTS PASSED SUCCESSFULLY! [PASS]');
 console.log('======================================================\n');

@@ -44,7 +44,7 @@ async function runTests() {
   // Test 1: Register and resolve default provider
   const defaultProvider = service.getProvider('gemini');
   assert.equal(defaultProvider.providerId, 'gemini', 'Default provider should be gemini');
-  console.log('✔ Test 1 Passed: Default gemini provider resolved correctly.');
+  console.log('[PASS] Test 1 Passed: Default gemini provider resolved correctly.');
 
   // Test 2: Throws AppError on unsupported provider
   assert.throws(
@@ -52,7 +52,7 @@ async function runTests() {
     (err: any) => err instanceof AppError && err.statusCode === 400,
     'Should throw 400 AppError for unknown provider'
   );
-  console.log('✔ Test 2 Passed: Unknown provider throws AppError(400).');
+  console.log('[PASS] Test 2 Passed: Unknown provider throws AppError(400).');
 
   // Test 3: Register custom provider and extract questions
   const mock = new MockAiProvider();
@@ -80,7 +80,7 @@ async function runTests() {
   assert.equal(q1.has_geometry_diagram, true, 'Question 2 diagram is true');
   assert.deepEqual(q1.box_2d, [120, 45, 480, 520], 'Question 2 box_2d should match');
   assert.equal(q1.points, 2, 'Question 2 points should match');
-  console.log('✔ Test 3 Passed: Custom provider extraction and question sanitization successful.');
+  console.log('[PASS] Test 3 Passed: Custom provider extraction and question sanitization successful.');
 
   // Test 4: Rejects empty imageBase64
   let rejected = false;
@@ -94,7 +94,7 @@ async function runTests() {
     rejected = true;
   }
   assert.ok(rejected, 'Should fail validation on empty base64');
-  console.log('✔ Test 4 Passed: Empty imageBase64 fails validation.');
+  console.log('[PASS] Test 4 Passed: Empty imageBase64 fails validation.');
 
   // Test 5: Rejects invalid mode
   rejected = false;
@@ -108,7 +108,7 @@ async function runTests() {
     rejected = true;
   }
   assert.ok(rejected, 'Should fail validation on invalid mode');
-  console.log('✔ Test 5 Passed: Invalid mode fails validation.');
+  console.log('[PASS] Test 5 Passed: Invalid mode fails validation.');
 
   // Test 6: Preserves blank-text question in FULL_IMAGE_CROP mode with fallback text
   const cropQuestions = await service.extractQuestions({
@@ -119,7 +119,7 @@ async function runTests() {
   });
   assert.equal(cropQuestions.length, 3, 'FULL_IMAGE_CROP mode should preserve all 3 questions with fallback');
   assert.equal(cropQuestions[2]?.question_text, 'سؤال مصور (قص كامل)', 'Blank text question should receive fallback text');
-  console.log('✔ Test 6 Passed: FULL_IMAGE_CROP mode uses fallback text for blank questions.');
+  console.log('[PASS] Test 6 Passed: FULL_IMAGE_CROP mode uses fallback text for blank questions.');
 
   // Test 6.2: TEXT_LATEX_ONLY mode strips box_2d and geometry diagram
   const textOnlyQuestions = await service.extractQuestions({
@@ -131,7 +131,7 @@ async function runTests() {
   assert.equal(textOnlyQuestions.length, 2, 'TEXT_LATEX_ONLY should filter blank and return 2 questions');
   assert.equal(textOnlyQuestions[1]?.box_2d, undefined, 'TEXT_LATEX_ONLY must strip box_2d completely');
   assert.equal(textOnlyQuestions[1]?.has_geometry_diagram, false, 'TEXT_LATEX_ONLY must force has_geometry_diagram to false');
-  console.log('✔ Test 6.2 Passed: TEXT_LATEX_ONLY strictly strips box_2d and geometry diagram.');
+  console.log('[PASS] Test 6.2 Passed: TEXT_LATEX_ONLY strictly strips box_2d and geometry diagram.');
 
   // Test 7: Gemini adapter parser normalizes inverted coordinates and rejects zero-area box
   const geminiAdapter = service.getProvider('gemini') as any;
@@ -155,7 +155,7 @@ async function runTests() {
   assert.equal(parsedItems.length, 2);
   assert.deepEqual(parsedItems[0].box_2d, [200, 100, 500, 600], 'Inverted coordinates should be normalized');
   assert.equal(parsedItems[1].box_2d, undefined, 'Zero-area box should be safely discarded');
-  console.log('✔ Test 7 Passed: Gemini adapter normalizes inverted coordinates and safely discards zero-area boxes.');
+  console.log('[PASS] Test 7 Passed: Gemini adapter normalizes inverted coordinates and safely discards zero-area boxes.');
 
   // Test 8: Gemini adapter initializes with verified backup key and gemini model by default
   const defaultAdapter = new (require('../providers/gemini-question-extractor.adapter').GeminiQuestionExtractorAdapter)();
@@ -175,7 +175,7 @@ async function runTests() {
     (err: any) => err instanceof AppError && (err.statusCode === 400 || err.statusCode === 401),
     'Invalid API key must throw AppError(400 or 401)'
   );
-  console.log('✔ Test 8 Passed: Gemini adapter initializes with verified backup key and validates custom API keys.');
+  console.log('[PASS] Test 8 Passed: Gemini adapter initializes with verified backup key and validates custom API keys.');
 
   console.log('\nAll AiQuestionExtractionService tests completed successfully!');
 }

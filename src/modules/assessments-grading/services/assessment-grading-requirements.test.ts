@@ -90,7 +90,7 @@ const resultModelMatch = textGrader.grade(qWithModelOnly, { textAnswer: '١٢' }
 assert.equal(resultModelMatch.isCorrect, true, 'Student answer matching modelAnswerText must be correct');
 assert.equal(resultModelMatch.pointsEarned, 5);
 
-console.log('✔ Test 1 Passed: INPUT_TEXT questions auto-grade accurately with Arabic/math normalization.');
+console.log('[PASS] Test 1 Passed: INPUT_TEXT questions auto-grade accurately with Arabic/math normalization.');
 
 // =============================================================================
 // Test 2: MCQ Auto-Grading
@@ -112,7 +112,7 @@ const resultMcqCorrect = mcqGrader.grade(qMcq, { selectedOptionIndex: 1 });
 assert.equal(resultMcqCorrect.isCorrect, true);
 assert.equal(resultMcqCorrect.pointsEarned, 5);
 
-console.log('✔ Test 2 Passed: MCQ questions auto-grade accurately against correct option index.');
+console.log('[PASS] Test 2 Passed: MCQ questions auto-grade accurately against correct option index.');
 
 // =============================================================================
 // Test 3: ESSAY_PHOTO Auto-Grading & Review Safeguard
@@ -129,7 +129,7 @@ const resultEssayAuto = essayGrader.grade(qEssay, { solutionImgsCount: 1 });
 assert.equal(resultEssayAuto.pointsEarned, 0, 'Essay auto-grade points must be 0 pending review');
 // It must NOT be treated as a final failure; it must remain pending teacher review.
 
-console.log('✔ Test 3 Passed: ESSAY_PHOTO questions are kept at 0 pending review and never auto-failed.');
+console.log('[PASS] Test 3 Passed: ESSAY_PHOTO questions are kept at 0 pending review and never auto-failed.');
 
 // =============================================================================
 // Test 4: The October Test Scenario (Mohammed Khaled 5 / 15 Breakdown)
@@ -211,7 +211,7 @@ assert.equal(sumAwarded, initialFinalScore, 'Sum of question awarded points must
 assert.equal(mappedReviewQuestions[1]!.isCorrect, true, 'Question 2 must display as correct');
 assert.equal(mappedReviewQuestions[2]!.isPendingManualGrading, true, 'Question 3 must be pending manual review');
 
-console.log('✔ Test 4 Passed: 5 / 15 score mismatch resolved — individual questions strictly sum to 5.');
+console.log('[PASS] Test 4 Passed: 5 / 15 score mismatch resolved — individual questions strictly sum to 5.');
 
 // =============================================================================
 // Test 5: Teacher Manual Grading Decisions on Essay Question
@@ -249,7 +249,7 @@ assert.equal(gradeZero.essayAwarded, 0, 'Zero points must be 0');
 assert.equal(gradeZero.totalScore, 5, 'Total score must be 5 / 15 (5 auto + 0 essay)');
 assert.equal(gradeZero.percentage, 33);
 
-console.log('✔ Test 5 Passed: Teacher can choose Full points (10/15), Half points (7.5/15), or Zero points (5/15).');
+console.log('[PASS] Test 5 Passed: Teacher can choose Full points (10/15), Half points (7.5/15), or Zero points (5/15).');
 
 // =============================================================================
 // Test 6: Grade Submission DTO Schema Validation
@@ -294,7 +294,7 @@ assert.equal(parsedGradeDto.custom_mistake_cases?.length, 3);
 assert.equal(parsedGradeDto.custom_mistake_cases?.[0]?.error_note, 'خطأ في إشارة الحد الثاني عند الاشتقاق');
 assert.equal(parsedGradeDto.custom_mistake_cases?.[2]?.youtube_solution_url, undefined);
 
-console.log('✔ Test 6 Passed: GradeSubmissionDto validates essay_answers and decisions successfully.');
+console.log('[PASS] Test 6 Passed: GradeSubmissionDto validates essay_answers and decisions successfully.');
 
 // =============================================================================
 // Test 7: Preservation of text_answers on Re-grading & Approval
@@ -322,7 +322,7 @@ const teacherAwardedEssay = 2.5;
 const calculatedFinal = calculatedTotalAuto + teacherAwardedEssay;
 assert.equal(calculatedFinal, 7.5, 'Final score must be 7.5 and not drop the 5 text points');
 
-console.log('✔ Test 7 Passed: text_answers points are 100% immune to being wiped on teacher grading or approval.');
+console.log('[PASS] Test 7 Passed: text_answers points are 100% immune to being wiped on teacher grading or approval.');
 
 // =============================================================================
 // Test 8: Multi-Essay Partial Grading (Pending Status Safeguard)
@@ -356,7 +356,7 @@ const fullEssayAnswers = [
 let shouldPublishFull = fullEssayAnswers.length >= totalEssayCount;
 assert.equal(shouldPublishFull, true, 'Submission with all essays graded must be PUBLISHED');
 
-console.log('✔ Test 8 Passed: Multi-essay quizzes remain pending until all essay questions are graded.');
+console.log('[PASS] Test 8 Passed: Multi-essay quizzes remain pending until all essay questions are graded.');
 
 // =============================================================================
 // Test 9: Non-Destructive Essay Answers Map Merging
@@ -388,7 +388,7 @@ assert.equal(mergedResults[0].points_earned, 5);
 assert.equal(mergedResults[1].points_earned, 2.5);
 assert.equal(mergedResults.reduce((sum, ea) => sum + ea.points_earned, 0), 7.5);
 
-console.log('✔ Test 9 Passed: Sequential essay question grading preserves previously graded questions.');
+console.log('[PASS] Test 9 Passed: Sequential essay question grading preserves previously graded questions.');
 
 // =============================================================================
 // Test 10: Accurate Zero Auto-Score with hasAutoAnswers
@@ -408,7 +408,7 @@ const resolvedAutoScore = hasAnswers ? (mcqSum + textSum) : zeroScoreSubmission.
 
 assert.equal(resolvedAutoScore, 0, 'Auto score must be 0 when student scored 0 on all auto questions');
 
-console.log('✔ Test 10 Passed: Zero score on auto questions correctly resolves to 0 without stale fallback.');
+console.log('[PASS] Test 10 Passed: Zero score on auto questions correctly resolves to 0 without stale fallback.');
 
 // =============================================================================
 // Test 11: Idempotent Approval & Duplicate Publishing Prevention
@@ -439,9 +439,9 @@ async function test11() {
 
   (SubmissionModel as any).findById = originalFindById;
 
-  console.log('✔ Test 11 Passed: Duplicate approval safely avoided and idempotency enforced.');
+  console.log('[PASS] Test 11 Passed: Duplicate approval safely avoided and idempotency enforced.');
   console.log('\n======================================================');
-  console.log('✔ ALL USER ASSESSMENT GRADING REQUIREMENTS VERIFIED! ✔');
+  console.log('[PASS] ALL USER ASSESSMENT GRADING REQUIREMENTS VERIFIED! [PASS]');
   console.log('======================================================');
 }
 

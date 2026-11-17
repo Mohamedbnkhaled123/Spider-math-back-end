@@ -41,7 +41,7 @@ async function runTests() {
     hook.fn.call(homeworkAssessment, () => {});
   }
   assert.equal(homeworkAssessment.is_free, false, 'HOMEWORK assessment must always have is_free = false');
-  console.log('✔ Test 1 Passed: HOMEWORK assessments strictly enforce is_free = false via pre-save hook.');
+  console.log('[PASS] Test 1 Passed: HOMEWORK assessments strictly enforce is_free = false via pre-save hook.');
 
   // Test 2: Non-HOMEWORK assessment retains is_free = true
   const quizAssessment = new AssessmentModel({
@@ -61,7 +61,7 @@ async function runTests() {
     hook.fn.call(quizAssessment, () => {});
   }
   assert.equal(quizAssessment.is_free, true, 'QUIZ assessment can have is_free = true');
-  console.log('✔ Test 2 Passed: QUIZ assessments preserve is_free = true.');
+  console.log('[PASS] Test 2 Passed: QUIZ assessments preserve is_free = true.');
 
   // Test 3: LectureMaterial pre-save hook synchronizes is_free and is_free_trial
   const lectureMaterial = new LectureMaterialModel({
@@ -79,7 +79,7 @@ async function runTests() {
     hook.fn.call(lectureMaterial, () => {});
   }
   assert.equal(lectureMaterial.is_free_trial, true, 'LectureMaterial must sync is_free_trial to match is_free');
-  console.log('✔ Test 3 Passed: LectureMaterial pre-save hook synchronizes is_free with is_free_trial.');
+  console.log('[PASS] Test 3 Passed: LectureMaterial pre-save hook synchronizes is_free with is_free_trial.');
 
   // Test 4: createAssessmentDtoSchema parses is_free successfully
   const parsedDto = createAssessmentDtoSchema.parse({
@@ -93,7 +93,7 @@ async function runTests() {
     is_free: true
   });
   assert.equal(parsedDto.is_free, true, 'AssessmentCreateDto should accept is_free: true');
-  console.log('✔ Test 4 Passed: AssessmentCreateDto validates is_free correctly.');
+  console.log('[PASS] Test 4 Passed: AssessmentCreateDto validates is_free correctly.');
 
   // Test 5: deviceLockGuard allows Super Admin without X-Device-UUID header
   let nextCalled = false;
@@ -109,7 +109,7 @@ async function runTests() {
   });
   assert.equal(nextCalled, true, 'deviceLockGuard should call next()');
   assert.equal(nextError, undefined, 'deviceLockGuard should not produce an error for Super Admin even without header');
-  console.log('✔ Test 5 Passed: deviceLockGuard gracefully permits Super Admin without X-Device-UUID.');
+  console.log('[PASS] Test 5 Passed: deviceLockGuard gracefully permits Super Admin without X-Device-UUID.');
 
   // Test 6: deviceLockGuard rejects student without X-Device-UUID header
   let studentNextCalled = false;
@@ -125,7 +125,7 @@ async function runTests() {
   assert.equal(studentNextCalled, true, 'deviceLockGuard should call next() with error for student');
   assert.ok(studentNextError, 'deviceLockGuard should produce an AppError for student lacking device UUID');
   assert.equal(studentNextError.statusCode, 400, 'Expected 400 Bad Request');
-  console.log('✔ Test 6 Passed: deviceLockGuard enforces X-Device-UUID for student accounts.');
+  console.log('[PASS] Test 6 Passed: deviceLockGuard enforces X-Device-UUID for student accounts.');
 
   // Test 7: Assessment with ESSAY_PHOTO forces requires_teacher_review = true via pre-save hook
   const essayAssessment = new AssessmentModel({
@@ -152,7 +152,7 @@ async function runTests() {
   }
   assert.equal(essayAssessment.has_essay_questions, true, 'has_essay_questions must be true');
   assert.equal(essayAssessment.requires_teacher_review, true, 'Essay question must strictly force requires_teacher_review = true');
-  console.log('✔ Test 7 Passed: Assessment with essay questions strictly forces requires_teacher_review = true.');
+  console.log('[PASS] Test 7 Passed: Assessment with essay questions strictly forces requires_teacher_review = true.');
 
   // Test 8: MCQ-only assessment allows requires_teacher_review = false
   const mcqAssessment = new AssessmentModel({
@@ -179,7 +179,7 @@ async function runTests() {
     hook.fn.call(mcqAssessment, () => {});
   }
   assert.equal(mcqAssessment.requires_teacher_review, false, 'MCQ only quiz allows requires_teacher_review = false');
-  console.log('✔ Test 8 Passed: MCQ-only quiz preserves requires_teacher_review = false for immediate grading.');
+  console.log('[PASS] Test 8 Passed: MCQ-only quiz preserves requires_teacher_review = false for immediate grading.');
 
   // Test 9: createAssessmentDtoSchema handles requiresTeacherReview and forces true on essay
   const parsedMcqDto = createAssessmentDtoSchema.parse({
@@ -213,14 +213,14 @@ async function runTests() {
     ]
   });
   assert.equal(parsedEssayDto.requires_teacher_review, true, 'Essay DTO must force requires_teacher_review: true');
-  console.log('✔ Test 9 Passed: createAssessmentDtoSchema correctly manages requires_teacher_review flag.');
+  console.log('[PASS] Test 9 Passed: createAssessmentDtoSchema correctly manages requires_teacher_review flag.');
 
   // Test 10: formatArabicStudentStage generates correct Arabic text
   const stageEg = formatArabicStudentStage('EGYPTIAN', 'SEC_1');
   assert.equal(stageEg, 'الصف الأول الثانوي • المنهج المصري');
   const stageGulf = formatArabicStudentStage('GULF', 'GRADE_12');
   assert.equal(stageGulf, 'الصف الثاني عشر (توجيهي) • المنهج الخليجي');
-  console.log('✔ Test 10 Passed: formatArabicStudentStage generates proper Arabic stage descriptions.');
+  console.log('[PASS] Test 10 Passed: formatArabicStudentStage generates proper Arabic stage descriptions.');
 
   // Test 11: createUnitPackageDtoSchema does not fallback to literal 'Unit Package'
   const unitDto = createUnitPackageDtoSchema.parse({
@@ -230,7 +230,7 @@ async function runTests() {
     title_en: 'Unit Package' // Default string should be discarded in favor of Arabic title
   });
   assert.equal(unitDto.title_en, 'الوحدة الأولى - الجبر', 'title_en must not fallback to Unit Package');
-  console.log('✔ Test 11 Passed: createUnitPackageDtoSchema sanitizes title_en to prevent "Unit Package" default.');
+  console.log('[PASS] Test 11 Passed: createUnitPackageDtoSchema sanitizes title_en to prevent "Unit Package" default.');
 
   // Test 12: SubmissionSchema allows optional unit_package_id for standalone general assessments
   const generalSubmission = new SubmissionModel({
@@ -246,7 +246,7 @@ async function runTests() {
   });
   const valError = generalSubmission.validateSync();
   assert.equal(valError, undefined, 'SubmissionModel should validate cleanly with unit_package_id = null');
-  console.log('✔ Test 12 Passed: SubmissionModel cleanly supports unit_package_id = null for general quizzes.');
+  console.log('[PASS] Test 12 Passed: SubmissionModel cleanly supports unit_package_id = null for general quizzes.');
 
   console.log('All Free Content & Toggle Verification Tests passed successfully!');
 }

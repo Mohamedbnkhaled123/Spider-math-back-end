@@ -209,12 +209,14 @@ export class UnitsService {
 
     const hasFullAccess = isSuperAdmin || (isSubscribed && accessScope !== 'ASSESSMENTS_ONLY');
 
+    const lectureFilter: Record<string, any> = { unit_package_id: unitId };
+    if (!isSuperAdmin) {
+      lectureFilter.is_published = true;
+    }
+
     // Fetch ordered lectures (excluding sensitive links & cipher from default query for non-subscribed)
-    const lectures = await LectureMaterialModel.find({
-      unit_package_id: unitId,
-      is_published: true
-    })
-      .sort({ order_index: 1 })
+    const lectures = await LectureMaterialModel.find(lectureFilter)
+      .sort({ order_index: 1, createdAt: 1 })
       .select(
         hasFullAccess
           ? '-youtube_encrypted_id'
@@ -421,8 +423,19 @@ export class UnitsService {
       slug = `${slug}-${Date.now().toString(36)}`;
     }
 
+    let orderIndex = dto.order_index;
+    if (!dto.order && (!dto.order_index || dto.order_index === 1)) {
+      const count = await UnitPackageModel.countDocuments({
+        curriculum: dto.curriculum,
+        grade_level: dto.grade_level,
+        academic_term: dto.academic_term
+      });
+      orderIndex = count + 1;
+    }
+
     const unit = await UnitPackageModel.create({
       ...dto,
+      order_index: orderIndex,
       slug
     });
 
@@ -481,6 +494,46 @@ export class UnitsService {
     publicCmsCache.clear();
 
     return { success: true, deletedUnitId: unitId };
+  }
+
+  /**
+   * Super Admin: Batch reorder units.
+   */
+  public async reorderUnits(payload: any) {
+    let updates: { id: string; order_index: number }[] = [];
+    if (Array.isArray(payload)) {
+      if (typeof payload[0] === 'string') {
+        updates = (payload as string[]).map((id, idx) => ({ id, order_index: idx + 1 }));
+      } else {
+        updates = (payload as any[]).map((it, idx) => ({
+          id: it.id || it._id,
+          order_index: Math.max(1, it.order_index ?? it.order ?? (idx + 1))
+        }));
+      }
+    } else if (payload && typeof payload === 'object') {
+      if (Array.isArray(payload.unitIds)) {
+        updates = payload.unitIds.map((id: string, idx: number) => ({ id, order_index: idx + 1 }));
+      } else if (Array.isArray(payload.items)) {
+        updates = payload.items.map((it: any, idx: number) => ({
+          id: it.id || it._id,
+          order_index: Math.max(1, it.order_index ?? it.order ?? (idx + 1))
+        }));
+      }
+    }
+
+    const validUpdates = updates.filter(u => u.id && Types.ObjectId.isValid(u.id));
+    if (validUpdates.length > 0) {
+      const bulkOps = validUpdates.map(u => ({
+        updateOne: {
+          filter: { _id: new Types.ObjectId(u.id) },
+          update: { $set: { order_index: u.order_index } }
+        }
+      }));
+      await UnitPackageModel.bulkWrite(bulkOps);
+      publicCmsCache.clear();
+    }
+
+    return { success: true, count: validUpdates.length };
   }
 }
 

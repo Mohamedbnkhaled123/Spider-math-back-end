@@ -36,7 +36,7 @@ unitsRouter.get(
 );
 
 // =============================================================================
-// Super Admin Unit Management Endpoints (/api/v1/admin/units)
+// Super Admin Unit Management Endpoints (/api/v1/admin/units & /api/v1/admin/curriculum-units)
 // =============================================================================
 
 adminUnitsRouter.use(authenticateJwt, requireRoles(ROLES.SUPER_ADMIN));
@@ -46,6 +46,9 @@ adminUnitsRouter.get(
   unitsController.getAllUnitsAdmin
 );
 
+adminUnitsRouter.put('/reorder', unitsController.reorderUnits);
+adminUnitsRouter.post('/reorder', unitsController.reorderUnits);
+
 adminUnitsRouter.post(
   '/',
   validateBody(createUnitPackageDtoSchema),
@@ -53,6 +56,12 @@ adminUnitsRouter.post(
 );
 
 adminUnitsRouter.patch(
+  '/:id',
+  validateBody(updateUnitPackageDtoSchema),
+  unitsController.updateUnitPackage
+);
+
+adminUnitsRouter.put(
   '/:id',
   validateBody(updateUnitPackageDtoSchema),
   unitsController.updateUnitPackage

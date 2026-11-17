@@ -37,7 +37,7 @@ const cmsPayloadDisabled = {
 const parsedDisabled = updateCmsDtoSchema.parse(cmsPayloadDisabled);
 assert.equal(parsedDisabled.isAnnouncementActive, false, 'isAnnouncementActive camelCase must be accepted as boolean false');
 
-console.log('✔ Test 1 Passed: Announcement banner toggle option is valid and correctly parsed in CMS schema.');
+console.log('[PASS] Test 1 Passed: Announcement banner toggle option is valid and correctly parsed in CMS schema.');
 
 // =============================================================================
 // Test 2: Unit Matching for Student Mohammed Khaled (EGYPTIAN - SEC_1) & Multi-Track Normalization
@@ -108,7 +108,7 @@ const matchingGulf = databaseUnits.filter((u) => {
 assert.equal(matchingGulf.length, 1, 'Gulf track (المنهج الخليجي - الصف العاشر) matches GRADE_10 unit');
 assert.equal(matchingGulf[0]?.id, 'unit_gulf_grade10');
 
-console.log('✔ Test 2 Passed: Mohammed Khaled (EGYPTIAN - SEC_1) and all tracks correctly match available units.');
+console.log('[PASS] Test 2 Passed: Mohammed Khaled (EGYPTIAN - SEC_1) and all tracks correctly match available units.');
 
 // =============================================================================
 // Test 3: Ratio "2 / 14" Origin and Calculation Verification
@@ -128,7 +128,7 @@ assert.equal(formattedLectureStat, '2 / 14', 'Lecture progress format should acc
 const completionPercentage = Math.round((mockUnitWith14Lectures.completedLectures / mockUnitWith14Lectures.totalLectures) * 100);
 assert.equal(completionPercentage, 14, 'Completion percentage for 2 / 14 lectures should be 14%');
 
-console.log('✔ Test 3 Passed: Confirmed "14" represents the total unit lecture capacity and completion ratio (2 / 14).');
+console.log('[PASS] Test 3 Passed: Confirmed "14" represents the total unit lecture capacity and completion ratio (2 / 14).');
 
 // =============================================================================
 // Test 4: Revoke Student Unit Subscription Logic
@@ -166,7 +166,7 @@ assert.equal(remainingActiveAfterAll.length, 0, 'No active subscriptions should 
 const studentHasActiveSubscription = remainingActiveAfterAll.length > 0;
 assert.equal(studentHasActiveSubscription, false, 'Student has_active_subscription flag must transition to false');
 
-console.log('✔ Test 4 Passed: Unit subscription revocation cleanly cancels access and updates student active status.');
+console.log('[PASS] Test 4 Passed: Unit subscription revocation cleanly cancels access and updates student active status.');
 
 // =============================================================================
 // Test 5: Free Trial Lectures Access for Unsubscribed Students
@@ -227,8 +227,8 @@ const subscribedStudent = true;
 assert.equal(canStudentAccessLecture(lecturesInUnit[1]!, subscribedStudent), true);
 assert.equal(canStudentAccessLecture(lecturesInUnit[2]!, subscribedStudent), true);
 
-console.log('✔ Test 5 Passed: Free trial lectures are universally accessible to all registered students without subscription.');
+console.log('[PASS] Test 5 Passed: Free trial lectures are universally accessible to all registered students without subscription.');
 
 console.log('\n======================================================');
-console.log('✔ ALL USER REQUIREMENTS TESTS PASSED SUCCESSFULLY! ✔');
+console.log('[PASS] ALL USER REQUIREMENTS TESTS PASSED SUCCESSFULLY! [PASS]');
 console.log('======================================================');

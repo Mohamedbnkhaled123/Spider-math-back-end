@@ -86,6 +86,19 @@ export class UnitsController {
       next(error);
     }
   }
+
+  /**
+   * PUT /api/v1/admin/units/reorder
+   * POST /api/v1/admin/units/reorder
+   */
+  public async reorderUnits(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await unitsService.reorderUnits(req.body);
+      res.status(200).json(createSuccessResponse(result));
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const unitsController = new UnitsController();

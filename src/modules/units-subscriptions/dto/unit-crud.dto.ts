@@ -30,6 +30,7 @@ const unitPackageBaseObject = z.object({
   isDiscounted: z.boolean().optional(),
   validity_days: z.number().int().min(1).default(90),
   order_index: z.number().int().min(1).default(1),
+  order: z.number().int().min(1).optional(),
   is_published: z.boolean().default(true),
   thumbnail_url: z.string().url().nullable().optional()
 });
@@ -65,6 +66,7 @@ export const createUnitPackageDtoSchema = unitPackageBaseObject
     const origPrice = data.original_price_egp !== undefined ? data.original_price_egp : (data.originalPriceEgp !== undefined ? data.originalPriceEgp : null);
     const discPct = data.discount_percentage !== undefined ? data.discount_percentage : (data.discountPercentage !== undefined ? data.discountPercentage : null);
     const isDisc = data.is_discounted !== undefined ? data.is_discounted : (data.isDiscounted !== undefined ? data.isDiscounted : ((origPrice !== null && origPrice > data.price_egp) || (discPct !== null && discPct > 0)));
+    const orderIndex = data.order !== undefined ? data.order : (data.order_index ?? 1);
 
     return {
       ...data,
@@ -72,7 +74,8 @@ export const createUnitPackageDtoSchema = unitPackageBaseObject
       slug,
       original_price_egp: origPrice,
       discount_percentage: discPct,
-      is_discounted: isDisc
+      is_discounted: isDisc,
+      order_index: orderIndex
     };
   });
 
@@ -98,6 +101,9 @@ export const updateUnitPackageDtoSchema = unitPackageBaseObject.partial().superR
   }
   if (data.isDiscounted !== undefined && data.is_discounted === undefined) {
     result.is_discounted = data.isDiscounted;
+  }
+  if (data.order !== undefined && data.order_index === undefined) {
+    result.order_index = data.order;
   }
   return result;
 });

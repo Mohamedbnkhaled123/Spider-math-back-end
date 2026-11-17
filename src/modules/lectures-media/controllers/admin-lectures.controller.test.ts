@@ -62,7 +62,7 @@ async function runTests() {
     assert.strictEqual(savedLectureData.youtube_video_id, '', 'youtube_video_id should be empty');
     assert.strictEqual(savedLectureData.video_duration_sec, 0, 'video_duration_sec should be 0');
     assert.deepStrictEqual(savedLectureData.pdf_materials, [], 'pdf_materials should be empty');
-    console.log('✔ Test 1 Passed: createLecture allows empty youtubeUrl and PDF.');
+    console.log('[PASS] Test 1 Passed: createLecture allows empty youtubeUrl and PDF.');
   }
 
   // Test 2: Create lecture with PDF only (no youtubeUrl) - should succeed
@@ -116,7 +116,7 @@ async function runTests() {
     assert.strictEqual(savedLectureData.youtube_encrypted_id, '');
     assert.strictEqual(savedLectureData.pdf_materials.length, 1);
     assert.strictEqual(savedLectureData.pdf_materials[0].storage_file_id, '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs');
-    console.log('✔ Test 2 Passed: createLecture allows PDF only with empty youtubeUrl.');
+    console.log('[PASS] Test 2 Passed: createLecture allows PDF only with empty youtubeUrl.');
   }
 
   // Test 3: Create lecture with invalid youtube URL - should throw 400
@@ -148,7 +148,7 @@ async function runTests() {
     await controller.createLecture(req, res, next);
     assert.ok(capturedError, 'Should throw error on invalid non-empty youtubeUrl');
     assert.strictEqual(capturedError.statusCode, 400);
-    console.log('✔ Test 3 Passed: createLecture rejects invalid non-empty youtubeUrl.');
+    console.log('[PASS] Test 3 Passed: createLecture rejects invalid non-empty youtubeUrl.');
   }
 
   // Test 4: updateLecture clearing youtubeUrl
@@ -191,7 +191,7 @@ async function runTests() {
     assert.strictEqual(updatedLecture.youtube_video_id, '');
     assert.strictEqual(updatedLecture.youtube_url, '');
     assert.strictEqual(updatedLecture.video_duration_sec, 0, 'video_duration_sec should be reset to 0 when clearing youtubeUrl');
-    console.log('✔ Test 4 Passed: updateLecture allows clearing youtubeUrl to empty string.');
+    console.log('[PASS] Test 4 Passed: updateLecture allows clearing youtubeUrl to empty string.');
   }
 
   // Test 5: updateLecture clearing googleDrivePdfFileId
@@ -230,7 +230,7 @@ async function runTests() {
     assert.strictEqual(responseStatus, 200);
     assert.strictEqual(updatedLecture.google_drive_pdf_id, '');
     assert.deepStrictEqual(updatedLecture.pdf_materials, []);
-    console.log('✔ Test 5 Passed: updateLecture allows clearing googleDrivePdfFileId.');
+    console.log('[PASS] Test 5 Passed: updateLecture allows clearing googleDrivePdfFileId.');
   }
 
   // Test 6: updateLecture updating isPrintAllowed without resending googleDrivePdfFileId
@@ -270,7 +270,7 @@ async function runTests() {
     assert.strictEqual(responseStatus, 200);
     assert.strictEqual(updatedLecture.is_print_allowed, true);
     assert.strictEqual(updatedLecture.pdf_materials[0].is_print_allowed, true);
-    console.log('✔ Test 6 Passed: updateLecture updates isPrintAllowed without resending googleDrivePdfFileId.');
+    console.log('[PASS] Test 6 Passed: updateLecture updates isPrintAllowed without resending googleDrivePdfFileId.');
   }
 
   // Test 7: LecturesService.getSecurePlayback safely handles lecture without video
@@ -317,7 +317,7 @@ async function runTests() {
     assert.strictEqual(playbackResult.sessionVideoToken, '', 'sessionVideoToken should be empty');
     assert.strictEqual(playbackResult.pdfMaterials.length, 1);
     assert.strictEqual(playbackResult.pdfMaterials[0].storageFileId, 'drive_id_123');
-    console.log('✔ Test 7 Passed: getSecurePlayback safely returns empty video strings when lecture has no video.');
+    console.log('[PASS] Test 7 Passed: getSecurePlayback safely returns empty video strings when lecture has no video.');
   }
 
   // Test 8: createLecture with pdfMaterials array and durationMinutes without youtubeUrl
@@ -375,7 +375,7 @@ async function runTests() {
     assert.strictEqual(savedLectureData.pdf_materials.length, 2);
     assert.strictEqual(savedLectureData.pdf_materials[0].storage_file_id, 'drive_file_abc_1');
     assert.strictEqual(savedLectureData.pdf_materials[1].storage_file_id, 'drive_file_abc_2');
-    console.log('✔ Test 8 Passed: createLecture supports pdfMaterials array and ensures 0 video duration when video is absent.');
+    console.log('[PASS] Test 8 Passed: createLecture supports pdfMaterials array and ensures 0 video duration when video is absent.');
   }
 
   // Test 9: deleteLecture unlinks linked assessments (sets lecture_id = null)
@@ -419,7 +419,7 @@ async function runTests() {
     assert.strictEqual(responseStatus, 200);
     assert.deepStrictEqual(unlinkedAssessmentFilter, { lecture_id: dummyLectureId });
     assert.deepStrictEqual(unlinkedAssessmentUpdate, { $set: { lecture_id: null } });
-    console.log('✔ Test 9 Passed: deleteLecture unlinks assessments by setting lecture_id to null.');
+    console.log('[PASS] Test 9 Passed: deleteLecture unlinks assessments by setting lecture_id to null.');
   }
 
   console.log('All AdminLecturesController unit tests PASSED successfully!');
