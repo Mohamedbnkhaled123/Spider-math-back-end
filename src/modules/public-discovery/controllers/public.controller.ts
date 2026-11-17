@@ -10,6 +10,7 @@ import { placementService } from '../../leads-placement/services/placement.servi
 import { sitemapService } from '../services/sitemap.service';
 import { createSuccessResponse } from '../../../common/interfaces/api-response.interface';
 import { PlacementQueryDto } from '../../leads-placement/dto/placement-query.dto';
+import { CloudinarySignedUploadAdapter } from '../../assessments-grading/adapters/cloudinary-signed-upload.adapter';
 
 export class PublicController {
   /**
@@ -42,6 +43,19 @@ export class PublicController {
    * GET /api/v1/public/placement-test?curriculum=EGYPTIAN&gradeLevel=SEC_3&term=TERM_1
    * Fetches sanitized placement test questions with hidden answer keys.
    */
+  /**
+   * GET /api/v1/public/placement-test/upload-signature
+   * Issues signed Cloudinary parameters scoped to 'spider-math-homework/' for placement essay photos.
+   */
+  public async getPlacementUploadSignature(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const signatureData = CloudinarySignedUploadAdapter.generatePlacementHomeworkSignature();
+      res.status(200).json(createSuccessResponse(signatureData));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   public async getPlacementTest(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const query = req.query as unknown as PlacementQueryDto;

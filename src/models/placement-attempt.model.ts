@@ -19,6 +19,8 @@ export type AcademicLevelBadge = (typeof ACADEMIC_LEVEL_BADGES)[number];
 export interface IPlacementAnswerItem {
   question_id: string;
   selected_option: number;
+  text_answer?: string;
+  uploaded_image_urls?: string[];
   is_correct: boolean;
 }
 
@@ -48,7 +50,9 @@ export interface IPlacementAttemptDocument extends IPlacementAttempt, Document<T
 const PlacementAnswerItemSchema = new Schema<IPlacementAnswerItem>(
   {
     question_id: { type: String, required: true },
-    selected_option: { type: Number, required: true },
+    selected_option: { type: Number, required: false, default: -1 },
+    text_answer: { type: String, required: false, default: '' },
+    uploaded_image_urls: { type: [String], required: false, default: [] },
     is_correct: { type: Boolean, required: true }
   },
   { _id: false }

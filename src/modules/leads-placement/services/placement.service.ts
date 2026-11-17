@@ -9,6 +9,7 @@ import { generatePlacementLeadWhatsAppLink } from '../../../common/utils/whatsap
 import { PlacementQueryDto } from '../dto/placement-query.dto';
 import { SubmitPlacementDto } from '../dto/submit-placement.dto';
 import { UnlockPlacementDto } from '../dto/unlock-placement.dto';
+import { QuestionGraderFactory } from '../../assessments-grading/factories/question-grader.factory';
 
 export class PlacementService {
   /**
@@ -75,7 +76,8 @@ export class PlacementService {
       questions: assessment.questions.map((q: any, qIdx: number) => ({
         id: q._id ? q._id.toString() : `q_${qIdx}`,
         question_id: q._id ? q._id.toString() : `q_${qIdx}`,
-        questionType: q.question_type,
+        question_type: q.question_type || 'MCQ',
+        questionType: q.question_type || 'MCQ',
         questionText: q.question_text,
         question_text: q.question_text,
         questionImageUrl: q.question_image_url || null,
@@ -103,14 +105,14 @@ export class PlacementService {
   public async submitAnonymousPlacement(dto: SubmitPlacementDto) {
     const term = dto.academicTerm || 'TERM_1';
 
-    // 1. Fetch assessment with correct_option_index for server-authoritative evaluation
+    // 1. Fetch assessment with answer keys for server-authoritative evaluation (MCQ, INPUT_TEXT, ESSAY_PHOTO)
     let assessment: any = await AssessmentModel.findOne({
       curriculum: dto.curriculum,
       grade_level: dto.gradeLevel,
       academic_term: term,
       is_placement_test: true,
       is_published: true
-    }).select('+questions.correct_option_index');
+    }).select('+questions.correct_option_index +questions.accepted_answers +questions.model_answer_text');
 
     if (!assessment) {
       assessment = await AssessmentModel.findOne({
@@ -119,37 +121,74 @@ export class PlacementService {
         academic_term: term,
         assessment_type: 'QUIZ',
         is_published: true
-      }).select('+questions.correct_option_index');
+      }).select('+questions.correct_option_index +questions.accepted_answers +questions.model_answer_text');
     }
 
     // Question answers map
-    const answerKeyMap = new Map<string, { correctIndex: number; text: string }>();
-    if (assessment) {
-      for (const q of assessment.questions) {
-        if (q._id) {
-          answerKeyMap.set(q._id.toString(), {
-            correctIndex: q.correct_option_index ?? 0,
-            text: q.question_text
-          });
-        }
-      }
+    const answerKeyMap = new Map<string, any>();
+    let totalPossiblePoints = 0;
+    if (assessment && Array.isArray(assessment.questions)) {
+      assessment.questions.forEach((q: any, qIdx: number) => {
+        const keyId = q._id ? q._id.toString() : `q_${qIdx}`;
+        answerKeyMap.set(keyId, q);
+        totalPossiblePoints += Number(q.points) || 1;
+      });
     }
 
+    const inputTextGrader = QuestionGraderFactory.getGrader('INPUT_TEXT');
     let correctCount = 0;
-    const evaluatedAnswers = dto.answers.map((ans) => {
-      const keyData = answerKeyMap.get(ans.questionId);
-      const isCorrect = keyData !== undefined && ans.selectedOption === keyData.correctIndex;
+    let earnedPoints = 0;
+
+    const evaluatedAnswers = (dto.answers || []).map((ans) => {
+      const q = answerKeyMap.get(ans.questionId);
+      let isCorrect = false;
+      let qPointsEarned = 0;
+
+      if (q) {
+        const qPoints = Number(q.points) || 1;
+        const rawType = String(q.question_type || 'MCQ').toUpperCase();
+        if (rawType === 'INPUT_TEXT') {
+          const gradeRes = inputTextGrader.grade(
+            {
+              questionId: ans.questionId,
+              questionType: 'INPUT_TEXT',
+              acceptedAnswers: q.accepted_answers,
+              modelAnswerText: q.model_answer_text,
+              points: qPoints
+            },
+            { textAnswer: ans.textAnswer || '' }
+          );
+          isCorrect = gradeRes.isCorrect;
+          qPointsEarned = gradeRes.pointsEarned;
+        } else if (rawType === 'ESSAY_PHOTO' || rawType === 'ESSAY') {
+          const hasImages = Array.isArray(ans.uploadedImageUrls) && ans.uploadedImageUrls.length > 0;
+          const hasText = Boolean(ans.textAnswer && ans.textAnswer.trim().length > 0);
+          isCorrect = hasImages || hasText;
+          qPointsEarned = isCorrect ? qPoints : 0;
+        } else {
+          isCorrect =
+            typeof ans.selectedOption === 'number' &&
+            ans.selectedOption >= 0 &&
+            ans.selectedOption === (q.correct_option_index ?? 0);
+          qPointsEarned = isCorrect ? qPoints : 0;
+        }
+      }
+
       if (isCorrect) correctCount++;
+      earnedPoints += qPointsEarned;
 
       return {
         question_id: ans.questionId,
-        selected_option: ans.selectedOption,
+        selected_option: typeof ans.selectedOption === 'number' ? ans.selectedOption : -1,
+        text_answer: ans.textAnswer || '',
+        uploaded_image_urls: Array.isArray(ans.uploadedImageUrls) ? ans.uploadedImageUrls : [],
         is_correct: isCorrect
       };
     });
 
-    const totalQuestions = Math.max(1, dto.answers.length);
-    const scorePct = Math.round((correctCount / totalQuestions) * 100);
+    const totalQuestions = Math.max(1, assessment?.questions?.length || evaluatedAnswers.length);
+    const maxScore = Math.max(1, totalPossiblePoints || totalQuestions);
+    const scorePct = Math.min(100, Math.round((correctCount / totalQuestions) * 100));
 
     // Compute Academic Level Badge
     let badge: AcademicLevelBadge;
@@ -167,10 +206,9 @@ export class PlacementService {
     const strongTopics: string[] = [];
     const weakTopics: string[] = [];
 
-    dto.answers.forEach((_ans, idx) => {
+    evaluatedAnswers.forEach((evaluated, idx) => {
       const topicLabel = `الموضوع ${idx + 1}`;
-      const isCorrect = evaluatedAnswers[idx]?.is_correct;
-      if (isCorrect) {
+      if (evaluated.is_correct) {
         strongTopics.push(topicLabel);
       } else {
         weakTopics.push(topicLabel);
@@ -195,10 +233,19 @@ export class PlacementService {
       expires_if_unclaimed_at: new Date(Date.now() + 48 * 60 * 60 * 1000)
     });
 
+    const passThreshold = Number((assessment as any)?.pass_percentage ?? 50);
+
     return {
       attemptId: attempt._id,
       status: 'LOCKED_BEHIND_GATE',
-      message: 'Placement assessment submitted successfully. Provide your contact details to unlock your comprehensive report.'
+      message: 'Placement assessment submitted successfully. Provide your contact details to unlock your comprehensive report.',
+      score: Math.round(earnedPoints * 100) / 100,
+      maxScore: Math.round(maxScore * 100) / 100,
+      percentage: scorePct,
+      passed: scorePct >= passThreshold,
+      totalQuestions,
+      correctAnswersCount: correctCount,
+      isUnlocked: false
     };
   }
 

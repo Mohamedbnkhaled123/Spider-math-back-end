@@ -1335,35 +1335,45 @@ export class AssessmentsService {
 
     // 3. Build full review of ALL questions (correct and incorrect) for student review
     const questionsReview: any[] = [];
+    const totalEssayQuestions = questions.filter(
+      (x: any) => x.question_type === 'ESSAY_PHOTO' || x.question_type === 'ESSAY'
+    ).length;
+    const hasAnyTaggedUploadedImg = (submission.uploaded_solution_imgs || []).some((img: any) =>
+      Boolean(img.question_id)
+    );
+
     questions.forEach((q: any, idx: number) => {
+      const qIdStr = q._id.toString();
       const isMcq = q.question_type === 'MCQ';
       const isInputText = q.question_type === 'INPUT_TEXT';
-      const isEssay = q.question_type === 'ESSAY_PHOTO';
+      const isEssay = q.question_type === 'ESSAY_PHOTO' || q.question_type === 'ESSAY';
 
-      const mcqAns: any = isMcq ? mcqAnswersMap.get(q._id.toString()) : null;
-      const textAns: any = isInputText ? textAnswersMap.get(q._id.toString()) : null;
-      const essayAns: any = isEssay ? essayAnswersMap.get(q._id.toString()) : null;
+      const mcqAns: any = isMcq ? mcqAnswersMap.get(qIdStr) : null;
+      const textAns: any = isInputText ? textAnswersMap.get(qIdStr) : null;
+      let essayAns: any = isEssay ? essayAnswersMap.get(qIdStr) : null;
+      if (!essayAns && isEssay && totalEssayQuestions === 1 && (submission.essay_answers || []).length === 1) {
+        essayAns = submission.essay_answers[0];
+      }
 
       let isCorrect: boolean | undefined = undefined;
       let awardedPoints: number | undefined = undefined;
 
       if (isMcq) {
         isCorrect = mcqAns ? !!mcqAns.is_correct : false;
-        awardedPoints = isCorrect ? (q.points || 1) : 0;
+        awardedPoints = isCorrect ? (Number(q.points) || 1) : 0;
       } else if (isInputText) {
         isCorrect = textAns ? !!textAns.is_correct : false;
-        awardedPoints = isCorrect ? (q.points || 1) : 0;
+        awardedPoints = isCorrect ? (Number(q.points) || 1) : 0;
       } else if (isEssay) {
         if (essayAns) {
-          awardedPoints = essayAns.points_earned;
-          isCorrect = essayAns.points_earned > 0;
+          awardedPoints = Math.round((Number(essayAns.points_earned) || 0) * 100) / 100;
+          isCorrect = awardedPoints > 0;
         } else if (isPublished && submission.essay_manual_score !== undefined && submission.essay_manual_score !== null) {
-          const totalEssay = questions.filter((x: any) => x.question_type === 'ESSAY_PHOTO').length;
-          if (totalEssay === 1) {
-            awardedPoints = submission.essay_manual_score;
-            isCorrect = submission.essay_manual_score > 0;
-          } else if (totalEssay > 1) {
-            awardedPoints = Math.round((submission.essay_manual_score / totalEssay) * 10) / 10;
+          if (totalEssayQuestions === 1) {
+            awardedPoints = Math.round((Number(submission.essay_manual_score) || 0) * 100) / 100;
+            isCorrect = awardedPoints > 0;
+          } else if (totalEssayQuestions > 1) {
+            awardedPoints = Math.round((Number(submission.essay_manual_score) / totalEssayQuestions) * 100) / 100;
             isCorrect = awardedPoints > 0;
           }
         }
@@ -1389,11 +1399,25 @@ export class AssessmentsService {
         : '';
 
       const customNote = (submission.custom_mistake_cases || []).find(
-        (c: any) => c.question_id && c.question_id.toString() === q._id.toString()
+        (c: any) => c.question_id && c.question_id.toString() === qIdStr
       );
 
+      const questionSolutionImages = (submission.uploaded_solution_imgs || [])
+        .filter((img: any) => {
+          if (img.question_id) {
+            return img.question_id.toString() === qIdStr;
+          }
+          return !hasAnyTaggedUploadedImg && totalEssayQuestions === 1 && isEssay;
+        })
+        .map((img: any) => ({
+          questionId: img.question_id ? img.question_id.toString() : qIdStr,
+          imageUrl: img.image_url,
+          rotationDeg: img.rotation_deg || 0,
+          sizeKb: img.size_kb
+        }));
+
       questionsReview.push({
-        questionId: q._id.toString(),
+        questionId: qIdStr,
         questionOrder: idx + 1,
         questionType: q.question_type,
         questionText: q.question_text || `السؤال رقم ${idx + 1}`,
@@ -1404,15 +1428,17 @@ export class AssessmentsService {
         correctOptionIndex: isPublished ? q.correct_option_index : undefined,
         correctAnswerText: correctText,
         isCorrect,
-        points: q.points || 1,
+        points: Number(q.points) || 1,
         awardedPoints,
         youtubeSolutionUrl: isPublished ? (q.youtube_solution_url || customNote?.youtube_solution_url || null) : null,
-        teacherNote: customNote ? customNote.error_note : null,
-        acceptedAnswers: isPublished && isInputText ? (q.accepted_answers || []) : undefined
+        teacherNote: customNote ? customNote.error_note : (essayAns?.teacher_note || null),
+        acceptedAnswers: isPublished && isInputText ? (q.accepted_answers || []) : undefined,
+        studentSolutionImages: questionSolutionImages
       });
     });
 
     const essaySolutionImages = (submission.uploaded_solution_imgs || []).map((img: any) => ({
+      questionId: img.question_id ? img.question_id.toString() : undefined,
       imageUrl: img.image_url,
       rotationDeg: img.rotation_deg || 0,
       sizeKb: img.size_kb

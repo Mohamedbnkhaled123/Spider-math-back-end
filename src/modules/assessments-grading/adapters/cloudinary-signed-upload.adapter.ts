@@ -58,6 +58,18 @@ export class CloudinarySignedUploadAdapter {
       );
     }
 
+    return this.buildSignaturePayload(folder);
+  }
+
+  /**
+   * Generates an ephemeral upload signature scoped strictly to 'spider-math-homework/'
+   * for anonymous placement-test ESSAY_PHOTO uploads.
+   */
+  static generatePlacementHomeworkSignature(): ICloudinarySignaturePayload {
+    return this.buildSignaturePayload(this.HOMEWORK_FOLDER);
+  }
+
+  private static buildSignaturePayload(folder: string): ICloudinarySignaturePayload {
     const timestamp = Math.floor(Date.now() / 1000);
 
     // Cloudinary signature calculation: sorted params "folder=...&timestamp=..." + api_secret

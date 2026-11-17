@@ -17,10 +17,12 @@ export const submitPlacementDtoSchema = z
       .array(
         z.object({
           questionId: z.string({ required_error: 'questionId is required' }),
-          selectedOption: z.number({ required_error: 'selectedOption index is required' }).int().min(0)
+          selectedOption: z.number().int().min(-1).optional().nullable(),
+          textAnswer: z.string().trim().max(500).optional().nullable(),
+          uploadedImageUrls: z.array(z.string().trim()).max(5).optional().default([])
         })
       )
-      .min(1, 'At least one answer must be provided')
+      .default([])
   })
   .superRefine((data, ctx) => {
     if (!isValidGradeForCurriculum(data.curriculum as CurriculumType, data.gradeLevel)) {

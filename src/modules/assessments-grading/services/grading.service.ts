@@ -201,31 +201,47 @@ export class GradingService {
       ? (mcqPoints + textPoints)
       : (Number(submission.mcq_auto_score) || 0);
 
-    let essayScore = Number(dto.essay_manual_score) || 0;
+    let essayScore = Math.round((Number(dto.essay_manual_score) || 0) * 100) / 100;
     if (dto.essay_answers && dto.essay_answers.length > 0) {
-      const existingMap = new Map<string, IEssayAnswer>(
-        (submission.essay_answers || []).map((ea: any) => [ea.question_id.toString(), ea])
-      );
-      for (const ea of dto.essay_answers) {
-        const validQId = Types.ObjectId.isValid(ea.question_id)
-          ? new Types.ObjectId(ea.question_id)
+      const existingMap = new Map<string, IEssayAnswer>();
+      for (const ea of submission.essay_answers || []) {
+        if (ea.question_id) {
+          existingMap.set(ea.question_id.toString(), {
+            question_id: ea.question_id,
+            points_earned: Number(ea.points_earned) || 0,
+            decision: ea.decision || null,
+            teacher_note: ea.teacher_note || ''
+          });
+        }
+      }
+      for (const eq of dto.essay_answers) {
+        const validQId = Types.ObjectId.isValid(eq.question_id)
+          ? new Types.ObjectId(eq.question_id)
           : ((assessment.questions?.[0]?._id as Types.ObjectId) || new Types.ObjectId());
-        existingMap.set(ea.question_id, {
+        const key = validQId.toString();
+        existingMap.set(key, {
           question_id: validQId,
-          points_earned: Number(ea.points_earned) || 0,
-          decision: ea.decision || null,
-          teacher_note: ea.teacher_note || ''
+          points_earned: Number(eq.points_earned) || 0,
+          decision: eq.decision || null,
+          teacher_note: eq.teacher_note || ''
         });
       }
       submission.essay_answers = Array.from(existingMap.values());
-      const fromAnswers = submission.essay_answers.reduce((sum: number, ea: any) => sum + (Number(ea.points_earned) || 0), 0);
-      essayScore = Math.max(essayScore, fromAnswers);
-    } else if (submission.essay_answers && submission.essay_answers.length > 0) {
-      const fromAnswers = submission.essay_answers.reduce((sum: number, ea: any) => sum + (Number(ea.points_earned) || 0), 0);
-      essayScore = Math.max(essayScore, fromAnswers);
+      const fromAnswers = submission.essay_answers.reduce(
+        (sum: number, ea: any) => sum + (Number(ea.points_earned) || 0),
+        0
+      );
+      // Authoritative sum of per-question essay grades (preserves 0.5 half-points & downward adjustments)
+      essayScore = Math.round(fromAnswers * 100) / 100;
+    } else if (submission.essay_answers && submission.essay_answers.length > 0 && (dto.essay_manual_score === undefined || dto.essay_manual_score === null)) {
+      const fromAnswers = submission.essay_answers.reduce(
+        (sum: number, ea: any) => sum + (Number(ea.points_earned) || 0),
+        0
+      );
+      essayScore = Math.round(fromAnswers * 100) / 100;
     }
 
-    const finalTotalScore = totalAutoScore + essayScore;
+    const finalTotalScore = Math.round((totalAutoScore + essayScore) * 100) / 100;
 
     submission.mcq_auto_score = totalAutoScore;
     submission.essay_manual_score = essayScore;
@@ -385,12 +401,15 @@ export class GradingService {
       ? (mcqPoints + textPoints)
       : (Number(submission.mcq_auto_score) || 0);
 
+    const hasEssayAnswers = Array.isArray(submission.essay_answers) && submission.essay_answers.length > 0;
     const essayAnswersScore = (submission.essay_answers || []).reduce(
       (sum: number, ea: any) => sum + (Number(ea.points_earned) || 0),
       0
     );
-    const effectiveEssayScore = Math.max(Number(submission.essay_manual_score) || 0, essayAnswersScore);
-    const finalTotalScore = totalAutoScore + effectiveEssayScore;
+    const effectiveEssayScore = hasEssayAnswers
+      ? Math.round(essayAnswersScore * 100) / 100
+      : Math.round((Number(submission.essay_manual_score) || 0) * 100) / 100;
+    const finalTotalScore = Math.round((totalAutoScore + effectiveEssayScore) * 100) / 100;
 
     // Defensive guards for legacy or offline submissions
     if (!submission.server_started_at) {

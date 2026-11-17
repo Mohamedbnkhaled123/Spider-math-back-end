@@ -50,6 +50,15 @@ publicRouter.get(
   publicController.getMyPlacementAttempt
 );
 
+/**
+ * GET /api/v1/public/placement-test/upload-signature
+ * Scoped Cloudinary upload signature for ephemeral placement essay solution images
+ */
+publicRouter.get(
+  '/placement-test/upload-signature',
+  publicController.getPlacementUploadSignature
+);
+
 
 /**
  * GET /api/v1/public/placement-test
