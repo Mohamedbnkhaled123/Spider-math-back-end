@@ -8,27 +8,141 @@ import { ROLES, UserRole } from '../../../common/constants/roles.constant';
 import { deviceWhitelistCache } from '../../../config/cache.config';
 import { generateStudentHaCode } from '../../../common/utils/ha-code-generator.util';
 import { NotificationFactory } from '../../../common/factories/notification.factory';
-import { UserModel, IApprovedDevice } from '../../../models/user.model';
+import { UserModel, IApprovedDevice, IUserDocument } from '../../../models/user.model';
 import { SubscriptionModel } from '../../../models/subscription.model';
 import { NotificationModel } from '../../../models/notification.model';
 import { PlacementAttemptModel } from '../../../models/placement-attempt.model';
 import { CmsConfigModel } from '../../../models/cms-config.model';
 import { GoogleLoginDto } from '../dto/google-login.dto';
+import {
+  AdminLoginDto,
+  SetupAccessCodeDto,
+  TeacherGoogleLoginDto,
+  UpdateAdminSecurityDto
+} from '../dto/admin-portal-auth.dto';
 import { CompleteProfileDto } from '../dto/complete-profile.dto';
 import { ParentActivateLoginDto, ParentLinkChildDto } from '../dto/parent-auth.dto';
 import { DirectRegisterStudentDto } from '../dto/direct-register.dto';
 import { UpdateProfileDto } from '../dto/update-profile.dto';
 import { DeviceDecisionDto } from '../dto/device-decision.dto';
 import { validatePhoneNumber, arePhoneNumbersIdentical } from '../../../common/utils/phone-validator.util';
+import { hashAccessCode, verifyAccessCode } from '../../../common/utils/access-code-hash.util';
 import { IJwtPayload } from '../../../common/interfaces/auth-payload.interface';
 import { primeStudentLastSeenThrottle } from '../../../middlewares/auth.middleware';
 import { PresenceTrackerService } from '../../parent-portal/services/presence-tracker.service';
 
+const ADMIN_AUTH_ATTEMPT_WINDOW_MS = 5 * 60 * 1000;
+const ADMIN_AUTH_MAX_ATTEMPTS = 15;
+
 export class AuthService {
   private googleClient: OAuth2Client;
+  private adminAuthAttempts = new Map<string, { count: number; resetAt: number }>();
 
   constructor() {
     this.googleClient = new OAuth2Client(env.GOOGLE_CLIENT_ID);
+  }
+
+  private enforceAdminAuthRateLimit(bucketKey: string): void {
+    const now = Date.now();
+    const record = this.adminAuthAttempts.get(bucketKey);
+    if (!record || record.resetAt <= now) {
+      this.adminAuthAttempts.set(bucketKey, { count: 1, resetAt: now + ADMIN_AUTH_ATTEMPT_WINDOW_MS });
+      return;
+    }
+    if (record.count >= ADMIN_AUTH_MAX_ATTEMPTS) {
+      throw new AppError(
+        'تم تجاوز الحد المسموح لمحاولات الدخول. يرجى الانتظار 5 دقائق.',
+        429,
+        ERROR_CODES.TOO_MANY_REQUESTS_429
+      );
+    }
+    record.count += 1;
+  }
+
+  private clearAdminAuthRateLimit(bucketKey: string): void {
+    this.adminAuthAttempts.delete(bucketKey);
+  }
+
+  /**
+   * Verifies either a Google OAuth2 Access Token (ya29...) or GIS ID Token and returns normalized identity.
+   */
+  private async verifyGoogleOAuthToken(
+    idToken: string,
+    emailOverride?: string,
+    fullNameOverride?: string
+  ): Promise<{ googleId: string; email: string; fullName: string; avatarUrl: string | null }> {
+    let googleId: string;
+    let email: string | undefined;
+    let fullName: string;
+    let avatarUrl: string | null = null;
+
+    if (
+      env.NODE_ENV !== 'production' &&
+      (idToken === 'DEV_MOCK_GOOGLE_TOKEN' ||
+        idToken.startsWith('DEV_MOCK_') ||
+        idToken.startsWith('test_token_') ||
+        idToken.startsWith('mock_') ||
+        idToken.startsWith('dev_'))
+    ) {
+      if (emailOverride) {
+        email = emailOverride.trim().toLowerCase();
+        googleId = `gid_${Buffer.from(email).toString('hex').slice(0, 24)}`;
+        fullName = fullNameOverride?.trim() || (email.split('@')[0] as string) || 'طالب سبايدر ماث';
+      } else if (idToken === 'DEV_MOCK_GOOGLE_TOKEN') {
+        googleId = 'mock-google-id-111122223333';
+        email = 'student.test@spidermath.com';
+        fullName = 'أحمد محمد علي';
+      } else {
+        googleId = idToken.replace(/^(test_token_|DEV_MOCK_|mock_|dev_)/, 'google_id_');
+        email = `${googleId}@spidermath.test`;
+        fullName = fullNameOverride || 'Test Student';
+      }
+      return { googleId, email, fullName, avatarUrl };
+    }
+
+    try {
+      if (idToken.startsWith('ya29.')) {
+        const googleRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${idToken}` }
+        });
+        if (!googleRes.ok) {
+          throw new AppError('Google OAuth token verification failed. Please re-authenticate.', 401, ERROR_CODES.INVALID_TOKEN_401);
+        }
+        const googlePayload: any = await googleRes.json();
+        googleId = googlePayload.sub;
+        email = typeof googlePayload.email === 'string' ? googlePayload.email.trim().toLowerCase() : undefined;
+        fullName = googlePayload.name || 'Spider Math User';
+        avatarUrl = googlePayload.picture || null;
+      } else {
+        const ticket = await this.googleClient.verifyIdToken({
+          idToken,
+          audience: env.GOOGLE_CLIENT_ID
+        });
+        const googlePayload = ticket.getPayload();
+
+        if (!googlePayload || !googlePayload.sub) {
+          throw new AppError('Invalid Google ID Token payload', 401, ERROR_CODES.INVALID_TOKEN_401);
+        }
+
+        googleId = googlePayload.sub;
+        email = typeof googlePayload.email === 'string' ? googlePayload.email.trim().toLowerCase() : undefined;
+        fullName = googlePayload.name || 'Spider Math User';
+        avatarUrl = googlePayload.picture || null;
+      }
+
+      if (!email) {
+        throw new AppError('Google account does not have an associated verified email address', 400, ERROR_CODES.BAD_REQUEST_400);
+      }
+
+      return { googleId, email, fullName, avatarUrl };
+    } catch (err: any) {
+      if (err instanceof AppError) throw err;
+      throw new AppError(
+        `Google OAuth verification failed: ${err.message}`,
+        401,
+        ERROR_CODES.INVALID_TOKEN_401
+      );
+    }
   }
 
   /**
@@ -57,80 +171,11 @@ export class AuthService {
    * Verifies Google OAuth2 ID Token and handles 1st device auto-approval vs 2nd device additive request.
    */
   public async loginWithGoogle(dto: GoogleLoginDto, ipAddress?: string) {
-    let googleId: string;
-    let email: string | undefined;
-    let fullName: string;
-    let avatarUrl: string | null = null;
-
-    // Verify Google ID Token (support mock in test & development mode for testing & browser simulation)
-    if (
-      env.NODE_ENV !== 'production' &&
-      (dto.idToken === 'DEV_MOCK_GOOGLE_TOKEN' ||
-        dto.idToken.startsWith('DEV_MOCK_') ||
-        dto.idToken.startsWith('test_token_') ||
-        dto.idToken.startsWith('mock_') ||
-        dto.idToken.startsWith('dev_'))
-    ) {
-      if (dto.email) {
-        email = dto.email.trim().toLowerCase();
-        googleId = `gid_${Buffer.from(email).toString('hex').slice(0, 24)}`;
-        fullName = dto.fullName?.trim() || (email.split('@')[0] as string) || 'طالب سبايدر ماث';
-        avatarUrl = null;
-      } else if (dto.idToken === 'DEV_MOCK_GOOGLE_TOKEN') {
-        googleId = 'mock-google-id-111122223333';
-        email = 'student.test@spidermath.com';
-        fullName = 'أحمد محمد علي';
-        avatarUrl = null;
-      } else {
-        googleId = dto.idToken.replace(/^(test_token_|DEV_MOCK_|mock_|dev_)/, 'google_id_');
-        email = `${googleId}@spidermath.test`;
-        fullName = dto.fullName || 'Test Student';
-      }
-    } else {
-      try {
-        if (dto.idToken.startsWith('ya29.')) {
-          // Real Google OAuth2 Access Token (selected from native Google account chooser popup)
-          const googleRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-            headers: { Authorization: `Bearer ${dto.idToken}` }
-          });
-          if (!googleRes.ok) {
-            throw new AppError('Google OAuth token verification failed. Please re-authenticate.', 401, ERROR_CODES.INVALID_TOKEN_401);
-          }
-          const googlePayload: any = await googleRes.json();
-          googleId = googlePayload.sub;
-          email = googlePayload.email;
-          fullName = googlePayload.name || 'Spider Student';
-          avatarUrl = googlePayload.picture || null;
-        } else {
-          // Real Google ID Token (Google Identity Services JWT)
-          const ticket = await this.googleClient.verifyIdToken({
-            idToken: dto.idToken,
-            audience: env.GOOGLE_CLIENT_ID
-          });
-          const googlePayload = ticket.getPayload();
-
-          if (!googlePayload || !googlePayload.sub) {
-            throw new AppError('Invalid Google ID Token payload', 401, ERROR_CODES.INVALID_TOKEN_401);
-          }
-
-          googleId = googlePayload.sub;
-          email = googlePayload.email;
-          fullName = googlePayload.name || 'Spider Student';
-          avatarUrl = googlePayload.picture || null;
-        }
-
-        if (!email) {
-          throw new AppError('Google account does not have an associated verified email address', 400, ERROR_CODES.BAD_REQUEST_400);
-        }
-      } catch (err: any) {
-        if (err instanceof AppError) throw err;
-        throw new AppError(
-          `Google OAuth verification failed: ${err.message}`,
-          401,
-          ERROR_CODES.INVALID_TOKEN_401
-        );
-      }
-    }
+    const { googleId, email, fullName, avatarUrl } = await this.verifyGoogleOAuthToken(
+      dto.idToken,
+      dto.email,
+      dto.fullName
+    );
 
     // Look up user by google_id or email
     let user = await UserModel.findOne({
@@ -1081,28 +1126,372 @@ export class AuthService {
     };
   }
 
-  /**
-   * Logs in official Super Admin and returns real HS512 JWT token.
-   */
-  public async adminLogin() {
-    const admin = await UserModel.findOne({ role: ROLES.SUPER_ADMIN });
-    if (!admin) {
-      throw new AppError('Super Admin user not found', 404, ERROR_CODES.STUDENT_NOT_FOUND_404);
-    }
+  private buildAdminAuthSession(admin: IUserDocument, portalScope: 'teacher' | 'dev') {
     const token = this.generateToken({
       sub: admin._id.toString(),
       role: admin.role,
-      deviceUuid: 'admin_primary_device'
+      deviceUuid: portalScope === 'dev' ? 'dev_primary_device' : 'admin_primary_device'
     });
     return {
       token,
+      portalScope,
       user: {
         _id: admin._id.toString(),
         full_name: admin.full_name,
-        email: admin.email,
+        email: admin.teacher_google_email || admin.email,
         role: admin.role
       }
     };
+  }
+
+  private getConfiguredAdminEmails(admin: IUserDocument): Set<string> {
+    const allowed = new Set<string>();
+    if (admin.teacher_google_email) {
+      allowed.add(admin.teacher_google_email.trim().toLowerCase());
+    }
+    const envEmails = (env.ADMIN_GOOGLE_EMAILS || '')
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+    for (const email of envEmails) {
+      allowed.add(email);
+    }
+    if (
+      admin.email &&
+      !admin.email.endsWith('@spidermath.com') &&
+      !admin.email.endsWith('@spidermath.edu') &&
+      !admin.email.endsWith('@spidermath.test')
+    ) {
+      allowed.add(admin.email.trim().toLowerCase());
+    }
+    return allowed;
+  }
+
+  /**
+   * Public status probe for hidden admin portals.
+   * Exposes ONLY setup booleans — never hashes or emails.
+   */
+  public async getAdminPortalStatus() {
+    const admin = await UserModel.findOne({ role: ROLES.SUPER_ADMIN })
+      .select('+teacher_access_code_hash +dev_access_code_hash teacher_google_email email');
+    if (!admin) {
+      return {
+        teacherCodeSet: false,
+        teacherGoogleSet: false,
+        devCodeSet: false
+      };
+    }
+    const allowedEmails = this.getConfiguredAdminEmails(admin);
+    return {
+      teacherCodeSet: Boolean(admin.teacher_access_code_hash),
+      teacherGoogleSet: allowedEmails.size > 0,
+      devCodeSet: Boolean(admin.dev_access_code_hash)
+    };
+  }
+
+  /**
+   * One-time setup for Teacher access code (5-click Footer entry when uninitialized).
+   */
+  public async setupTeacherAccessCode(dto: SetupAccessCodeDto, ipAddress?: string) {
+    const bucketKey = `teacher_setup:${ipAddress || 'unknown'}`;
+    this.enforceAdminAuthRateLimit(bucketKey);
+
+    const admin = await UserModel.findOne({ role: ROLES.SUPER_ADMIN })
+      .select('+teacher_access_code_hash +dev_access_code_hash');
+    if (!admin) {
+      throw new AppError('Super Admin account not found', 404, ERROR_CODES.STUDENT_NOT_FOUND_404);
+    }
+
+    if (admin.teacher_access_code_hash || admin.teacher_google_email) {
+      throw new AppError(
+        'تم تسجيل بيانات دخول المعلمة مسبقاً. يمكنك تعديلها من داخل لوحة التحكم فقط.',
+        403,
+        ERROR_CODES.FORBIDDEN_403
+      );
+    }
+
+    if (admin.dev_access_code_hash && verifyAccessCode(dto.accessCode, admin.dev_access_code_hash)) {
+      throw new AppError(
+        'يجب اختيار كود مختلف عن كود المطور.',
+        409,
+        ERROR_CODES.CONFLICT_409
+      );
+    }
+
+    const updated = await UserModel.findOneAndUpdate(
+      {
+        _id: admin._id,
+        role: ROLES.SUPER_ADMIN,
+        $or: [{ teacher_access_code_hash: null }, { teacher_access_code_hash: { $exists: false } }]
+      },
+      { $set: { teacher_access_code_hash: hashAccessCode(dto.accessCode) } },
+      { new: true }
+    );
+
+    if (!updated) {
+      throw new AppError(
+        'تم تسجيل كود المعلمة مسبقاً.',
+        403,
+        ERROR_CODES.FORBIDDEN_403
+      );
+    }
+
+    this.clearAdminAuthRateLimit(bucketKey);
+    return this.buildAdminAuthSession(updated, 'teacher');
+  }
+
+  /**
+   * Strict one-time registration for Developer secret code (12-click Navbar entry).
+   */
+  public async setupDevAccessCode(dto: SetupAccessCodeDto, ipAddress?: string) {
+    const bucketKey = `dev_setup:${ipAddress || 'unknown'}`;
+    this.enforceAdminAuthRateLimit(bucketKey);
+
+    const admin = await UserModel.findOne({ role: ROLES.SUPER_ADMIN })
+      .select('+teacher_access_code_hash +dev_access_code_hash');
+    if (!admin) {
+      throw new AppError('Super Admin account not found', 404, ERROR_CODES.STUDENT_NOT_FOUND_404);
+    }
+
+    if (admin.dev_access_code_hash) {
+      throw new AppError(
+        'تم تسجيل كود المطور مسبقاً — التسجيل عبر هذا المدخل متاح لمرة واحدة فقط.',
+        403,
+        ERROR_CODES.FORBIDDEN_403
+      );
+    }
+
+    if (admin.teacher_access_code_hash && verifyAccessCode(dto.accessCode, admin.teacher_access_code_hash)) {
+      throw new AppError(
+        'يجب أن يكون كود المطور مختلفاً عن كود دخول المعلمة.',
+        409,
+        ERROR_CODES.CONFLICT_409
+      );
+    }
+
+    const updated = await UserModel.findOneAndUpdate(
+      {
+        _id: admin._id,
+        role: ROLES.SUPER_ADMIN,
+        $or: [{ dev_access_code_hash: null }, { dev_access_code_hash: { $exists: false } }]
+      },
+      { $set: { dev_access_code_hash: hashAccessCode(dto.accessCode) } },
+      { new: true }
+    );
+
+    if (!updated) {
+      throw new AppError(
+        'تم تسجيل كود المطور مسبقاً — التسجيل متاح لمرة واحدة فقط.',
+        403,
+        ERROR_CODES.FORBIDDEN_403
+      );
+    }
+
+    this.clearAdminAuthRateLimit(bucketKey);
+    return this.buildAdminAuthSession(updated, 'dev');
+  }
+
+  /**
+   * Authenticates Teacher (5-click Footer) or Developer (12-click Nav) using salted scrypt verification.
+   */
+  public async adminLogin(dto: AdminLoginDto, ipAddress?: string) {
+    const mode = dto.mode === 'dev' ? 'dev' : 'teacher';
+    const bucketKey = `admin_login:${mode}:${ipAddress || 'unknown'}`;
+    this.enforceAdminAuthRateLimit(bucketKey);
+
+    const admin = await UserModel.findOne({ role: ROLES.SUPER_ADMIN })
+      .select('+teacher_access_code_hash +dev_access_code_hash');
+    if (!admin) {
+      throw new AppError('Super Admin user not found', 404, ERROR_CODES.STUDENT_NOT_FOUND_404);
+    }
+
+    const targetHash = mode === 'dev' ? admin.dev_access_code_hash : admin.teacher_access_code_hash;
+    if (!targetHash) {
+      throw new AppError(
+        mode === 'dev' ? 'لم يتم تعيين كود المطور بعد.' : 'لم يتم تعيين كود المعلمة بعد.',
+        401,
+        ERROR_CODES.INVALID_CREDENTIALS_401
+      );
+    }
+
+    if (!verifyAccessCode(dto.accessCode, targetHash)) {
+      throw new AppError('كود الدخول السري غير صحيح.', 401, ERROR_CODES.INVALID_CREDENTIALS_401);
+    }
+
+    this.clearAdminAuthRateLimit(bucketKey);
+    return this.buildAdminAuthSession(admin, mode);
+  }
+
+  /**
+   * Authenticates Eng. Heba (Teacher Super Admin) using Google OAuth from the 5-click Footer portal.
+   * On initial setup (when neither Teacher Code nor Teacher Google Email exists), binds her Gmail once.
+   */
+  public async teacherGoogleLogin(dto: TeacherGoogleLoginDto, ipAddress?: string) {
+    const bucketKey = `teacher_google:${ipAddress || 'unknown'}`;
+    this.enforceAdminAuthRateLimit(bucketKey);
+
+    const { email, googleId } = await this.verifyGoogleOAuthToken(dto.idToken, dto.email, dto.fullName);
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const admin = await UserModel.findOne({ role: ROLES.SUPER_ADMIN })
+      .select('+teacher_access_code_hash');
+    if (!admin) {
+      throw new AppError('Super Admin user not found', 404, ERROR_CODES.STUDENT_NOT_FOUND_404);
+    }
+
+    const allowedEmails = this.getConfiguredAdminEmails(admin);
+
+    if (allowedEmails.size > 0) {
+      if (!allowedEmails.has(normalizedEmail)) {
+        throw new AppError(
+          'حساب Google هذا غير مصرح له بالدخول إلى لوحة المعلمة.',
+          403,
+          ERROR_CODES.FORBIDDEN_403
+        );
+      }
+      if (!admin.teacher_google_email) {
+        await UserModel.updateOne(
+          { _id: admin._id },
+          { $set: { teacher_google_email: normalizedEmail } }
+        ).catch(() => {});
+      }
+      if (!admin.google_id && googleId && !googleId.startsWith('mock')) {
+        await UserModel.updateOne(
+          { _id: admin._id, $or: [{ google_id: null }, { google_id: { $exists: false } }] },
+          { $set: { google_id: googleId } }
+        ).catch(() => {});
+      }
+      this.clearAdminAuthRateLimit(bucketKey);
+      return this.buildAdminAuthSession(admin, 'teacher');
+    }
+
+    // Teacher code already exists without bound Gmail: block unauthenticated Google binding
+    if (admin.teacher_access_code_hash) {
+      throw new AppError(
+        'لم يتم ربط حساب Google للمعلمة بعد. يرجى الدخول بالكود السري وربط إيميلك من إعدادات الإدارة.',
+        403,
+        ERROR_CODES.FORBIDDEN_403
+      );
+    }
+
+    // First-time Teacher setup with Google Email (atomic once-only bind)
+    const existingOtherUser = await UserModel.findOne({
+      email: normalizedEmail,
+      _id: { $ne: admin._id }
+    }).select('_id role');
+    if (existingOtherUser) {
+      throw new AppError(
+        'هذا البريد مسجل مسبقاً كحساب طالب أو ولي أمر ولا يمكن ربطه كحساب إدارة.',
+        409,
+        ERROR_CODES.EMAIL_ALREADY_REGISTERED_409
+      );
+    }
+
+    const updated = await UserModel.findOneAndUpdate(
+      {
+        _id: admin._id,
+        role: ROLES.SUPER_ADMIN,
+        $or: [
+          { teacher_google_email: null },
+          { teacher_google_email: '' },
+          { teacher_google_email: { $exists: false } }
+        ]
+      },
+      { $set: { teacher_google_email: normalizedEmail } },
+      { new: true }
+    );
+
+    if (!updated) {
+      throw new AppError(
+        'تم ربط حساب Google مسبقاً بحساب مختلف.',
+        403,
+        ERROR_CODES.FORBIDDEN_403
+      );
+    }
+
+    this.clearAdminAuthRateLimit(bucketKey);
+    return this.buildAdminAuthSession(updated, 'teacher');
+  }
+
+  /**
+   * Returns current Admin & Developer security status (authenticated Super Admin only).
+   */
+  public async getAdminSecuritySettings() {
+    const admin = await UserModel.findOne({ role: ROLES.SUPER_ADMIN })
+      .select('+teacher_access_code_hash +dev_access_code_hash teacher_google_email email');
+    if (!admin) {
+      throw new AppError('Super Admin account not found', 404, ERROR_CODES.STUDENT_NOT_FOUND_404);
+    }
+    return {
+      teacherCodeSet: Boolean(admin.teacher_access_code_hash),
+      teacherGoogleEmail: admin.teacher_google_email || '',
+      devCodeSet: Boolean(admin.dev_access_code_hash)
+    };
+  }
+
+  /**
+   * Updates Admin/Teacher Google Email, Teacher Access Code, or Developer Code inside authenticated Admin Dashboard.
+   */
+  public async updateAdminSecuritySettings(dto: UpdateAdminSecurityDto) {
+    const admin = await UserModel.findOne({ role: ROLES.SUPER_ADMIN })
+      .select('+teacher_access_code_hash +dev_access_code_hash');
+    if (!admin) {
+      throw new AppError('Super Admin account not found', 404, ERROR_CODES.STUDENT_NOT_FOUND_404);
+    }
+
+    const updates: Record<string, any> = {};
+
+    if (dto.teacherGoogleEmail !== undefined) {
+      const normalized = (dto.teacherGoogleEmail || '').trim().toLowerCase();
+      if (!normalized) {
+        updates.teacher_google_email = null;
+      } else {
+        const collision = await UserModel.findOne({
+          email: normalized,
+          _id: { $ne: admin._id }
+        }).select('_id');
+        if (collision) {
+          throw new AppError(
+            'هذا البريد مسجل لحساب طالب أو ولي أمر ولا يمكن ربطه للإدارة.',
+            409,
+            ERROR_CODES.EMAIL_ALREADY_REGISTERED_409
+          );
+        }
+        updates.teacher_google_email = normalized;
+      }
+    }
+
+    if (dto.newTeacherCode) {
+      if (admin.dev_access_code_hash && verifyAccessCode(dto.newTeacherCode, admin.dev_access_code_hash)) {
+        throw new AppError('يجب اختيار كود للمعلمة مختلف عن كود المطور.', 409, ERROR_CODES.CONFLICT_409);
+      }
+      if (dto.newDevCode && dto.newTeacherCode.trim() === dto.newDevCode.trim()) {
+        throw new AppError('يجب اختيار كودين مختلفين للمعلمة والمطور.', 409, ERROR_CODES.CONFLICT_409);
+      }
+      updates.teacher_access_code_hash = hashAccessCode(dto.newTeacherCode);
+    }
+
+    if (dto.newDevCode) {
+      if (admin.dev_access_code_hash) {
+        if (!dto.currentDevCode || !verifyAccessCode(dto.currentDevCode, admin.dev_access_code_hash)) {
+          throw new AppError(
+            'يرجى إدخال كود المطور الحالي بشكل صحيح لتحديثه.',
+            401,
+            ERROR_CODES.INVALID_CREDENTIALS_401
+          );
+        }
+      }
+      if (admin.teacher_access_code_hash && verifyAccessCode(dto.newDevCode, admin.teacher_access_code_hash)) {
+        throw new AppError('يجب اختيار كود مطور مختلف عن كود المعلمة.', 409, ERROR_CODES.CONFLICT_409);
+      }
+      updates.dev_access_code_hash = hashAccessCode(dto.newDevCode);
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await UserModel.updateOne({ _id: admin._id }, { $set: updates });
+    }
+
+    return this.getAdminSecuritySettings();
   }
 }
 

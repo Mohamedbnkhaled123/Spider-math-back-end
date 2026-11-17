@@ -64,6 +64,8 @@ const envSchema = z.object({
     })
     .min(1, 'GOOGLE_CLIENT_ID cannot be empty'),
 
+  ADMIN_GOOGLE_EMAILS: z.string().optional(),
+
   CLOUDINARY_CLOUD_NAME: z
     .string({
       required_error: 'CLOUDINARY_CLOUD_NAME is required for student homework upload signatures'

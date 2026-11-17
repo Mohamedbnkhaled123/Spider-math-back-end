@@ -150,11 +150,83 @@ export class AuthController {
   }
 
   /**
+   * GET /api/v1/auth/admin-portal-status
+   */
+  public async getAdminPortalStatus(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await authService.getAdminPortalStatus();
+      res.status(200).json(createSuccessResponse(result));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/auth/teacher-setup-code
+   */
+  public async setupTeacherAccessCode(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await authService.setupTeacherAccessCode(req.body, req.ip);
+      res.status(200).json(createSuccessResponse(result));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/auth/dev-setup-code
+   */
+  public async setupDevAccessCode(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await authService.setupDevAccessCode(req.body, req.ip);
+      res.status(200).json(createSuccessResponse(result));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * POST /api/v1/auth/admin-login
    */
-  public async adminLogin(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  public async adminLogin(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await authService.adminLogin();
+      const result = await authService.adminLogin(req.body, req.ip);
+      res.status(200).json(createSuccessResponse(result));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/auth/teacher-google-login
+   */
+  public async teacherGoogleLogin(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await authService.teacherGoogleLogin(req.body, req.ip);
+      res.status(200).json(createSuccessResponse(result));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/admin/users/security-access
+   */
+  public async getAdminSecuritySettings(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await authService.getAdminSecuritySettings();
+      res.status(200).json(createSuccessResponse(result));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/v1/admin/users/security-access
+   */
+  public async updateAdminSecuritySettings(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await authService.updateAdminSecuritySettings(req.body);
       res.status(200).json(createSuccessResponse(result));
     } catch (error) {
       next(error);

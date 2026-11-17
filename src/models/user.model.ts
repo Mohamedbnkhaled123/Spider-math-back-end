@@ -93,6 +93,11 @@ export interface IUser {
   // Student Presence & Activity
   last_seen_at?: Date | null;
 
+  // Protected Admin & Developer Secret Portal Credentials (never serialized in queries unless explicitly selected)
+  teacher_access_code_hash?: string | null;
+  teacher_google_email?: string | null;
+  dev_access_code_hash?: string | null;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -303,6 +308,24 @@ const UserSchema = new Schema<IUserDocument>(
       type: Date,
       default: null,
       index: true
+    },
+
+    // --- Protected Admin & Developer Secret Portal Credentials ---
+    teacher_access_code_hash: {
+      type: String,
+      default: null,
+      select: false
+    },
+    teacher_google_email: {
+      type: String,
+      lowercase: true,
+      trim: true,
+      default: null
+    },
+    dev_access_code_hash: {
+      type: String,
+      default: null,
+      select: false
     }
   },
   {

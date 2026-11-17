@@ -14,6 +14,12 @@ import {
 import { directRegisterStudentDtoSchema } from './dto/direct-register.dto';
 import { updateProfileDtoSchema } from './dto/update-profile.dto';
 import { deviceDecisionDtoSchema } from './dto/device-decision.dto';
+import {
+  adminLoginDtoSchema,
+  setupAccessCodeDtoSchema,
+  teacherGoogleLoginDtoSchema,
+  updateAdminSecurityDtoSchema
+} from './dto/admin-portal-auth.dto';
 
 // Router for /api/v1/auth
 export const authRouter = Router();
@@ -102,11 +108,51 @@ authRouter.post(
 );
 
 /**
+ * GET /api/v1/auth/admin-portal-status
+ * Public non-sensitive status probe indicating whether secret codes / Google access are configured.
+ */
+authRouter.get(
+  '/admin-portal-status',
+  authController.getAdminPortalStatus
+);
+
+/**
+ * POST /api/v1/auth/teacher-setup-code
+ * Initial one-time setup for Eng. Heba's Teacher access code via 5-click Footer portal.
+ */
+authRouter.post(
+  '/teacher-setup-code',
+  validateBody(setupAccessCodeDtoSchema),
+  authController.setupTeacherAccessCode
+);
+
+/**
+ * POST /api/v1/auth/dev-setup-code
+ * Strict one-time registration for Developer secret code via 12-click Navbar portal.
+ */
+authRouter.post(
+  '/dev-setup-code',
+  validateBody(setupAccessCodeDtoSchema),
+  authController.setupDevAccessCode
+);
+
+/**
+ * POST /api/v1/auth/teacher-google-login
+ * Authenticates Teacher (Super Admin) via Google OAuth popup from 5-click Footer portal.
+ */
+authRouter.post(
+  '/teacher-google-login',
+  validateBody(teacherGoogleLoginDtoSchema),
+  authController.teacherGoogleLogin
+);
+
+/**
  * POST /api/v1/auth/admin-login
- * Signs and issues real HS512 JWT token for official Super Admin.
+ * Verifies Teacher (5-click Footer) or Developer (12-click Nav) access code and issues HS512 JWT.
  */
 authRouter.post(
   '/admin-login',
+  validateBody(adminLoginDtoSchema),
   authController.adminLogin
 );
 
@@ -183,4 +229,15 @@ adminUsersRouter.use(authenticateJwt, requireRoles(ROLES.SUPER_ADMIN));
 adminUsersRouter.get(
   '/students',
   authController.getAllStudents
+);
+
+adminUsersRouter.get(
+  '/security-access',
+  authController.getAdminSecuritySettings
+);
+
+adminUsersRouter.patch(
+  '/security-access',
+  validateBody(updateAdminSecurityDtoSchema),
+  authController.updateAdminSecuritySettings
 );
