@@ -24,6 +24,10 @@ import {
 import { AppError } from '../../../common/utils/app-error.util';
 import { ERROR_CODES } from '../../../common/constants/error-codes.constant';
 import { ROLES, UserRole } from '../../../common/constants/roles.constant';
+import {
+  getCompatibleCurriculumsForQuery,
+  isAcademicTrackCompatible
+} from '../../../common/constants/curriculum-hierarchy.constant';
 import { CreateAssessmentDto } from '../dto/assessment-create.dto';
 import { UpdateAssessmentDto } from '../dto/assessment-update.dto';
 import { SubmissionSyncDto } from '../dto/submission-sync.dto';
@@ -450,15 +454,24 @@ export class AssessmentsService {
       throw new AppError('This assessment is not currently available', 404, ERROR_CODES.ASSESSMENT_NOT_FOUND_404);
     }
 
-    // Strict Grade-Level Isolation: Student can ONLY access and start exams for their exact grade_level (Placement tests are open across grades)
+    // Strict Grade-Level Isolation: Student can ONLY access and start exams for their compatible track/grade (or explicitly subscribed units)
     if (!assessment.is_placement_test && userRole === ROLES.STUDENT) {
       const student = await UserModel.findById(studentId).select('grade_level curriculum');
-      if (student && student.grade_level && assessment.grade_level && assessment.grade_level !== student.grade_level) {
-        throw new AppError(
-          'عذراً، هذا الاختبار مخصص لصف دراسي آخر فقط ولا يمكنك الوصول إليه.',
-          403,
-          ERROR_CODES.FORBIDDEN_403
-        );
+      if (student && student.grade_level && assessment.grade_level && !isAcademicTrackCompatible(student.curriculum, student.grade_level, assessment.curriculum, assessment.grade_level)) {
+        const hasActiveUnitSub = assessment.unit_package_id
+          ? await SubscriptionModel.exists({
+              student_id: new Types.ObjectId(studentId),
+              unit_package_id: assessment.unit_package_id,
+              subscription_status: 'ACTIVE'
+            })
+          : null;
+        if (!hasActiveUnitSub) {
+          throw new AppError(
+            'عذراً، هذا الاختبار مخصص لصف دراسي آخر فقط ولا يمكنك الوصول إليه.',
+            403,
+            ERROR_CODES.FORBIDDEN_403
+          );
+        }
       }
     }
 
@@ -1037,22 +1050,7 @@ export class AssessmentsService {
     studentId?: string;
   }, isSuperAdmin = false): Promise<Partial<IAssessmentDocument>[]> {
     const filter: Record<string, any> = {};
-
-    if (query.studentId && !isSuperAdmin) {
-      if (Types.ObjectId.isValid(query.studentId)) {
-        const student = await UserModel.findById(query.studentId).select('grade_level curriculum');
-        if (student && student.grade_level) {
-          // Force the student's grade level and curriculum so they can NEVER see other grades' quizzes
-          filter.grade_level = student.grade_level;
-          if (student.curriculum) {
-            filter.curriculum = student.curriculum;
-          }
-        }
-      }
-    } else {
-      if (query.gradeLevel) filter.grade_level = query.gradeLevel;
-      if (query.curriculum) filter.curriculum = query.curriculum;
-    }
+    const andConditions: Record<string, any>[] = [];
 
     if (query.unitPackageId && Types.ObjectId.isValid(query.unitPackageId)) {
       filter.unit_package_id = new Types.ObjectId(query.unitPackageId);
@@ -1060,17 +1058,68 @@ export class AssessmentsService {
     if (query.lectureId && Types.ObjectId.isValid(query.lectureId)) {
       filter.lecture_id = new Types.ObjectId(query.lectureId);
     }
-    if (query.academicTerm) {
-      filter.$or = [
-        { academic_term: query.academicTerm },
-        { academic_term: { $exists: false } },
-        { academic_term: null },
-        { academic_term: 'ALL_TERMS' }
-      ];
-    }
     if (!isSuperAdmin) {
       filter.is_published = true;
       filter['questions.0'] = { $exists: true };
+    }
+
+    if (query.studentId && !isSuperAdmin) {
+      if (Types.ObjectId.isValid(query.studentId)) {
+        const [student, activeSubs] = await Promise.all([
+          UserModel.findById(query.studentId).select('grade_level curriculum').lean(),
+          SubscriptionModel.find({
+            student_id: query.studentId,
+            subscription_status: 'ACTIVE',
+            $or: [{ expires_at: { $gt: new Date() } }, { expires_at: null }, { expires_at: { $exists: false } }]
+          }).select('unit_package_id').lean()
+        ]);
+        const subscribedUnitIds = activeSubs.map((s: any) => s.unit_package_id).filter(Boolean);
+
+        const gradeScope: Record<string, any> = {};
+        if (student && student.grade_level) {
+          gradeScope.grade_level = student.grade_level;
+          if (student.curriculum) {
+            const compat = getCompatibleCurriculumsForQuery(student.curriculum, student.grade_level);
+            gradeScope.curriculum = compat.length > 1 ? { $in: compat } : (compat[0] || student.curriculum);
+          }
+        }
+        if (query.academicTerm) {
+          gradeScope.$or = [
+            { academic_term: query.academicTerm },
+            { academic_term: { $exists: false } },
+            { academic_term: null },
+            { academic_term: 'ALL_TERMS' }
+          ];
+        }
+
+        if (subscribedUnitIds.length > 0 && Object.keys(gradeScope).length > 0) {
+          andConditions.push({
+            $or: [
+              gradeScope,
+              { unit_package_id: { $in: subscribedUnitIds } }
+            ]
+          });
+        } else if (Object.keys(gradeScope).length > 0) {
+          Object.assign(filter, gradeScope);
+        }
+      }
+    } else {
+      if (query.gradeLevel) filter.grade_level = query.gradeLevel;
+      if (query.curriculum) filter.curriculum = query.curriculum;
+      if (query.academicTerm) {
+        andConditions.push({
+          $or: [
+            { academic_term: query.academicTerm },
+            { academic_term: { $exists: false } },
+            { academic_term: null },
+            { academic_term: 'ALL_TERMS' }
+          ]
+        });
+      }
+    }
+
+    if (andConditions.length > 0) {
+      filter.$and = andConditions;
     }
 
     const queryBuilder = AssessmentModel.find(filter)
@@ -1117,10 +1166,19 @@ export class AssessmentsService {
       throw new AppError('Assessment not found', 404, ERROR_CODES.ASSESSMENT_NOT_FOUND_404);
     }
 
-    if (studentId && !isSuperAdmin) {
+    if (studentId && !isSuperAdmin && !assessment.is_placement_test) {
       const student = await UserModel.findById(studentId).select('grade_level curriculum');
-      if (student && student.grade_level && assessment.grade_level && assessment.grade_level !== student.grade_level) {
-        throw new AppError('عذراً، هذا الاختبار مخصص لصف دراسي آخر فقط ولا يمكنك الوصول إليه.', 403, ERROR_CODES.FORBIDDEN_403);
+      if (student && student.grade_level && assessment.grade_level && !isAcademicTrackCompatible(student.curriculum, student.grade_level, assessment.curriculum, assessment.grade_level)) {
+        const hasActiveUnitSub = assessment.unit_package_id
+          ? await SubscriptionModel.exists({
+              student_id: new Types.ObjectId(studentId),
+              unit_package_id: assessment.unit_package_id,
+              subscription_status: 'ACTIVE'
+            })
+          : null;
+        if (!hasActiveUnitSub) {
+          throw new AppError('عذراً، هذا الاختبار مخصص لصف دراسي آخر فقط ولا يمكنك الوصول إليه.', 403, ERROR_CODES.FORBIDDEN_403);
+        }
       }
     }
 

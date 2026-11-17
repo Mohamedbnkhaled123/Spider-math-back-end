@@ -10,6 +10,10 @@ import { publicCmsCache } from '../../../config/cache.config';
 import { AppError } from '../../../common/utils/app-error.util';
 import { ERROR_CODES } from '../../../common/constants/error-codes.constant';
 import { ROLES } from '../../../common/constants/roles.constant';
+import {
+  getCompatibleCurriculumsForQuery,
+  isAcademicTrackCompatible
+} from '../../../common/constants/curriculum-hierarchy.constant';
 import { UnitsQueryDto } from '../dto/units-query.dto';
 import { CreateUnitPackageDto, UpdateUnitPackageDto } from '../dto/unit-crud.dto';
 
@@ -38,28 +42,65 @@ export class UnitsService {
       }
     }
 
-    const filter: Record<string, unknown> = isSuperAdmin ? {} : { is_published: true };
+    let filter: Record<string, unknown> = isSuperAdmin ? {} : { is_published: true };
+    let subscribedUnitIds: Types.ObjectId[] = [];
+    let preloadedActiveSubs: any[] | null = null;
 
     if (!isSuperAdmin && studentId && Types.ObjectId.isValid(studentId)) {
-      const student = await UserModel.findById(studentId).select('grade_level curriculum role');
+      const [student, activeSubs] = await Promise.all([
+        UserModel.findById(studentId).select('grade_level curriculum role').lean(),
+        SubscriptionModel.find({
+          student_id: studentId,
+          subscription_status: 'ACTIVE',
+          $or: [{ expires_at: { $gt: new Date() } }, { expires_at: null }, { expires_at: { $exists: false } }]
+        })
+          .select('unit_package_id expires_at access_scope')
+          .lean()
+      ]);
+
+      preloadedActiveSubs = activeSubs;
+      subscribedUnitIds = activeSubs
+        .map((s: any) => s.unit_package_id)
+        .filter((id: any) => !!id);
+
       if (student && student.role === ROLES.STUDENT && student.grade_level) {
-        filter.grade_level = student.grade_level;
+        const gradeCatalogFilter: Record<string, unknown> = {
+          is_published: true,
+          grade_level: student.grade_level
+        };
         if (student.curriculum) {
-          filter.curriculum = student.curriculum;
+          const compatCurriculums = getCompatibleCurriculumsForQuery(student.curriculum, student.grade_level);
+          gradeCatalogFilter.curriculum = compatCurriculums.length > 1
+            ? { $in: compatCurriculums }
+            : (compatCurriculums[0] || student.curriculum);
+        }
+        if (query.term) {
+          gradeCatalogFilter.academic_term = query.term;
+        }
+        if (query.type) {
+          gradeCatalogFilter.package_type = query.type;
+        }
+
+        if (subscribedUnitIds.length > 0) {
+          const subFilter: Record<string, unknown> = { _id: { $in: subscribedUnitIds } };
+          if (query.type) {
+            subFilter.package_type = query.type;
+          }
+          filter = { $or: [gradeCatalogFilter, subFilter] };
+        } else {
+          filter = gradeCatalogFilter;
         }
       } else {
         if (query.curriculum) filter.curriculum = query.curriculum;
         if (query.gradeLevel) filter.grade_level = query.gradeLevel;
+        if (query.term) filter.academic_term = query.term;
+        if (query.type) filter.package_type = query.type;
       }
     } else {
       if (query.curriculum) filter.curriculum = query.curriculum;
       if (query.gradeLevel) filter.grade_level = query.gradeLevel;
-    }
-    if (query.term) {
-      filter.academic_term = query.term;
-    }
-    if (query.type) {
-      filter.package_type = query.type;
+      if (query.term) filter.academic_term = query.term;
+      if (query.type) filter.package_type = query.type;
     }
 
     const units = await UnitPackageModel.find(filter)
@@ -105,10 +146,10 @@ export class UnitsService {
     }
 
     // Hydrate subscription status for authenticated student
-    const activeSubs = await SubscriptionModel.find({
+    const activeSubs = preloadedActiveSubs ?? await SubscriptionModel.find({
       student_id: studentId,
       subscription_status: 'ACTIVE',
-      expires_at: { $gt: new Date() }
+      $or: [{ expires_at: { $gt: new Date() } }, { expires_at: null }, { expires_at: { $exists: false } }]
     })
       .select('unit_package_id expires_at access_scope')
       .lean();
@@ -177,23 +218,7 @@ export class UnitsService {
     if (!isSubscribed && studentId && Types.ObjectId.isValid(studentId)) {
       const student = await UserModel.findById(studentId).select('grade_level curriculum');
       if (student && student.grade_level && unit.grade_level) {
-        const normStudentGrade = (student.grade_level || '').trim().toUpperCase();
-        const normUnitGrade = (unit.grade_level || '').trim().toUpperCase();
-        const normalizeGrade = (g: string) => {
-          if (g.includes('SEC_1') || g.includes('الأول الثانوي') || g.includes('SECONDARY 1') || g.includes('1ST SEC')) return 'SEC_1';
-          if (g.includes('SEC_2') || g.includes('الثاني الثانوي') || g.includes('SECONDARY 2') || g.includes('2ND SEC')) return 'SEC_2';
-          if (g.includes('SEC_3') || g.includes('الثالث الثانوي') || g.includes('SECONDARY 3') || g.includes('THANAWEYA') || g.includes('3RD SEC')) return 'SEC_3';
-          if (g.includes('PREP_1') || g.includes('الأول الإعدادي')) return 'PREP_1';
-          if (g.includes('PREP_2') || g.includes('الثاني الإعدادي')) return 'PREP_2';
-          if (g.includes('PREP_3') || g.includes('الثالث الإعدادي')) return 'PREP_3';
-          if (g.includes('GRADE_12') || g.includes('الثاني عشر') || g.includes('توجيهي')) return 'GRADE_12';
-          if (g.includes('GRADE_11') || g.includes('الحادي عشر')) return 'GRADE_11';
-          if (g.includes('GRADE_10') || g.includes('العاشر')) return 'GRADE_10';
-          if (g.includes('GRADE_9') || g.includes('التاسع')) return 'GRADE_9';
-          return g;
-        };
-
-        if (normalizeGrade(normUnitGrade) !== normalizeGrade(normStudentGrade)) {
+        if (!isAcademicTrackCompatible(student.curriculum, student.grade_level, unit.curriculum, unit.grade_level)) {
           // Check if this unit has free trial lectures - all registered students are allowed to preview free trial lectures
           const hasFreeLectures = await LectureMaterialModel.exists({
             unit_package_id: unitId,

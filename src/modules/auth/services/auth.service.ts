@@ -27,6 +27,7 @@ import { UpdateProfileDto } from '../dto/update-profile.dto';
 import { DeviceDecisionDto } from '../dto/device-decision.dto';
 import { validatePhoneNumber, arePhoneNumbersIdentical } from '../../../common/utils/phone-validator.util';
 import { hashAccessCode, verifyAccessCode } from '../../../common/utils/access-code-hash.util';
+import { getEffectiveCurriculumForRecord, CurriculumType } from '../../../common/constants/curriculum-hierarchy.constant';
 import { IJwtPayload } from '../../../common/interfaces/auth-payload.interface';
 import { primeStudentLastSeenThrottle } from '../../../middlewares/auth.middleware';
 import { PresenceTrackerService } from '../../parent-portal/services/presence-tracker.service';
@@ -494,7 +495,7 @@ export class AuthService {
     user.full_name = dto.fullName.trim();
     user.phone = dto.phone.trim();
     user.parent_phone = dto.parentPhone.trim();
-    user.curriculum = dto.curriculum;
+    user.curriculum = getEffectiveCurriculumForRecord(dto.curriculum, dto.gradeLevel) as CurriculumType;
     user.grade_level = dto.gradeLevel;
     const cms = await CmsConfigModel.findOne({ singleton_key: 'MAIN_SITE_CONFIG' }).select('active_academic_term').lean();
     user.academic_term = dto.academicTerm || cms?.active_academic_term || 'TERM_1';
@@ -575,7 +576,7 @@ export class AuthService {
       phone: dto.phone.trim(),
       parent_phone: dto.parentPhone.trim(),
       role: ROLES.STUDENT,
-      curriculum: dto.curriculum,
+      curriculum: getEffectiveCurriculumForRecord(dto.curriculum, dto.gradeLevel) as CurriculumType,
       grade_level: dto.gradeLevel,
       academic_term: dto.academicTerm || (await CmsConfigModel.findOne({ singleton_key: 'MAIN_SITE_CONFIG' }).select('active_academic_term').lean())?.active_academic_term || 'TERM_1',
       country: dto.country || 'EG',

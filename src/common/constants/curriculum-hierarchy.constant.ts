@@ -47,13 +47,14 @@ export const GRADE_LEVELS_BY_CURRICULUM: Record<CurriculumType, readonly string[
     'IGCSE_OL', 'IGCSE_AS', 'IGCSE_AL'
   ],
 
-  // 4. الدبلومة الأمريكية (SAT • EST • ACT — من Grade 1 إلى اختبارات القبول)
+  // 4. الدبلومة الأمريكية (SAT • EST • ACT — اختبارات القبول الجامعي، مع إبقاء US_GRADE لدعم السجلات القديمة)
   AMERICAN: [
-    'US_GRADE_1', 'US_GRADE_2', 'US_GRADE_3', 'US_GRADE_4', 'US_GRADE_5', 'US_GRADE_6', 'US_GRADE_7', 'US_GRADE_8',
-    'GRADE_9', 'GRADE_10', 'GRADE_11', 'GRADE_12',
-    'SAT_1', 'SAT_2', 'SAT_MATH',
+    'SAT', 'SAT_1', 'SAT_2', 'SAT_MATH',
     'EST_1', 'EST_2', 'EST_MATH',
-    'ACT_1', 'ACT_2', 'ACT_MATH'
+    'ACT_1', 'ACT_2', 'ACT_MATH',
+    'GRADE_9', 'GRADE_10', 'GRADE_11', 'GRADE_12',
+    'US_GRADE_1', 'US_GRADE_2', 'US_GRADE_3', 'US_GRADE_4', 'US_GRADE_5', 'US_GRADE_6', 'US_GRADE_7', 'US_GRADE_8',
+    'US_GRADE_9', 'US_GRADE_10', 'US_GRADE_11', 'US_GRADE_12'
   ]
 } as const;
 
@@ -78,7 +79,7 @@ export const ALL_GRADE_LEVELS = [
   'IGCSE_OL', 'IGCSE_AS', 'IGCSE_AL',
 
   // American
-  'SAT_1', 'SAT_2', 'SAT_MATH',
+  'SAT', 'SAT_1', 'SAT_2', 'SAT_MATH',
   'EST_1', 'EST_2', 'EST_MATH',
   'ACT_1', 'ACT_2', 'ACT_MATH'
 ] as const;
@@ -315,4 +316,88 @@ export function isValidGradeForCurriculum(curriculum?: CurriculumType | null, gr
 
   // 3. Dynamic / custom grade code configured for this curriculum track (e.g. QODORAT, GAT, or custom stage grade)
   return /^[\w\u0600-\u06FF-]{1,64}$/.test(trimmed);
+}
+
+/**
+ * Normalizes a curriculum identifier string cleanly without misclassifying US K-12 or IGCSE tracks.
+ */
+export function normalizeCurriculumCode(curriculum?: string | null): string {
+  const clean = (curriculum || '').trim().toUpperCase();
+  if (!clean) return '';
+  if (clean === 'EGYPTIAN' || clean.includes('EGYPT') || clean.includes('مصر')) return 'EGYPTIAN';
+  if (clean === 'GULF' || clean.includes('GULF') || clean.includes('خليج')) return 'GULF';
+  if (clean === 'INTERNATIONAL' || clean.includes('INT') || clean.includes('IGCSE') || clean.includes('بريطان') || clean.includes('دول')) return 'INTERNATIONAL';
+  if (clean === 'AMERICAN' || clean.includes('AMER') || clean.includes('أمر')) return 'AMERICAN';
+  return clean;
+}
+
+/**
+ * Normalizes a grade code cleanly without substring collisions (e.g. US_GRADE_12 vs GRADE_12).
+ */
+export function normalizeGradeCode(gradeLevel?: string | null): string {
+  const clean = (gradeLevel || '').trim().toUpperCase();
+  if (!clean) return '';
+  if (/^(PRI|PREP|SEC)_\d+$/.test(clean) || /^US_GRADE_\d+$/.test(clean) || /^IGCSE_YEAR_\d+$/.test(clean) || /^GRADE_\d+$/.test(clean)) {
+    return clean;
+  }
+  if (/^(SAT|EST|ACT)(?:_[12]|_MATH)?$/.test(clean)) {
+    return clean;
+  }
+  if (clean === 'IGCSE_OL' || clean === 'IGCSE_AS' || clean === 'IGCSE_AL') {
+    return clean;
+  }
+  return clean;
+}
+
+/**
+ * Resolves canonical track for storage and matching: US K-12 grades (US_GRADE_1..US_GRADE_12)
+ * belong to the INTERNATIONAL track (American Curriculum division), while UNIVERSITY entrance
+ * tests (SAT, EST, ACT) belong to AMERICAN. Preserves compatibility with legacy records.
+ */
+export function getEffectiveCurriculumForRecord(curriculum?: string | null, gradeLevel?: string | null): string {
+  const normCurr = normalizeCurriculumCode(curriculum);
+  const normGrade = normalizeGradeCode(gradeLevel);
+  if (normCurr === 'AMERICAN' && /^US_GRADE_\d+$/.test(normGrade)) {
+    return 'INTERNATIONAL';
+  }
+  return normCurr;
+}
+
+/**
+ * Returns all stored curriculum values equivalent to a student/unit pair for MongoDB queries.
+ */
+export function getCompatibleCurriculumsForQuery(curriculum?: string | null, gradeLevel?: string | null): string[] {
+  const effective = getEffectiveCurriculumForRecord(curriculum, gradeLevel);
+  const normCurr = normalizeCurriculumCode(curriculum);
+  const normGrade = normalizeGradeCode(gradeLevel);
+
+  if (/^US_GRADE_\d+$/.test(normGrade)) {
+    return ['INTERNATIONAL', 'AMERICAN'];
+  }
+  if (effective && normCurr && effective !== normCurr) {
+    return [effective, normCurr];
+  }
+  return effective ? [effective] : (normCurr ? [normCurr] : []);
+}
+
+/**
+ * Checks whether a student curriculum + grade matches a target unit/assessment curriculum + grade.
+ */
+export function isAcademicTrackCompatible(
+  studentCurriculum?: string | null,
+  studentGrade?: string | null,
+  targetCurriculum?: string | null,
+  targetGrade?: string | null
+): boolean {
+  const sGrade = normalizeGradeCode(studentGrade);
+  const tGrade = normalizeGradeCode(targetGrade);
+  if (sGrade && tGrade && sGrade !== tGrade) {
+    return false;
+  }
+  const effSCurr = getEffectiveCurriculumForRecord(studentCurriculum, studentGrade);
+  const effTCurr = getEffectiveCurriculumForRecord(targetCurriculum, targetGrade);
+  if (effSCurr && effTCurr && effSCurr !== effTCurr) {
+    return false;
+  }
+  return true;
 }

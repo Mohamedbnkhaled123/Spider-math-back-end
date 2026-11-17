@@ -10,6 +10,7 @@ import { CmsConfigModel } from '../../../models/cms-config.model';
 import { AppError } from '../../../common/utils/app-error.util';
 import { ERROR_CODES } from '../../../common/constants/error-codes.constant';
 import { generateSubscriptionRequestWhatsAppLink } from '../../../common/utils/whatsapp-link.util';
+import { isAcademicTrackCompatible } from '../../../common/constants/curriculum-hierarchy.constant';
 import { ActivateSubscriptionDto } from '../dto/subscription.dto';
 
 export class SubscriptionsService {
@@ -34,9 +35,9 @@ export class SubscriptionsService {
       throw new AppError('Unit package not found', 404, ERROR_CODES.RESOURCE_NOT_FOUND_404);
     }
 
-    // Strict Academic Integrity Check: Unit Curriculum & Grade Level MUST match Student Profile
+    // Academic Integrity Check: Unit Curriculum & Grade Level MUST be compatible with Student Profile
     if (student.role === 'STUDENT' && student.grade_level && unit.grade_level) {
-      if (student.curriculum !== unit.curriculum || student.grade_level !== unit.grade_level) {
+      if (!isAcademicTrackCompatible(student.curriculum, student.grade_level, unit.curriculum, unit.grade_level)) {
         throw new AppError(
           `لا يمكن تفعيل هذه الوحدة لأنها مخصصة لـ (${unit.curriculum} - ${unit.grade_level}) بينما الطالب مسجل في (${student.curriculum} - ${student.grade_level}).`,
           400,
@@ -102,6 +103,17 @@ export class SubscriptionsService {
 
     if (!unit) {
       throw new AppError('Unit package not found', 404, ERROR_CODES.RESOURCE_NOT_FOUND_404);
+    }
+
+    // Strict Academic Integrity Check: Prevent activating units from another curriculum or grade level
+    if (student.role === 'STUDENT' && student.grade_level && unit.grade_level) {
+      if (!isAcademicTrackCompatible(student.curriculum, student.grade_level, unit.curriculum, unit.grade_level)) {
+        throw new AppError(
+          `لا يمكن تفعيل هذه الوحدة (${unit.curriculum} - ${unit.grade_level}) لطالب مسجل في (${student.curriculum || ''} - ${student.grade_level}).`,
+          400,
+          ERROR_CODES.BAD_REQUEST_400
+        );
+      }
     }
 
     // Mark student as having active subscription via atomic update at line 125 below
