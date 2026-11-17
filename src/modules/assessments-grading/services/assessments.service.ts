@@ -111,7 +111,7 @@ export class AssessmentsService {
       has_essay_questions: hasEssayQuestions,
       total_points: totalPoints,
       xp_reward: dto.xp_reward,
-      is_published: (dto.is_published ?? true) && sanitizedQuestions.length > 0,
+      is_published: dto.is_published !== undefined ? dto.is_published : (sanitizedQuestions.length > 0),
       questions: sanitizedQuestions
     });
 
@@ -185,7 +185,11 @@ export class AssessmentsService {
         assessment.is_free = assessment.assessment_type === 'HOMEWORK' ? false : !!(dto as any).is_free;
       }
       if (dto.xp_reward !== undefined) assessment.xp_reward = dto.xp_reward;
-      if (dto.is_published !== undefined) assessment.is_published = dto.is_published;
+      if (dto.is_published !== undefined) {
+        assessment.is_published = dto.is_published;
+      } else if (dto.questions && dto.questions.length > 0) {
+        assessment.is_published = true;
+      }
       if (dto.unit_package_id !== undefined) {
         assessment.unit_package_id = (dto.unit_package_id && Types.ObjectId.isValid(dto.unit_package_id)) ? new Types.ObjectId(dto.unit_package_id) : null;
       }
@@ -279,7 +283,11 @@ export class AssessmentsService {
     if (dto.graph_calculator !== undefined) assessment.graph_calculator = dto.graph_calculator as any;
     if (dto.reference_sheet_url !== undefined) assessment.reference_sheet_url = dto.reference_sheet_url;
     if (dto.xp_reward !== undefined) assessment.xp_reward = dto.xp_reward;
-    if (dto.is_published !== undefined) assessment.is_published = dto.is_published;
+    if (dto.is_published !== undefined) {
+      assessment.is_published = dto.is_published;
+    } else if (dto.questions && dto.questions.length > 0) {
+      assessment.is_published = true;
+    }
     if (dto.unit_package_id !== undefined) {
       assessment.unit_package_id = (dto.unit_package_id && Types.ObjectId.isValid(dto.unit_package_id)) ? new Types.ObjectId(dto.unit_package_id) : null;
     }

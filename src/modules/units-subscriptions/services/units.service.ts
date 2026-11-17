@@ -240,10 +240,10 @@ export class UnitsService {
 
     // Fetch ordered assessments with sanitized answer keys (hide empty assessments from students)
     const assessmentsFilter: Record<string, any> = {
-      unit_package_id: unitId,
-      is_published: true
+      unit_package_id: unitId
     };
     if (!isSuperAdmin) {
+      assessmentsFilter.is_published = true;
       assessmentsFilter['questions.0'] = { $exists: true };
     }
     const assessmentQuery = AssessmentModel.find(assessmentsFilter).sort({ createdAt: 1 });
