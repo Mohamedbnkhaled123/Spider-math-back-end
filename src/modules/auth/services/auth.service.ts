@@ -17,6 +17,7 @@ import { GoogleLoginDto } from '../dto/google-login.dto';
 import {
   AdminLoginDto,
   SetupAccessCodeDto,
+  DevDeviceLoginDto,
   TeacherGoogleLoginDto,
   UpdateAdminSecurityDto
 } from '../dto/admin-portal-auth.dto';
@@ -26,7 +27,13 @@ import { DirectRegisterStudentDto } from '../dto/direct-register.dto';
 import { UpdateProfileDto } from '../dto/update-profile.dto';
 import { DeviceDecisionDto } from '../dto/device-decision.dto';
 import { validatePhoneNumber, arePhoneNumbersIdentical } from '../../../common/utils/phone-validator.util';
-import { hashAccessCode, verifyAccessCode } from '../../../common/utils/access-code-hash.util';
+import {
+  hashAccessCode,
+  verifyAccessCode,
+  generateDeviceTrustToken,
+  hashDeviceTrustToken,
+  verifyDeviceTrustToken
+} from '../../../common/utils/access-code-hash.util';
 import { getEffectiveCurriculumForRecord, CurriculumType } from '../../../common/constants/curriculum-hierarchy.constant';
 import { IJwtPayload } from '../../../common/interfaces/auth-payload.interface';
 import { primeStudentLastSeenThrottle } from '../../../middlewares/auth.middleware';
@@ -1127,15 +1134,21 @@ export class AuthService {
     };
   }
 
-  private buildAdminAuthSession(admin: IUserDocument, portalScope: 'teacher' | 'dev') {
+  private buildAdminAuthSession(
+    admin: IUserDocument,
+    portalScope: 'teacher' | 'dev',
+    devDeviceTrustToken?: string,
+    deviceUuid?: string
+  ) {
     const token = this.generateToken({
       sub: admin._id.toString(),
       role: admin.role,
-      deviceUuid: portalScope === 'dev' ? 'dev_primary_device' : 'admin_primary_device'
+      deviceUuid: (deviceUuid && deviceUuid.trim()) || (portalScope === 'dev' ? 'dev_primary_device' : 'admin_primary_device')
     });
     return {
       token,
       portalScope,
+      ...(devDeviceTrustToken ? { devDeviceTrustToken } : {}),
       user: {
         _id: admin._id.toString(),
         full_name: admin.full_name,
@@ -1143,6 +1156,56 @@ export class AuthService {
         role: admin.role
       }
     };
+  }
+
+  private async issueTrustedDevDeviceToken(
+    adminId: Types.ObjectId | string,
+    deviceUuid?: string,
+    deviceType?: string,
+    browserInfo?: string,
+    ipAddress?: string
+  ): Promise<string | undefined> {
+    const cleanUuid = (deviceUuid || '').trim();
+    if (
+      !cleanUuid ||
+      cleanUuid.length < 4 ||
+      cleanUuid === 'SSR_STATIC_DEVICE_NODE' ||
+      cleanUuid === 'SM-PENDING-FINGERPRINT'
+    ) {
+      return undefined;
+    }
+
+    const rawTrustToken = generateDeviceTrustToken();
+    const tokenHash = hashDeviceTrustToken(rawTrustToken);
+    const now = new Date();
+
+    await UserModel.updateOne(
+      { _id: adminId },
+      { $pull: { trusted_dev_devices: { device_uuid: cleanUuid } } }
+    );
+    await UserModel.updateOne(
+      { _id: adminId },
+      {
+        $push: {
+          trusted_dev_devices: {
+            $each: [
+              {
+                device_uuid: cleanUuid,
+                token_hash: tokenHash,
+                device_type: deviceType || 'Desktop Browser',
+                browser_info: browserInfo || 'Spider Math Dev Client',
+                ip_address: ipAddress,
+                trusted_at: now,
+                last_used_at: now
+              }
+            ],
+            $slice: -10
+          }
+        }
+      }
+    );
+
+    return rawTrustToken;
   }
 
   private getConfiguredAdminEmails(admin: IUserDocument): Set<string> {
@@ -1289,7 +1352,14 @@ export class AuthService {
     }
 
     this.clearAdminAuthRateLimit(bucketKey);
-    return this.buildAdminAuthSession(updated, 'dev');
+    const devTrustToken = await this.issueTrustedDevDeviceToken(
+      updated._id,
+      dto.deviceUuid,
+      dto.deviceType,
+      dto.browserInfo,
+      ipAddress
+    );
+    return this.buildAdminAuthSession(updated, 'dev', devTrustToken, dto.deviceUuid);
   }
 
   /**
@@ -1320,7 +1390,49 @@ export class AuthService {
     }
 
     this.clearAdminAuthRateLimit(bucketKey);
-    return this.buildAdminAuthSession(admin, mode);
+    if (mode === 'dev') {
+      const devTrustToken = await this.issueTrustedDevDeviceToken(
+        admin._id,
+        dto.deviceUuid,
+        dto.deviceType,
+        dto.browserInfo,
+        ipAddress
+      );
+      return this.buildAdminAuthSession(admin, 'dev', devTrustToken, dto.deviceUuid);
+    }
+    return this.buildAdminAuthSession(admin, 'teacher');
+  }
+
+  /**
+   * Authenticates a previously trusted Developer device via 12-click Navbar portal without re-entering password.
+   */
+  public async devDeviceLogin(dto: DevDeviceLoginDto, ipAddress?: string) {
+    const bucketKey = `dev_device_login:${ipAddress || 'unknown'}`;
+    this.enforceAdminAuthRateLimit(bucketKey);
+
+    const admin = await UserModel.findOne({ role: ROLES.SUPER_ADMIN })
+      .select('+dev_access_code_hash +trusted_dev_devices');
+    if (!admin || !admin.dev_access_code_hash) {
+      throw new AppError('لم يتم تعيين كود المطور بعد.', 401, ERROR_CODES.INVALID_CREDENTIALS_401);
+    }
+
+    const cleanUuid = (dto.deviceUuid || '').trim();
+    const matchedDevice = (admin.trusted_dev_devices || []).find((d) => d.device_uuid === cleanUuid);
+    if (!matchedDevice || !verifyDeviceTrustToken(dto.deviceTrustToken, matchedDevice.token_hash)) {
+      throw new AppError(
+        'هذا الجهاز غير موثق للدخول التلقائي — يرجى إدخال كلمة مرور المطور.',
+        401,
+        ERROR_CODES.INVALID_CREDENTIALS_401
+      );
+    }
+
+    await UserModel.updateOne(
+      { _id: admin._id, 'trusted_dev_devices.device_uuid': cleanUuid },
+      { $set: { 'trusted_dev_devices.$.last_used_at': new Date() } }
+    ).catch(() => {});
+
+    this.clearAdminAuthRateLimit(bucketKey);
+    return this.buildAdminAuthSession(admin, 'dev', undefined, cleanUuid);
   }
 
   /**
@@ -1419,14 +1531,15 @@ export class AuthService {
    */
   public async getAdminSecuritySettings() {
     const admin = await UserModel.findOne({ role: ROLES.SUPER_ADMIN })
-      .select('+teacher_access_code_hash +dev_access_code_hash teacher_google_email email');
+      .select('+teacher_access_code_hash +dev_access_code_hash +trusted_dev_devices teacher_google_email email');
     if (!admin) {
       throw new AppError('Super Admin account not found', 404, ERROR_CODES.STUDENT_NOT_FOUND_404);
     }
     return {
       teacherCodeSet: Boolean(admin.teacher_access_code_hash),
       teacherGoogleEmail: admin.teacher_google_email || '',
-      devCodeSet: Boolean(admin.dev_access_code_hash)
+      devCodeSet: Boolean(admin.dev_access_code_hash),
+      trustedDevDevicesCount: Array.isArray(admin.trusted_dev_devices) ? admin.trusted_dev_devices.length : 0
     };
   }
 
@@ -1435,7 +1548,7 @@ export class AuthService {
    */
   public async updateAdminSecuritySettings(dto: UpdateAdminSecurityDto) {
     const admin = await UserModel.findOne({ role: ROLES.SUPER_ADMIN })
-      .select('+teacher_access_code_hash +dev_access_code_hash');
+      .select('+teacher_access_code_hash +dev_access_code_hash +trusted_dev_devices');
     if (!admin) {
       throw new AppError('Super Admin account not found', 404, ERROR_CODES.STUDENT_NOT_FOUND_404);
     }
@@ -1486,6 +1599,12 @@ export class AuthService {
         throw new AppError('يجب اختيار كود مطور مختلف عن كود المعلمة.', 409, ERROR_CODES.CONFLICT_409);
       }
       updates.dev_access_code_hash = hashAccessCode(dto.newDevCode);
+      // Invalidate previously trusted dev devices when developer password changes
+      updates.trusted_dev_devices = [];
+    }
+
+    if (dto.revokeDevDevices) {
+      updates.trusted_dev_devices = [];
     }
 
     if (Object.keys(updates).length > 0) {

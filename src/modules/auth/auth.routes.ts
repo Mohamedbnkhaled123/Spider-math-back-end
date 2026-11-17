@@ -17,6 +17,7 @@ import { deviceDecisionDtoSchema } from './dto/device-decision.dto';
 import {
   adminLoginDtoSchema,
   setupAccessCodeDtoSchema,
+  devDeviceLoginDtoSchema,
   teacherGoogleLoginDtoSchema,
   updateAdminSecurityDtoSchema
 } from './dto/admin-portal-auth.dto';
@@ -154,6 +155,16 @@ authRouter.post(
   '/admin-login',
   validateBody(adminLoginDtoSchema),
   authController.adminLogin
+);
+
+/**
+ * POST /api/v1/auth/dev-device-login
+ * Passwordless Developer login on previously trusted device (12-click Navbar entry).
+ */
+authRouter.post(
+  '/dev-device-login',
+  validateBody(devDeviceLoginDtoSchema),
+  authController.devDeviceLogin
 );
 
 /**

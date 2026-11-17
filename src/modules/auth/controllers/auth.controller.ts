@@ -178,7 +178,8 @@ export class AuthController {
    */
   public async setupDevAccessCode(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await authService.setupDevAccessCode(req.body, req.ip);
+      const deviceUuid = req.body?.deviceUuid || req.deviceUuid || req.header('X-Device-UUID');
+      const result = await authService.setupDevAccessCode({ ...req.body, deviceUuid }, req.ip);
       res.status(200).json(createSuccessResponse(result));
     } catch (error) {
       next(error);
@@ -190,7 +191,20 @@ export class AuthController {
    */
   public async adminLogin(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await authService.adminLogin(req.body, req.ip);
+      const deviceUuid = req.body?.deviceUuid || req.deviceUuid || req.header('X-Device-UUID');
+      const result = await authService.adminLogin({ ...req.body, deviceUuid }, req.ip);
+      res.status(200).json(createSuccessResponse(result));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/auth/dev-device-login
+   */
+  public async devDeviceLogin(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await authService.devDeviceLogin(req.body, req.ip);
       res.status(200).json(createSuccessResponse(result));
     } catch (error) {
       next(error);

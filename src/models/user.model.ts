@@ -52,6 +52,16 @@ export interface IUiPreferences {
   theme: 'light' | 'dark';
 }
 
+export interface ITrustedDevDevice {
+  device_uuid: string;
+  token_hash: string;
+  device_type?: string;
+  browser_info?: string;
+  ip_address?: string;
+  trusted_at: Date;
+  last_used_at: Date;
+}
+
 /**
  * Unified User Document Interface
  */
@@ -97,6 +107,7 @@ export interface IUser {
   teacher_access_code_hash?: string | null;
   teacher_google_email?: string | null;
   dev_access_code_hash?: string | null;
+  trusted_dev_devices?: ITrustedDevDevice[];
 
   createdAt: Date;
   updatedAt: Date;
@@ -325,6 +336,21 @@ const UserSchema = new Schema<IUserDocument>(
     dev_access_code_hash: {
       type: String,
       default: null,
+      select: false
+    },
+    trusted_dev_devices: {
+      type: [
+        {
+          device_uuid: { type: String, required: true, trim: true },
+          token_hash: { type: String, required: true, trim: true },
+          device_type: { type: String, trim: true },
+          browser_info: { type: String, trim: true },
+          ip_address: { type: String, trim: true },
+          trusted_at: { type: Date, default: Date.now },
+          last_used_at: { type: Date, default: Date.now }
+        }
+      ],
+      default: [],
       select: false
     }
   },

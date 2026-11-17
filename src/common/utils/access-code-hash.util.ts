@@ -35,3 +35,36 @@ export function verifyAccessCode(rawCode: string, storedHash?: string | null): b
     return false;
   }
 }
+
+/**
+ * Generates a high-entropy cryptographic device trust secret for trusted developer devices.
+ */
+export function generateDeviceTrustToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+/**
+ * Computes deterministic SHA-256 hex digest for storing a trusted device secret at rest.
+ */
+export function hashDeviceTrustToken(rawToken: string): string {
+  return crypto.createHash('sha256').update((rawToken || '').trim(), 'utf8').digest('hex');
+}
+
+/**
+ * Verifies a presented device trust secret against a stored SHA-256 hash in constant time.
+ */
+export function verifyDeviceTrustToken(rawToken?: string | null, storedHash?: string | null): boolean {
+  if (!rawToken || !storedHash) {
+    return false;
+  }
+  try {
+    const actualBuf = Buffer.from(hashDeviceTrustToken(rawToken), 'hex');
+    const expectedBuf = Buffer.from(storedHash.trim(), 'hex');
+    if (actualBuf.length === 0 || actualBuf.length !== expectedBuf.length) {
+      return false;
+    }
+    return crypto.timingSafeEqual(actualBuf, expectedBuf);
+  } catch {
+    return false;
+  }
+}

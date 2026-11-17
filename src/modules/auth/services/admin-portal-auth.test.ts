@@ -29,6 +29,7 @@ async function runTests() {
       teacher_access_code_hash: null,
       teacher_google_email: null,
       dev_access_code_hash: null,
+      trusted_dev_devices: [],
       google_id: null
     };
     let mockStudentUser: any = null;
@@ -63,8 +64,21 @@ async function runTests() {
     };
 
     (UserModel as any).updateOne = async (_query: any, update: any) => {
-      if (update?.$set && mockAdmin) {
+      if (!mockAdmin) return { modifiedCount: 0 };
+      if (update?.$set) {
         mockAdmin = { ...mockAdmin, ...update.$set };
+      }
+      if (update?.$pull?.trusted_dev_devices?.device_uuid) {
+        const dropUuid = update.$pull.trusted_dev_devices.device_uuid;
+        mockAdmin.trusted_dev_devices = (mockAdmin.trusted_dev_devices || []).filter(
+          (d: any) => d.device_uuid !== dropUuid
+        );
+      }
+      if (update?.$push?.trusted_dev_devices?.$each) {
+        mockAdmin.trusted_dev_devices = [
+          ...(mockAdmin.trusted_dev_devices || []),
+          ...update.$push.trusted_dev_devices.$each
+        ].slice(-10);
       }
       return { modifiedCount: 1 };
     };
@@ -168,8 +182,51 @@ async function runTests() {
       newDevCode: 'UpdatedDev#2026',
       currentDevCode: 'DevMaster!99'
     });
-    const devLoginUpdated = await authService.adminLogin({ accessCode: 'UpdatedDev#2026', mode: 'dev' }, '10.0.0.6');
+    const devLoginUpdated = await authService.adminLogin(
+      { accessCode: 'UpdatedDev#2026', mode: 'dev', deviceUuid: 'DEV-DEVICE-A' },
+      '10.0.0.6'
+    );
     assert.ok(devLoginUpdated.token);
+    assert.ok(devLoginUpdated.devDeviceTrustToken, 'Dev login with deviceUuid should return trusted device secret');
+
+    // 8. Trusted Developer device passwordless re-entry
+    const trustedAutoSession = await authService.devDeviceLogin(
+      { deviceUuid: 'DEV-DEVICE-A', deviceTrustToken: devLoginUpdated.devDeviceTrustToken! },
+      '10.0.0.6'
+    );
+    assert.ok(trustedAutoSession.token, 'Trusted device should authenticate Dev without re-entering password');
+
+    // Different device UUID MUST fail even with Device A's trust token
+    await assert.rejects(
+      () =>
+        authService.devDeviceLogin(
+          { deviceUuid: 'DEV-DEVICE-B', deviceTrustToken: devLoginUpdated.devDeviceTrustToken! },
+          '10.0.0.7'
+        ),
+      (err: any) => err?.statusCode === 401
+    );
+
+    // Tampered token on Device A MUST fail
+    await assert.rejects(
+      () =>
+        authService.devDeviceLogin(
+          { deviceUuid: 'DEV-DEVICE-A', deviceTrustToken: '0'.repeat(64) },
+          '10.0.0.8'
+        ),
+      (err: any) => err?.statusCode === 401
+    );
+
+    // Revoking trusted dev devices clears access immediately
+    const afterRevoke = await authService.updateAdminSecuritySettings({ revokeDevDevices: true });
+    assert.strictEqual(afterRevoke.trustedDevDevicesCount, 0);
+    await assert.rejects(
+      () =>
+        authService.devDeviceLogin(
+          { deviceUuid: 'DEV-DEVICE-A', deviceTrustToken: devLoginUpdated.devDeviceTrustToken! },
+          '10.0.0.9'
+        ),
+      (err: any) => err?.statusCode === 401
+    );
 
     console.log('ALL ADMIN & DEVELOPER PORTAL AUTH SECURITY TESTS PASSED!');
   } finally {
