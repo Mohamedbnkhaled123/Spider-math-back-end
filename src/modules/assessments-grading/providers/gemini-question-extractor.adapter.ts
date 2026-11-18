@@ -51,6 +51,7 @@ export class GeminiQuestionExtractorAdapter implements IAiQuestionExtractorProvi
     if (trimmed === 'gemini-2.5-flash') return 'gemini-3.5-flash-lite';
     if (trimmed === 'gemini-2.5-flash-lite') return 'gemini-3.5-flash-lite';
     if (trimmed === 'gemini-3-flash') return 'gemini-3.5-flash-lite';
+    if (trimmed === 'gemini-3.5-flash') return 'gemini-3.5-flash-lite';
     return trimmed;
   }
 
@@ -226,9 +227,9 @@ Return a structured JSON array of questions.
   ): Promise<string | null> {
     const candidateModels: string[] = Array.from(
       new Set([
-        this.model,
         'gemini-3.5-flash-lite',
         'gemini-3-flash-preview',
+        this.model,
         this.fallbackModel,
         'gemini-3.5-flash',
         'gemini-flash-lite-latest',
@@ -285,7 +286,7 @@ Return a structured JSON array of questions.
     return null;
   }
 
-  private static readonly PER_MODEL_TIMEOUT_MS = 18000;
+  private static readonly PER_MODEL_TIMEOUT_MS = 10000;
 
   private buildModelRequestBody(requestBody: any, modelName: string, includeThinkingLow: boolean): any {
     const isGeminiFlashOr3 = /gemini-3|flash/i.test(modelName);
@@ -331,7 +332,7 @@ Return a structured JSON array of questions.
       const isTimeout = networkError?.name === 'AbortError' || /abort/i.test(String(networkError?.message || ''));
       if (allowFallback) {
         console.warn(
-          `[GeminiQuestionExtractorAdapter] ${isTimeout ? 'Timeout (18s)' : 'Network error'} calling "${modelName}": ${networkError?.message}. Falling back...`
+          `[GeminiQuestionExtractorAdapter] ${isTimeout ? `Timeout (${GeminiQuestionExtractorAdapter.PER_MODEL_TIMEOUT_MS / 1000}s)` : 'Network error'} calling "${modelName}": ${networkError?.message}. Falling back...`
         );
         return null;
       }
