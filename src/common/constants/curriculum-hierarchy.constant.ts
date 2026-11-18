@@ -401,3 +401,268 @@ export function isAcademicTrackCompatible(
   }
   return true;
 }
+
+// =============================================================================
+// Academic Year Progression & Graduation Evaluation Helpers
+// =============================================================================
+
+export type PromotionMode = 'TERM' | 'GRADE';
+
+export type PromotionEligibilityStatus =
+  | 'PROMOTABLE'
+  | 'GRADUATING'
+  | 'INELIGIBLE_NO_TERMS'
+  | 'INELIGIBLE_ALREADY_TERM_2'
+  | 'INELIGIBLE_ARCHIVED'
+  | 'INELIGIBLE_INCOMPLETE_PROFILE'
+  | 'INELIGIBLE_NOT_STUDENT';
+
+export interface IStudentPromotionEvaluation {
+  eligible: boolean;
+  status: PromotionEligibilityStatus;
+  isGraduating: boolean;
+  hasTerms: boolean;
+  currentCurriculum: string;
+  currentGrade: string;
+  currentTerm: AcademicTermType | null;
+  nextGrade: string | null;
+  nextTerm: AcademicTermType | null;
+  reasonAr?: string;
+  reasonEn?: string;
+}
+
+const EGYPTIAN_GRADE_CHAIN: readonly string[] = [
+  'PRI_1', 'PRI_2', 'PRI_3', 'PRI_4', 'PRI_5', 'PRI_6',
+  'PREP_1', 'PREP_2', 'PREP_3',
+  'SEC_1', 'SEC_2', 'SEC_3'
+];
+
+const GULF_GRADE_CHAIN: readonly string[] = [
+  'GRADE_1', 'GRADE_2', 'GRADE_3', 'GRADE_4', 'GRADE_5', 'GRADE_6',
+  'GRADE_7', 'GRADE_8', 'GRADE_9',
+  'GRADE_10', 'GRADE_11', 'GRADE_12'
+];
+
+const US_K12_GRADE_CHAIN: readonly string[] = [
+  'US_GRADE_1', 'US_GRADE_2', 'US_GRADE_3', 'US_GRADE_4', 'US_GRADE_5', 'US_GRADE_6',
+  'US_GRADE_7', 'US_GRADE_8',
+  'US_GRADE_9', 'US_GRADE_10', 'US_GRADE_11', 'US_GRADE_12'
+];
+
+const BRITISH_YEAR_GRADE_CHAIN: readonly string[] = [
+  'IGCSE_YEAR_1', 'IGCSE_YEAR_2', 'IGCSE_YEAR_3', 'IGCSE_YEAR_4', 'IGCSE_YEAR_5', 'IGCSE_YEAR_6',
+  'IGCSE_YEAR_7', 'IGCSE_YEAR_8', 'IGCSE_YEAR_9',
+  'IGCSE_YEAR_10', 'IGCSE_YEAR_11', 'IGCSE_YEAR_12', 'IGCSE_YEAR_13'
+];
+
+const BRITISH_EXAM_GRADE_CHAIN: readonly string[] = [
+  'IGCSE_OL', 'IGCSE_AS', 'IGCSE_AL'
+];
+
+const AMERICAN_LEGACY_HS_CHAIN: readonly string[] = [
+  'GRADE_9', 'GRADE_10', 'GRADE_11', 'GRADE_12'
+];
+
+/**
+ * Only EGYPTIAN and GULF curricula use academic terms (TERM_1 / TERM_2).
+ * INTERNATIONAL, AMERICAN (SAT/EST/ACT), and other tracks run continuously without terms.
+ */
+export function curriculumHasTerms(curriculum?: string | null, gradeLevel?: string | null): boolean {
+  const effective = getEffectiveCurriculumForRecord(curriculum, gradeLevel);
+  return effective === 'EGYPTIAN' || effective === 'GULF';
+}
+
+/**
+ * Resolves the immediate next grade level within the student's academic track/division chain.
+ * Keeps US K-12, British Years, British Exams, Egyptian, Gulf, and SAT/EST/ACT strictly isolated.
+ */
+export function resolveNextGradeForCurriculum(
+  curriculum?: string | null,
+  gradeLevel?: string | null
+): { nextGrade: string | null; isTerminal: boolean } {
+  const effective = getEffectiveCurriculumForRecord(curriculum, gradeLevel);
+  const normGrade = normalizeGradeCode(gradeLevel);
+  if (!effective || !normGrade) {
+    return { nextGrade: null, isTerminal: false };
+  }
+
+  let chain: readonly string[] | null = null;
+  if (effective === 'EGYPTIAN') {
+    chain = EGYPTIAN_GRADE_CHAIN;
+  } else if (effective === 'GULF') {
+    chain = GULF_GRADE_CHAIN;
+  } else if (effective === 'INTERNATIONAL') {
+    if (normGrade.startsWith('US_GRADE_')) {
+      chain = US_K12_GRADE_CHAIN;
+    } else if (normGrade.startsWith('IGCSE_YEAR_')) {
+      chain = BRITISH_YEAR_GRADE_CHAIN;
+    } else if (BRITISH_EXAM_GRADE_CHAIN.includes(normGrade)) {
+      chain = BRITISH_EXAM_GRADE_CHAIN;
+    }
+  } else if (effective === 'AMERICAN') {
+    if (AMERICAN_LEGACY_HS_CHAIN.includes(normGrade)) {
+      chain = AMERICAN_LEGACY_HS_CHAIN;
+    } else {
+      // SAT / EST / ACT / SAT_MATH / EST_MATH / ACT_MATH are terminal university-entrance tracks
+      return { nextGrade: null, isTerminal: true };
+    }
+  }
+
+  if (!chain) {
+    // Unknown/custom standalone track (e.g. QODORAT/GAT) defaults to terminal when promoted at grade level
+    return { nextGrade: null, isTerminal: true };
+  }
+
+  const idx = chain.indexOf(normGrade);
+  if (idx === -1 || idx >= chain.length - 1) {
+    return { nextGrade: null, isTerminal: true };
+  }
+
+  return { nextGrade: chain[idx + 1]!, isTerminal: false };
+}
+
+/**
+ * Evaluates whether a student can be promoted in TERM or GRADE mode without side effects.
+ */
+export function evaluateStudentPromotion(
+  student: {
+    role?: string;
+    is_profile_completed?: boolean;
+    is_archived?: boolean;
+    curriculum?: string | null;
+    grade_level?: string | null;
+    academic_term?: AcademicTermType | string | null;
+  },
+  mode: PromotionMode
+): IStudentPromotionEvaluation {
+  const effectiveCurr = getEffectiveCurriculumForRecord(student.curriculum, student.grade_level);
+  const normGrade = normalizeGradeCode(student.grade_level);
+  const hasTerms = curriculumHasTerms(student.curriculum, student.grade_level);
+  const normalizedTerm: AcademicTermType | null = hasTerms
+    ? (student.academic_term === 'TERM_2' ? 'TERM_2' : 'TERM_1')
+    : null;
+
+  if (student.role && student.role !== 'STUDENT') {
+    return {
+      eligible: false,
+      status: 'INELIGIBLE_NOT_STUDENT',
+      isGraduating: false,
+      hasTerms,
+      currentCurriculum: effectiveCurr,
+      currentGrade: normGrade,
+      currentTerm: normalizedTerm,
+      nextGrade: null,
+      nextTerm: null,
+      reasonAr: 'هذا الحساب ليس حساب طالب',
+      reasonEn: 'Account is not a student'
+    };
+  }
+
+  if (student.is_archived === true) {
+    return {
+      eligible: false,
+      status: 'INELIGIBLE_ARCHIVED',
+      isGraduating: false,
+      hasTerms,
+      currentCurriculum: effectiveCurr,
+      currentGrade: normGrade,
+      currentTerm: normalizedTerm,
+      nextGrade: null,
+      nextTerm: null,
+      reasonAr: 'الطالب موجود في الأرشيف بالفعل',
+      reasonEn: 'Student is already archived'
+    };
+  }
+
+  if (student.is_profile_completed === false || !effectiveCurr || !normGrade) {
+    return {
+      eligible: false,
+      status: 'INELIGIBLE_INCOMPLETE_PROFILE',
+      isGraduating: false,
+      hasTerms,
+      currentCurriculum: effectiveCurr,
+      currentGrade: normGrade,
+      currentTerm: normalizedTerm,
+      nextGrade: null,
+      nextTerm: null,
+      reasonAr: 'ملف الطالب غير مكتمل (لا يحتوي على منهج وصف دراسي)',
+      reasonEn: 'Student profile is incomplete'
+    };
+  }
+
+  if (mode === 'TERM') {
+    if (!hasTerms) {
+      return {
+        eligible: false,
+        status: 'INELIGIBLE_NO_TERMS',
+        isGraduating: false,
+        hasTerms: false,
+        currentCurriculum: effectiveCurr,
+        currentGrade: normGrade,
+        currentTerm: null,
+        nextGrade: null,
+        nextTerm: null,
+        reasonAr: 'هذا المنهج لا يحتوي على فصول دراسية (ترم أول / ترم ثانٍ)',
+        reasonEn: 'Curriculum has no academic terms'
+      };
+    }
+
+    if (normalizedTerm === 'TERM_2') {
+      return {
+        eligible: false,
+        status: 'INELIGIBLE_ALREADY_TERM_2',
+        isGraduating: false,
+        hasTerms: true,
+        currentCurriculum: effectiveCurr,
+        currentGrade: normGrade,
+        currentTerm: 'TERM_2',
+        nextGrade: null,
+        nextTerm: null,
+        reasonAr: 'الطالب في الترم الثاني بالفعل — استخدمي ترقية الصف الدراسي',
+        reasonEn: 'Student is already in Term 2; use grade promotion instead'
+      };
+    }
+
+    return {
+      eligible: true,
+      status: 'PROMOTABLE',
+      isGraduating: false,
+      hasTerms: true,
+      currentCurriculum: effectiveCurr,
+      currentGrade: normGrade,
+      currentTerm: 'TERM_1',
+      nextGrade: normGrade,
+      nextTerm: 'TERM_2'
+    };
+  }
+
+  // mode === 'GRADE'
+  const { nextGrade, isTerminal } = resolveNextGradeForCurriculum(student.curriculum, student.grade_level);
+  if (isTerminal || !nextGrade) {
+    return {
+      eligible: true,
+      status: 'GRADUATING',
+      isGraduating: true,
+      hasTerms,
+      currentCurriculum: effectiveCurr,
+      currentGrade: normGrade,
+      currentTerm: normalizedTerm,
+      nextGrade: null,
+      nextTerm: null,
+      reasonAr: 'الطالب في الصف النهائي وسيتم تخرجه',
+      reasonEn: 'Student is in the final grade and graduating'
+    };
+  }
+
+  return {
+    eligible: true,
+    status: 'PROMOTABLE',
+    isGraduating: false,
+    hasTerms,
+    currentCurriculum: effectiveCurr,
+    currentGrade: normGrade,
+    currentTerm: normalizedTerm,
+    nextGrade,
+    nextTerm: hasTerms ? 'TERM_1' : null
+  };
+}

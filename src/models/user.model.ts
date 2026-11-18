@@ -21,6 +21,9 @@ export type AccountLockStatus = (typeof ACCOUNT_LOCK_STATUSES)[number];
 export const DEVICE_REQUEST_STATUSES = ['PENDING', 'APPROVED', 'REJECTED'] as const;
 export type DeviceRequestStatus = (typeof DEVICE_REQUEST_STATUSES)[number];
 
+export const GRADUATION_STATUSES = ['ACTIVE', 'GRADUATED'] as const;
+export type GraduationStatus = (typeof GRADUATION_STATUSES)[number];
+
 /**
  * Approved Device Item Interface (Additive Whitelist)
  */
@@ -102,6 +105,13 @@ export interface IUser {
 
   // Student Presence & Activity
   last_seen_at?: Date | null;
+
+  // Graduation & Archive Lifecycle (Managed Manually by Super Admin)
+  is_archived?: boolean;
+  archived_at?: Date | null;
+  graduation_status?: GraduationStatus;
+  graduated_from_grade?: string | null;
+  graduated_at?: Date | null;
 
   // Protected Admin & Developer Secret Portal Credentials (never serialized in queries unless explicitly selected)
   teacher_access_code_hash?: string | null;
@@ -319,6 +329,32 @@ const UserSchema = new Schema<IUserDocument>(
       type: Date,
       default: null,
       index: true
+    },
+
+    // --- Graduation & Archive Lifecycle (Managed Manually by Super Admin) ---
+    is_archived: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    archived_at: {
+      type: Date,
+      default: null
+    },
+    graduation_status: {
+      type: String,
+      enum: GRADUATION_STATUSES,
+      default: 'ACTIVE',
+      index: true
+    },
+    graduated_from_grade: {
+      type: String,
+      trim: true,
+      default: null
+    },
+    graduated_at: {
+      type: Date,
+      default: null
     },
 
     // --- Protected Admin & Developer Secret Portal Credentials ---

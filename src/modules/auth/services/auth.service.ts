@@ -1037,7 +1037,7 @@ export class AuthService {
     const students = await UserModel.find({
       role: { $nin: ['SUPER_ADMIN', 'ADMIN', 'TEACHER'] }
     })
-      .select('full_name student_code email phone parent_phone curriculum grade_level avatar_url approved_devices total_xp has_active_subscription account_lock_status role is_profile_completed is_leaderboard_hidden createdAt last_seen_at')
+      .select('full_name student_code email phone parent_phone curriculum grade_level academic_term country avatar_url approved_devices total_xp has_active_subscription account_lock_status role is_profile_completed is_leaderboard_hidden is_archived archived_at graduation_status graduated_from_grade graduated_at createdAt last_seen_at')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -1061,6 +1061,15 @@ export class AuthService {
         ...s,
         avatarUrl: s.avatar_url,
         avatar_url: s.avatar_url,
+        academic_term: s.academic_term || null,
+        academicTerm: s.academic_term || null,
+        country: s.country || 'EG',
+        is_archived: !!s.is_archived,
+        isArchived: !!s.is_archived,
+        archived_at: s.archived_at || null,
+        graduation_status: s.graduation_status || 'ACTIVE',
+        graduated_from_grade: s.graduated_from_grade || null,
+        graduated_at: s.graduated_at || null,
         has_active_subscription: activeSet.has(studentIdStr) || !!s.has_active_subscription,
         last_seen_at: lastSeenAt,
         lastSeenAt,

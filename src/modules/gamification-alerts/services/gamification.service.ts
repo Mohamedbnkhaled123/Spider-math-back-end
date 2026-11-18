@@ -41,7 +41,8 @@ export class GamificationService {
       curriculum: query.curriculum,
       grade_level: query.gradeLevel,
       has_active_subscription: true,
-      is_leaderboard_hidden: { $ne: true }
+      is_leaderboard_hidden: { $ne: true },
+      is_archived: { $ne: true }
     };
 
     if (query.term) {

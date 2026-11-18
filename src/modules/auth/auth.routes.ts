@@ -14,6 +14,7 @@ import {
 import { directRegisterStudentDtoSchema } from './dto/direct-register.dto';
 import { updateProfileDtoSchema } from './dto/update-profile.dto';
 import { deviceDecisionDtoSchema } from './dto/device-decision.dto';
+import { promoteStudentsDtoSchema, archiveStudentDtoSchema } from './dto/promote-students.dto';
 import {
   adminLoginDtoSchema,
   setupAccessCodeDtoSchema,
@@ -240,6 +241,23 @@ adminUsersRouter.use(authenticateJwt, requireRoles(ROLES.SUPER_ADMIN));
 adminUsersRouter.get(
   '/students',
   authController.getAllStudents
+);
+
+adminUsersRouter.post(
+  '/students/promote',
+  validateBody(promoteStudentsDtoSchema),
+  authController.promoteStudents
+);
+
+adminUsersRouter.patch(
+  '/students/:studentId/archive',
+  validateBody(archiveStudentDtoSchema),
+  authController.setStudentArchiveStatus
+);
+
+adminUsersRouter.delete(
+  '/students/:studentId',
+  authController.permanentlyDeleteStudent
 );
 
 adminUsersRouter.get(

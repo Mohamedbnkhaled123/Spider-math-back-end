@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { authService } from '../services/auth.service';
+import { studentPromotionService } from '../services/student-promotion.service';
 import { createSuccessResponse, createErrorResponse } from '../../../common/interfaces/api-response.interface';
 import { ERROR_CODES } from '../../../common/constants/error-codes.constant';
 import { UserModel } from '../../../models/user.model';
@@ -279,6 +280,44 @@ export class AuthController {
       }
 
       const result = await authService.checkDeviceStatus(studentId, deviceUuid || '');
+      res.status(200).json(createSuccessResponse(result));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/admin/users/students/promote
+   */
+  public async promoteStudents(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await studentPromotionService.promoteStudents(req.body);
+      res.status(200).json(createSuccessResponse(result));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/v1/admin/users/students/:studentId/archive
+   */
+  public async setStudentArchiveStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const studentId = req.params.studentId!;
+      const result = await studentPromotionService.setStudentArchiveStatus(studentId, !!req.body?.archived);
+      res.status(200).json(createSuccessResponse(result));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * DELETE /api/v1/admin/users/students/:studentId
+   */
+  public async permanentlyDeleteStudent(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const studentId = req.params.studentId!;
+      const result = await studentPromotionService.permanentlyDeleteStudent(studentId);
       res.status(200).json(createSuccessResponse(result));
     } catch (error) {
       next(error);
