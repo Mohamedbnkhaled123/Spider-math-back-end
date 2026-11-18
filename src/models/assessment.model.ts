@@ -291,7 +291,11 @@ const AssessmentSchema = new Schema<IAssessmentDocument>(
 // Automatic Total Points Calculation Hook, Homework Free Exclusion & Essay Review Enforcer
 AssessmentSchema.pre('save', function (this: any, next: any) {
   if (this.is_multi_module === true) {
-    this.time_limit_minutes = (this.module_1_time_minutes || 0) + (this.module_2_time_minutes || 0);
+    const mod1 = Number(this.module_1_time_minutes) || 35;
+    const mod2 = Number(this.module_2_time_minutes) || 35;
+    this.module_1_time_minutes = mod1;
+    this.module_2_time_minutes = mod2;
+    this.time_limit_minutes = mod1 + mod2;
   }
   if (this.assessment_type === 'HOMEWORK') {
     this.is_free = false;
