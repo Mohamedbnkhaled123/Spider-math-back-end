@@ -21,24 +21,52 @@ export interface IPendingSubmissionsQuery {
 export interface IAllSubmissionsQuery {
   assessmentId?: string;
   curriculum?: string;
+  country?: string;
+  intlDivision?: string;
   gradeLevel?: string;
+  academicTerm?: string;
   status?: string; // 'ALL' | 'PENDING' | 'PUBLISHED' | 'IN_PROGRESS'
   search?: string;
   page?: number;
   limit?: number;
 }
 
+const INTL_DIVISION_GRADES: Record<string, readonly string[]> = {
+  AMERICAN_CURRICULUM: [
+    'US_GRADE_1', 'US_GRADE_2', 'US_GRADE_3', 'US_GRADE_4',
+    'US_GRADE_5', 'US_GRADE_6', 'US_GRADE_7', 'US_GRADE_8',
+    'US_GRADE_9', 'US_GRADE_10', 'US_GRADE_11', 'US_GRADE_12'
+  ],
+  BRITISH_CURRICULUM: [
+    'IGCSE_YEAR_1', 'IGCSE_YEAR_2', 'IGCSE_YEAR_3', 'IGCSE_YEAR_4',
+    'IGCSE_YEAR_5', 'IGCSE_YEAR_6', 'IGCSE_YEAR_7', 'IGCSE_YEAR_8',
+    'IGCSE_YEAR_9', 'IGCSE_YEAR_10', 'IGCSE_YEAR_11', 'IGCSE_YEAR_12',
+    'IGCSE_YEAR_13', 'IGCSE_OL', 'IGCSE_AS', 'IGCSE_AL'
+  ]
+};
+
+function expandCountryFilterVariants(raw: string): string[] {
+  const code = raw.trim().toUpperCase();
+  if (code === 'SA' || code === 'KSA') return ['SA', 'sa', 'KSA', 'Saudi Arabia', 'السعودية'];
+  if (code === 'QA' || code === 'QAT') return ['QA', 'qa', 'QAT', 'Qatar', 'قطر'];
+  if (code === 'AE' || code === 'UAE') return ['AE', 'ae', 'UAE', 'United Arab Emirates', 'الإمارات'];
+  if (code === 'KW' || code === 'KWT') return ['KW', 'kw', 'KWT', 'Kuwait', 'الكويت'];
+  if (code === 'EG') return ['EG', 'eg', 'Egypt', 'مصر'];
+  return [raw.trim(), code];
+}
+
 export class GradingService {
   /**
    * Lists all submissions with comprehensive filtering (GET /api/v1/admin/submissions).
-   * Supports filtering by assessment, curriculum, grade, status, search, and returns analytics.
+   * Supports filtering by assessment, curriculum, country, international division, grade, term, status, search, and returns analytics.
    */
   async getAllSubmissions(query: IAllSubmissionsQuery) {
     const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.min(100, Math.max(1, Number(query.limit) || 15));
+    const limit = Math.min(500, Math.max(1, Number(query.limit) || 200));
     const skip = (page - 1) * limit;
 
     const filter: Record<string, unknown> = {};
+    const andConditions: Record<string, unknown>[] = [];
 
     if (query.assessmentId) {
       filter.assessment_id = new Types.ObjectId(query.assessmentId);
@@ -54,40 +82,59 @@ export class GradingService {
       filter.sync_queue_status = 'IN_PROGRESS';
     }
 
-    // Filter by student properties (curriculum, gradeLevel, search)
-    const studentFilter: Record<string, unknown> = { role: ROLES.STUDENT };
-    let needsStudentFilter = false;
-
-    if (query.curriculum) {
-      studentFilter.curriculum = query.curriculum;
-      needsStudentFilter = true;
-    }
-    if (query.gradeLevel) {
-      studentFilter.grade_level = query.gradeLevel;
-      needsStudentFilter = true;
-    }
-    if (query.search && query.search.trim()) {
-      const s = query.search.trim();
-      studentFilter.$or = [
-        { full_name: { $regex: s, $options: 'i' } },
-        { student_code: { $regex: s, $options: 'i' } },
-        { phone_number: { $regex: s, $options: 'i' } }
-      ];
-      needsStudentFilter = true;
-    }
-
-    if (needsStudentFilter) {
+    // Filter by student properties (country, search)
+    const cleanCountry = query.country && query.country !== 'ALL' ? query.country.trim() : '';
+    const cleanSearch = query.search && query.search.trim() ? query.search.trim() : '';
+    if (cleanCountry || cleanSearch) {
+      const studentFilter: Record<string, unknown> = { role: ROLES.STUDENT };
+      if (cleanCountry) {
+        studentFilter.country = { $in: expandCountryFilterVariants(cleanCountry) };
+      }
+      if (cleanSearch) {
+        studentFilter.$or = [
+          { full_name: { $regex: cleanSearch, $options: 'i' } },
+          { student_code: { $regex: cleanSearch, $options: 'i' } },
+          { phone_number: { $regex: cleanSearch, $options: 'i' } },
+          { phone: { $regex: cleanSearch, $options: 'i' } }
+        ];
+      }
       const matchingStudents = await UserModel.find(studentFilter).select('_id').lean();
-      const studentIds = matchingStudents.map((s) => s._id);
-      filter.student_id = { $in: studentIds };
+      andConditions.push({ student_id: { $in: matchingStudents.map((s) => s._id) } });
+    }
+
+    // Filter by academic categorization hierarchy (curriculum, international division, gradeLevel, academicTerm)
+    const cleanCurriculum = query.curriculum && query.curriculum !== 'ALL' ? query.curriculum.trim() : '';
+    const cleanDivision = query.intlDivision && query.intlDivision !== 'ALL' ? query.intlDivision.trim() : '';
+    const cleanGrade = query.gradeLevel && query.gradeLevel !== 'ALL' ? query.gradeLevel.trim() : '';
+    const cleanTerm = query.academicTerm && query.academicTerm !== 'ALL' ? query.academicTerm.trim() : '';
+
+    if ((cleanCurriculum || cleanDivision || cleanGrade || cleanTerm) && !query.assessmentId) {
+      const assessmentFilter: Record<string, unknown> = {};
+      if (cleanCurriculum) {
+        assessmentFilter.curriculum = cleanCurriculum;
+      }
+      if (cleanGrade) {
+        assessmentFilter.grade_level = cleanGrade;
+      } else if (cleanDivision && INTL_DIVISION_GRADES[cleanDivision]) {
+        assessmentFilter.grade_level = { $in: INTL_DIVISION_GRADES[cleanDivision] };
+      }
+      if (cleanTerm) {
+        assessmentFilter.academic_term = cleanTerm;
+      }
+      const matchingAsms = await AssessmentModel.find(assessmentFilter).select('_id').lean();
+      andConditions.push({ assessment_id: { $in: matchingAsms.map((a) => a._id) } });
+    }
+
+    if (andConditions.length > 0) {
+      filter.$and = andConditions;
     }
 
     const [submissions, total, totalPending, totalPublished, totalInProgress] = await Promise.all([
       SubmissionModel.find(filter)
-        .populate<{ student_id: IUserDocument }>('student_id', 'full_name student_code phone_number parent_phone curriculum grade_level email')
+        .populate<{ student_id: IUserDocument }>('student_id', 'full_name student_code phone phone_number parent_phone curriculum grade_level academic_term country governorate email')
         .populate<{ assessment_id: IAssessmentDocument }>(
           'assessment_id',
-          'title_ar title_en total_points assessment_type questions has_essay_questions xp_reward'
+          'title_ar title_en total_points assessment_type curriculum grade_level academic_term questions has_essay_questions xp_reward'
         )
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -136,10 +183,10 @@ export class GradingService {
 
     const [submissions, total] = await Promise.all([
       SubmissionModel.find(filter)
-        .populate<{ student_id: IUserDocument }>('student_id', 'full_name student_code phone_number curriculum grade_level')
+        .populate<{ student_id: IUserDocument }>('student_id', 'full_name student_code phone phone_number curriculum grade_level academic_term country')
         .populate<{ assessment_id: IAssessmentDocument }>(
           'assessment_id',
-          'title_ar title_en total_points assessment_type questions has_essay_questions xp_reward'
+          'title_ar title_en total_points assessment_type curriculum grade_level academic_term questions has_essay_questions xp_reward'
         )
         .sort({ createdAt: -1 })
         .skip(skip)

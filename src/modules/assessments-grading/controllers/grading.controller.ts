@@ -13,7 +13,10 @@ export class GradingController {
     try {
       const assessmentId = req.query.assessmentId as string | undefined;
       const curriculum = req.query.curriculum as string | undefined;
+      const country = req.query.country as string | undefined;
+      const intlDivision = req.query.intlDivision as string | undefined;
       const gradeLevel = req.query.gradeLevel as string | undefined;
+      const academicTerm = (req.query.academicTerm || req.query.term) as string | undefined;
       const status = req.query.status as string | undefined;
       const search = req.query.search as string | undefined;
       const page = req.query.page ? parseInt(req.query.page as string, 10) : undefined;
@@ -22,7 +25,10 @@ export class GradingController {
       const result = await this.gradingService.getAllSubmissions({
         assessmentId,
         curriculum,
+        country,
+        intlDivision,
         gradeLevel,
+        academicTerm,
         status,
         search,
         page,
