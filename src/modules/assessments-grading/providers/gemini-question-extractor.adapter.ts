@@ -35,7 +35,7 @@ export class GeminiQuestionExtractorAdapter implements IAiQuestionExtractorProvi
       model || process.env.GEMINI_MODEL || process.env.GEMINI_EXTRACTION_MODEL || 'gemini-3.5-flash-lite'
     );
     this.fallbackModel = this.normalizeModelName(
-      fallbackModel || process.env.GEMINI_FALLBACK_MODEL || 'gemini-flash-lite-latest'
+      fallbackModel || process.env.GEMINI_FALLBACK_MODEL || 'gemini-3-flash-preview'
     );
   }
 
@@ -227,14 +227,13 @@ Return a structured JSON array of questions.
     const candidateModels: string[] = Array.from(
       new Set([
         this.model,
-        this.fallbackModel,
         'gemini-3.5-flash-lite',
-        'gemini-flash-lite-latest',
-        'gemini-3.5-flash',
-        'gemini-flash-latest',
         'gemini-3-flash-preview',
-        'gemini-3.8-flash',
-        'gemini-3.1-pro-preview'
+        this.fallbackModel,
+        'gemini-3.5-flash',
+        'gemini-flash-lite-latest',
+        'gemini-flash-latest',
+        'gemini-3.8-flash'
       ])
     ).filter((m): m is string => Boolean(m));
 
@@ -286,15 +285,36 @@ Return a structured JSON array of questions.
     return null;
   }
 
+  private static readonly PER_MODEL_TIMEOUT_MS = 18000;
+
+  private buildModelRequestBody(requestBody: any, modelName: string, includeThinkingLow: boolean): any {
+    const isGeminiFlashOr3 = /gemini-3|flash/i.test(modelName);
+    if (!includeThinkingLow || !isGeminiFlashOr3) {
+      return requestBody;
+    }
+    return {
+      ...requestBody,
+      generationConfig: {
+        ...(requestBody.generationConfig || {}),
+        thinkingConfig: { thinkingLevel: 'LOW' }
+      }
+    };
+  }
+
   private async callGeminiModel(
     modelName: string,
     requestBody: any,
     allowFallback: boolean,
-    apiKey: string
+    apiKey: string,
+    includeThinkingLow = true
   ): Promise<string | null> {
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       modelName
     )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+    const effectiveBody = this.buildModelRequestBody(requestBody, modelName, includeThinkingLow);
+    const controller = new AbortController();
+    const timeoutHandle = setTimeout(() => controller.abort(), GeminiQuestionExtractorAdapter.PER_MODEL_TIMEOUT_MS);
 
     let response: Response;
     try {
@@ -304,24 +324,38 @@ Return a structured JSON array of questions.
           'Content-Type': 'application/json',
           'x-goog-api-key': apiKey
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(effectiveBody),
+        signal: controller.signal
       });
     } catch (networkError: any) {
+      const isTimeout = networkError?.name === 'AbortError' || /abort/i.test(String(networkError?.message || ''));
       if (allowFallback) {
         console.warn(
-          `[GeminiQuestionExtractorAdapter] Network error calling "${modelName}": ${networkError?.message}. Falling back...`
+          `[GeminiQuestionExtractorAdapter] ${isTimeout ? 'Timeout (18s)' : 'Network error'} calling "${modelName}": ${networkError?.message}. Falling back...`
         );
         return null;
       }
       throw new AppError(
-        `Failed to communicate with Gemini AI API: ${networkError?.message || networkError}`,
-        502,
+        isTimeout
+          ? `AI extraction timed out after ${GeminiQuestionExtractorAdapter.PER_MODEL_TIMEOUT_MS / 1000}s while calling ${modelName}. Please try again.`
+          : `Failed to communicate with Gemini AI API: ${networkError?.message || networkError}`,
+        isTimeout ? 504 : 502,
         ERROR_CODES.INTERNAL_SERVER_ERROR_500
       );
+    } finally {
+      clearTimeout(timeoutHandle);
     }
 
     if (!response.ok) {
       const errorText = await response.text();
+      if (
+        response.status === 400 &&
+        includeThinkingLow &&
+        /thinkinglevel|thinkingconfig/i.test(errorText)
+      ) {
+        return this.callGeminiModel(modelName, requestBody, allowFallback, apiKey, false);
+      }
+
       let parsedError: any = null;
       try {
         parsedError = JSON.parse(errorText);
