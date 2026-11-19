@@ -163,3 +163,17 @@ adminSubmissionsRouter.post(
   authorizeRoles(ROLES.SUPER_ADMIN),
   gradingController.approveSubmission
 );
+
+adminSubmissionsRouter.post(
+  '/bulk-delete',
+  authenticateJwt,
+  authorizeRoles(ROLES.SUPER_ADMIN),
+  gradingController.bulkDeleteOrHideSubmissions
+);
+
+adminSubmissionsRouter.post(
+  '/restore-hidden',
+  authenticateJwt,
+  authorizeRoles(ROLES.SUPER_ADMIN),
+  gradingController.restoreHiddenSubmissions
+);

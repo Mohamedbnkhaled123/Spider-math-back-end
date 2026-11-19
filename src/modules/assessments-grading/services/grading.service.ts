@@ -27,6 +27,7 @@ export interface IAllSubmissionsQuery {
   academicTerm?: string;
   status?: string; // 'ALL' | 'PENDING' | 'PUBLISHED' | 'IN_PROGRESS'
   search?: string;
+  includeHidden?: boolean;
   page?: number;
   limit?: number;
 }
@@ -66,6 +67,9 @@ export class GradingService {
     const skip = (page - 1) * limit;
 
     const filter: Record<string, unknown> = {};
+    if (!query.includeHidden) {
+      filter.hidden_from_teacher = { $ne: true };
+    }
     const andConditions: Record<string, unknown>[] = [];
 
     if (query.assessmentId) {
@@ -129,7 +133,7 @@ export class GradingService {
       filter.$and = andConditions;
     }
 
-    const [submissions, total, totalPending, totalPublished, totalInProgress] = await Promise.all([
+    const [submissions, total, totalPending, totalPublished, totalInProgress, hiddenCount] = await Promise.all([
       SubmissionModel.find(filter)
         .populate<{ student_id: IUserDocument }>('student_id', 'full_name student_code phone phone_number parent_phone curriculum grade_level academic_term country governorate email')
         .populate<{ assessment_id: IAssessmentDocument }>(
@@ -141,9 +145,10 @@ export class GradingService {
         .limit(limit)
         .lean(),
       SubmissionModel.countDocuments(filter),
-      SubmissionModel.countDocuments({ result_visibility: 'HIDDEN_PENDING_TEACHER', sync_queue_status: 'SYNCED_ONLINE' }),
-      SubmissionModel.countDocuments({ result_visibility: 'PUBLISHED_TO_STUDENT_AND_PARENT', sync_queue_status: 'SYNCED_ONLINE' }),
-      SubmissionModel.countDocuments({ sync_queue_status: 'IN_PROGRESS' })
+      SubmissionModel.countDocuments({ result_visibility: 'HIDDEN_PENDING_TEACHER', sync_queue_status: 'SYNCED_ONLINE', hidden_from_teacher: { $ne: true } }),
+      SubmissionModel.countDocuments({ result_visibility: 'PUBLISHED_TO_STUDENT_AND_PARENT', sync_queue_status: 'SYNCED_ONLINE', hidden_from_teacher: { $ne: true } }),
+      SubmissionModel.countDocuments({ sync_queue_status: 'IN_PROGRESS', hidden_from_teacher: { $ne: true } }),
+      SubmissionModel.countDocuments({ hidden_from_teacher: true })
     ]);
 
     return {
@@ -152,7 +157,8 @@ export class GradingService {
         totalSubmissions: total,
         pendingReviewCount: totalPending,
         publishedCount: totalPublished,
-        inProgressCount: totalInProgress
+        inProgressCount: totalInProgress,
+        hiddenCount
       },
       pagination: {
         page,
@@ -174,7 +180,8 @@ export class GradingService {
 
     const filter: Record<string, unknown> = {
       result_visibility: 'HIDDEN_PENDING_TEACHER',
-      sync_queue_status: 'SYNCED_ONLINE'
+      sync_queue_status: 'SYNCED_ONLINE',
+      hidden_from_teacher: { $ne: true }
     };
 
     if (query.assessmentId) {
@@ -566,5 +573,77 @@ export class GradingService {
     }
 
     return submission;
+  }
+
+  /**
+   * Bulk or single teacher action on submissions:
+   * - HIDE_FROM_TEACHER: marks hidden_from_teacher=true so the teacher dashboard stays clean while student & parent retain full review access.
+   * - PERMANENT_DELETE: removes submission records permanently from MongoDB.
+   */
+  async bulkDeleteOrHideSubmissions(
+    submissionIds: string[],
+    mode: 'HIDE_FROM_TEACHER' | 'PERMANENT_DELETE'
+  ) {
+    const validIds = Array.from(
+      new Set((submissionIds || []).map((id) => id.trim()).filter((id) => Types.ObjectId.isValid(id)))
+    );
+    if (validIds.length === 0) {
+      throw new AppError('No valid submission IDs provided', 400, ERROR_CODES.BAD_REQUEST_400);
+    }
+
+    const objectIds = validIds.map((id) => new Types.ObjectId(id));
+
+    if (mode === 'HIDE_FROM_TEACHER') {
+      const updateRes = await SubmissionModel.updateMany(
+        { _id: { $in: objectIds } },
+        {
+          $set: {
+            hidden_from_teacher: true,
+            hidden_from_teacher_at: new Date()
+          }
+        }
+      );
+
+      return {
+        mode,
+        affectedCount: updateRes.modifiedCount ?? updateRes.matchedCount ?? validIds.length,
+        submissionIds: validIds
+      };
+    }
+
+    const deleteRes = await SubmissionModel.deleteMany({ _id: { $in: objectIds } });
+    return {
+      mode,
+      affectedCount: deleteRes.deletedCount ?? validIds.length,
+      submissionIds: validIds
+    };
+  }
+
+  /**
+   * Restores previously hidden submissions back to teacher dashboard visibility.
+   */
+  async restoreHiddenSubmissions(submissionIds: string[]) {
+    const validIds = Array.from(
+      new Set((submissionIds || []).map((id) => id.trim()).filter((id) => Types.ObjectId.isValid(id)))
+    );
+    if (validIds.length === 0) {
+      throw new AppError('No valid submission IDs provided', 400, ERROR_CODES.BAD_REQUEST_400);
+    }
+
+    const objectIds = validIds.map((id) => new Types.ObjectId(id));
+    const updateRes = await SubmissionModel.updateMany(
+      { _id: { $in: objectIds } },
+      {
+        $set: {
+          hidden_from_teacher: false,
+          hidden_from_teacher_at: null
+        }
+      }
+    );
+
+    return {
+      restoredCount: updateRes.modifiedCount ?? updateRes.matchedCount ?? validIds.length,
+      submissionIds: validIds
+    };
   }
 }

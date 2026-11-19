@@ -1003,6 +1003,8 @@ export class AssessmentsService {
       throw new AppError('Assessment not found', 404, ERROR_CODES.ASSESSMENT_NOT_FOUND_404);
     }
 
+    await SubmissionModel.deleteMany({ assessment_id: assessment._id });
+
     if (assessment.unit_package_id) {
       await UnitPackageModel.findByIdAndUpdate(assessment.unit_package_id, {
         $inc: { quizzes_count: -1 }

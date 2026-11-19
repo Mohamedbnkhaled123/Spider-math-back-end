@@ -81,6 +81,8 @@ export interface ISubmission {
 
   custom_mistake_cases: ICustomMistakeCase[];
   graded_at?: Date | null;
+  hidden_from_teacher?: boolean;
+  hidden_from_teacher_at?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -282,6 +284,15 @@ const SubmissionSchema = new Schema<ISubmissionDocument>(
       default: []
     },
     graded_at: {
+      type: Date,
+      default: null
+    },
+    hidden_from_teacher: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    hidden_from_teacher_at: {
       type: Date,
       default: null
     }

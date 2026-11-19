@@ -1,6 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { GradingService } from '../services/grading.service';
 import { gradeSubmissionDtoSchema } from '../dto/grade-submission.dto';
+import {
+  bulkDeleteSubmissionsDtoSchema,
+  restoreSubmissionsDtoSchema
+} from '../dto/manage-submissions.dto';
 
 export class GradingController {
   constructor(private gradingService: GradingService) {}
@@ -19,6 +23,7 @@ export class GradingController {
       const academicTerm = (req.query.academicTerm || req.query.term) as string | undefined;
       const status = req.query.status as string | undefined;
       const search = req.query.search as string | undefined;
+      const includeHidden = req.query.includeHidden === 'true';
       const page = req.query.page ? parseInt(req.query.page as string, 10) : undefined;
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
 
@@ -31,6 +36,7 @@ export class GradingController {
         academicTerm,
         status,
         search,
+        includeHidden,
         page,
         limit
       });
@@ -105,6 +111,42 @@ export class GradingController {
       res.status(200).json({
         success: true,
         data: submission
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * Hides selected submissions from teacher dashboard or permanently deletes them
+   * POST /api/v1/admin/submissions/bulk-delete
+   */
+  bulkDeleteOrHideSubmissions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const dto = bulkDeleteSubmissionsDtoSchema.parse(req.body);
+      const result = await this.gradingService.bulkDeleteOrHideSubmissions(dto.submissionIds, dto.mode);
+
+      res.status(200).json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * Restores submissions previously hidden from teacher dashboard
+   * POST /api/v1/admin/submissions/restore-hidden
+   */
+  restoreHiddenSubmissions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const dto = restoreSubmissionsDtoSchema.parse(req.body);
+      const result = await this.gradingService.restoreHiddenSubmissions(dto.submissionIds);
+
+      res.status(200).json({
+        success: true,
+        data: result
       });
     } catch (error) {
       next(error);

@@ -28,6 +28,8 @@ export interface IPromotionActionItem {
   fromTerm?: string | null;
   toTerm?: string | null;
   status: string;
+  resetApplied?: boolean;
+  clearedSubmissions?: boolean;
   reasonAr?: string;
   reasonEn?: string;
 }
@@ -106,15 +108,29 @@ export class StudentPromotionService {
 
     for (const { user, id, evalRes } of evaluations) {
       if (evalRes.status === 'PROMOTABLE') {
-        const updateSet: Record<string, unknown> =
-          dto.mode === 'TERM'
-            ? { academic_term: 'TERM_2' }
-            : {
-                grade_level: evalRes.nextGrade,
-                ...(evalRes.nextTerm ? { academic_term: evalRes.nextTerm } : {})
-              };
+        if (dto.mode === 'TERM') {
+          await UserModel.updateOne(
+            { _id: user._id, role: ROLES.STUDENT },
+            { $set: { academic_term: 'TERM_2' } }
+          );
+          await SubmissionModel.deleteMany({ student_id: user._id });
+        } else {
+          // GRADE promotion resets previous year's progress & subscriptions while preserving identity
+          const updateSet: Record<string, unknown> = {
+            grade_level: evalRes.nextGrade,
+            ...(evalRes.nextTerm ? { academic_term: evalRes.nextTerm } : {}),
+            total_xp: 0,
+            has_active_subscription: false
+          };
 
-        await UserModel.updateOne({ _id: user._id, role: ROLES.STUDENT }, { $set: updateSet });
+          await UserModel.updateOne({ _id: user._id, role: ROLES.STUDENT }, { $set: updateSet });
+          await SubmissionModel.deleteMany({ student_id: user._id });
+          await WatchProgressModel.deleteMany({ student_id: user._id });
+          await GamificationLogModel.deleteMany({ student_id: user._id });
+          await NotificationModel.deleteMany({ recipient_id: user._id });
+          await SubscriptionModel.deleteMany({ student_id: user._id });
+          studentPresenceCache.delete(id);
+        }
 
         promoted.push({
           studentId: id,
@@ -125,7 +141,9 @@ export class StudentPromotionService {
           toGrade: evalRes.nextGrade,
           fromTerm: evalRes.currentTerm,
           toTerm: evalRes.nextTerm,
-          status: 'PROMOTED'
+          status: 'PROMOTED',
+          resetApplied: dto.mode === 'GRADE',
+          clearedSubmissions: true
         });
         continue;
       }

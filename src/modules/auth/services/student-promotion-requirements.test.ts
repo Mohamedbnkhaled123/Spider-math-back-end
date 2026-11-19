@@ -251,6 +251,13 @@ async function runTests() {
       }
     ];
 
+    submissionsDb = [
+      { _id: 'sub_eg_t1', student_id: idEgPri5 },
+      { _id: 'sub_gulf_t1', student_id: idGulfG8 },
+      { _id: 'sub_t2_keep', student_id: idEgAlreadyT2 },
+      { _id: 'sub_sat_keep', student_id: idSatStudent }
+    ];
+
     const termResult = await studentPromotionService.promoteStudents(
       promoteStudentsDtoSchema.parse({
         mode: 'TERM',
@@ -263,7 +270,7 @@ async function runTests() {
     assert.strictEqual(usersDb.find((u) => u._id === idEgPri5)!.academic_term, 'TERM_2');
     assert.strictEqual(usersDb.find((u) => u._id === idEgPri5)!.grade_level, 'PRI_5', 'Grade level unchanged during term promotion');
     assert.strictEqual(usersDb.find((u) => u._id === idEgPri5)!.student_code, 'HA1001', 'HA code preserved');
-    assert.strictEqual(usersDb.find((u) => u._id === idEgPri5)!.total_xp, 250, 'XP preserved');
+    assert.strictEqual(usersDb.find((u) => u._id === idEgPri5)!.total_xp, 250, 'XP preserved during TERM promotion');
     assert.strictEqual(usersDb.find((u) => u._id === idGulfG8)!.academic_term, 'TERM_2');
     assert.strictEqual(usersDb.find((u) => u._id === idSatStudent)!.grade_level, 'SAT_MATH');
     assert.strictEqual(usersDb.find((u) => u._id === idSatStudent)!.academic_term, undefined, 'SAT student never assigned TERM_2');
@@ -275,12 +282,17 @@ async function runTests() {
       termResult.skipped.find((s) => s.studentId === idEgAlreadyT2.toString())?.status,
       'INELIGIBLE_ALREADY_TERM_2'
     );
+    // Term promotion MUST auto-delete old Term 1 submissions for promoted students while leaving skipped untouched
+    assert.strictEqual(submissionsDb.some((s) => matchesId(s.student_id, idEgPri5)), false, 'Promoted student Term 1 submissions deleted automatically');
+    assert.strictEqual(submissionsDb.some((s) => matchesId(s.student_id, idGulfG8)), false, 'Promoted Gulf student Term 1 submissions deleted automatically');
+    assert.strictEqual(submissionsDb.some((s) => matchesId(s.student_id, idEgAlreadyT2)), true, 'Already-Term-2 student submissions preserved');
+    assert.strictEqual(submissionsDb.some((s) => matchesId(s.student_id, idSatStudent)), true, 'SAT student submissions preserved');
     console.log('[PASS] REQ-1 & REQ-2 verified.');
 
     // -------------------------------------------------------------------------
-    // REQ-3 & REQ-4: Grade Promotion + Exclusions (Failed / Cancelled Students)
+    // REQ-3 & REQ-4: Grade Promotion Full Reset + Exclusions (Failed / Cancelled Students)
     // -------------------------------------------------------------------------
-    console.log('--- REQ-3 & REQ-4: Grade Promotion & Teacher Exclusions ---');
+    console.log('--- REQ-3 & REQ-4: Grade Promotion Full Reset & Teacher Exclusions ---');
     const idFailedPri5 = new Types.ObjectId();
     const idCancelledPri6 = new Types.ObjectId();
     const idPri6Promote = new Types.ObjectId();
@@ -297,6 +309,7 @@ async function runTests() {
         curriculum: 'EGYPTIAN',
         grade_level: 'PRI_5',
         academic_term: 'TERM_2',
+        has_active_subscription: true,
         total_xp: 250,
         is_profile_completed: true
       },
@@ -308,6 +321,7 @@ async function runTests() {
         curriculum: 'EGYPTIAN',
         grade_level: 'PRI_5',
         academic_term: 'TERM_2',
+        has_active_subscription: true,
         total_xp: 40,
         is_profile_completed: true
       },
@@ -331,6 +345,7 @@ async function runTests() {
         curriculum: 'EGYPTIAN',
         grade_level: 'PRI_6',
         academic_term: 'TERM_2',
+        has_active_subscription: true,
         total_xp: 500,
         is_profile_completed: true
       },
@@ -366,6 +381,35 @@ async function runTests() {
       }
     ];
 
+    subscriptionsDb = [
+      { _id: 'sub_eg5', student_id: idEgPri5 },
+      { _id: 'sub_fail', student_id: idFailedPri5 }
+    ];
+    submissionsDb = [
+      { _id: 's_eg5', student_id: idEgPri5 },
+      { _id: 's_fail', student_id: idFailedPri5 }
+    ];
+    watchProgressDb = [
+      { _id: 'wp_eg5', student_id: idEgPri5 },
+      { _id: 'wp_fail', student_id: idFailedPri5 }
+    ];
+    gamLogsDb = [
+      { _id: 'gl_eg5', student_id: idEgPri5 },
+      { _id: 'gl_fail', student_id: idFailedPri5 }
+    ];
+    notificationsDb = [
+      { _id: 'n_eg5', recipient_id: idEgPri5 },
+      { _id: 'n_fail', recipient_id: idFailedPri5 }
+    ];
+    studentPresenceCache.set(idEgPri5.toString(), {
+      studentId: idEgPri5.toString(),
+      studentName: 'Ahmed Promotable PRI_5',
+      activityType: 'WATCHING_LECTURE',
+      referenceId: 'lec1',
+      referenceTitle: 'Lec 1',
+      lastHeartbeatAt: new Date()
+    });
+
     const gradeResult = await studentPromotionService.promoteStudents(
       promoteStudentsDtoSchema.parse({
         mode: 'GRADE',
@@ -376,15 +420,33 @@ async function runTests() {
 
     assert.strictEqual(gradeResult.promotedCount, 5);
     assert.strictEqual(gradeResult.excludedCount, 2);
-    assert.strictEqual(usersDb.find((u) => u._id === idEgPri5)!.grade_level, 'PRI_6');
-    assert.strictEqual(usersDb.find((u) => u._id === idEgPri5)!.academic_term, 'TERM_1', 'Grade promotion resets term to TERM_1');
+    const promotedEg5 = usersDb.find((u) => u._id === idEgPri5)!;
+    assert.strictEqual(promotedEg5.grade_level, 'PRI_6');
+    assert.strictEqual(promotedEg5.academic_term, 'TERM_1', 'Grade promotion resets term to TERM_1');
+    assert.strictEqual(promotedEg5.total_xp, 0, 'Grade promotion resets XP to 0');
+    assert.strictEqual(promotedEg5.has_active_subscription, false, 'Grade promotion resets active subscription flag');
+    assert.strictEqual(promotedEg5.student_code, 'HA2001', 'Student HA code preserved on reset');
+    assert.strictEqual(promotedEg5.full_name, 'Ahmed Promotable PRI_5', 'Student name preserved on reset');
+    assert.strictEqual(subscriptionsDb.some((s) => matchesId(s.student_id, idEgPri5)), false, 'Old subscriptions cleared');
+    assert.strictEqual(submissionsDb.some((s) => matchesId(s.student_id, idEgPri5)), false, 'Old submissions cleared');
+    assert.strictEqual(watchProgressDb.some((s) => matchesId(s.student_id, idEgPri5)), false, 'Old watch progress cleared');
+    assert.strictEqual(gamLogsDb.some((s) => matchesId(s.student_id, idEgPri5)), false, 'Old gamification logs cleared');
+    assert.strictEqual(notificationsDb.some((s) => matchesId(s.recipient_id, idEgPri5)), false, 'Old notifications cleared');
+    assert.strictEqual(studentPresenceCache.has(idEgPri5.toString()), false, 'Presence cache cleared');
+
     assert.strictEqual(usersDb.find((u) => u._id === idPri6Promote)!.grade_level, 'PREP_1');
     assert.strictEqual(usersDb.find((u) => u._id === idUs11Promote)!.grade_level, 'US_GRADE_12');
     assert.strictEqual(usersDb.find((u) => u._id === idUk12Promote)!.grade_level, 'IGCSE_YEAR_13');
     assert.strictEqual(usersDb.find((u) => u._id === idUkOlPromote)!.grade_level, 'IGCSE_AS');
-    // Excluded students remain untouched
-    assert.strictEqual(usersDb.find((u) => u._id === idFailedPri5)!.grade_level, 'PRI_5');
-    assert.strictEqual(usersDb.find((u) => u._id === idFailedPri5)!.academic_term, 'TERM_2');
+    // Excluded students remain 100% untouched (no reset)
+    const failedStudentAfter = usersDb.find((u) => u._id === idFailedPri5)!;
+    assert.strictEqual(failedStudentAfter.grade_level, 'PRI_5');
+    assert.strictEqual(failedStudentAfter.academic_term, 'TERM_2');
+    assert.strictEqual(failedStudentAfter.total_xp, 40);
+    assert.strictEqual(failedStudentAfter.has_active_subscription, true);
+    assert.strictEqual(submissionsDb.some((s) => matchesId(s.student_id, idFailedPri5)), true, 'Excluded student keeps submissions');
+    assert.strictEqual(subscriptionsDb.some((s) => matchesId(s.student_id, idFailedPri5)), true, 'Excluded student keeps subscription');
+    assert.strictEqual(watchProgressDb.some((s) => matchesId(s.student_id, idFailedPri5)), true, 'Excluded student keeps watch progress');
     assert.strictEqual(usersDb.find((u) => u._id === idCancelledPri6)!.grade_level, 'PRI_6');
     console.log('[PASS] REQ-3 & REQ-4 verified.');
 
@@ -399,9 +461,22 @@ async function runTests() {
     const idIgAlGraduate = new Types.ObjectId();
     const idSatGraduate = new Types.ObjectId();
     const idSec2Advance = new Types.ObjectId();
+    const idActiveSec3 = new Types.ObjectId();
     const idParentUser = new Types.ObjectId();
 
     usersDb = [
+      {
+        _id: idActiveSec3,
+        full_name: 'Active Existing Sec 3 Student',
+        student_code: 'HA3008',
+        role: ROLES.STUDENT,
+        curriculum: 'EGYPTIAN',
+        grade_level: 'SEC_3',
+        academic_term: 'TERM_2',
+        has_active_subscription: true,
+        total_xp: 800,
+        is_profile_completed: true
+      },
       {
         _id: idSec3GraduateArchive,
         full_name: 'Graduated Sec 3 Archived',
@@ -572,15 +647,16 @@ async function runTests() {
     assert.strictEqual(sec3Archived.is_leaderboard_hidden, true);
     assert.strictEqual(sec3Archived.student_code, 'HA3001');
 
-    // Verify Leaderboard hides archived SEC_3 student even with high XP and subscription
+    // Verify Leaderboard hides archived SEC_3 student even with high XP and subscription,
+    // and also excludes newly promoted SEC_2 -> SEC_3 whose subscription/XP was reset for the new grade
     const leaderboardSvc = new GamificationService();
     const lbSec3 = await leaderboardSvc.getLeaderboard({
       curriculum: 'EGYPTIAN',
       gradeLevel: 'SEC_3',
       limit: 20
     });
-    assert.strictEqual(lbSec3.totalStudents, 1, 'Only active newly-promoted SEC_3 student in leaderboard');
-    assert.strictEqual(lbSec3.leaderboard[0]?.studentId, idSec2Advance.toString());
+    assert.strictEqual(lbSec3.totalStudents, 1, 'Only non-archived active SEC_3 student in leaderboard');
+    assert.strictEqual(lbSec3.leaderboard[0]?.studentId, idActiveSec3.toString());
 
     // Verify already-archived student cannot be re-promoted
     const rePromoteArchived = await studentPromotionService.promoteStudents(
