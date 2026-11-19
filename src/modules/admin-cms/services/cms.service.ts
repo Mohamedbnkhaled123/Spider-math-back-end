@@ -9,6 +9,12 @@ import { UpdateCmsDto } from '../dto/update-cms.dto';
 const CMS_CACHE_KEY = 'MAIN_SITE_CONFIG';
 const CMS_CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
 
+const pickOptionalText = (val: unknown, fallback: string): string =>
+  typeof val === 'string' ? val : fallback;
+
+const pickRequiredText = (val: unknown, fallback: string): string =>
+  typeof val === 'string' && val.trim().length > 0 ? val : fallback;
+
 export class CmsService {
   /**
    * Retrieves Landing Page public configuration.
@@ -75,12 +81,14 @@ export class CmsService {
       isAnnouncementActive: config.is_announcement_active ?? true,
       announcementBannerTextEn: config.announcement_banner_text_en || '✦ 20% Limited Discount on Term 1 Master Packages for Platform Launch ✦',
 
-      heroBadgeAr: config.hero_badge_ar || 'Spider Math✦ المنظومة الهندسية الرائدة',
-      heroBadgeEn: config.hero_badge_en || 'Spider Math✦ Engineering Excellence',
-      heroCtaPrimaryAr: config.hero_cta_primary_ar || 'اختار منهجك وابدأ الآن',
-      heroCtaPrimaryEn: config.hero_cta_primary_en || 'Choose Your Curriculum & Begin',
-      heroCtaSecondaryAr: config.hero_cta_secondary_ar || 'امتحان تحديد المستوى المجاني',
-      heroCtaSecondaryEn: config.hero_cta_secondary_en || 'Free Placement Test',
+      heroBadgeAr: pickOptionalText(config.hero_badge_ar, 'Spider Math✦ المنظومة الهندسية الرائدة'),
+      heroBadgeEn: pickOptionalText(config.hero_badge_en, 'Spider Math✦ Engineering Excellence'),
+      heroCtaPrimaryAr: pickRequiredText(config.hero_cta_primary_ar, 'اختار منهجك وابدأ الآن'),
+      heroCtaPrimaryEn: pickRequiredText(config.hero_cta_primary_en, 'Choose Your Curriculum & Begin'),
+      heroCtaSecondaryAr: pickOptionalText(config.hero_cta_secondary_ar, 'امتحان تحديد المستوى المجاني'),
+      heroCtaSecondaryEn: pickOptionalText(config.hero_cta_secondary_en, 'Free Placement Test'),
+      aboutHeadlineAr: pickRequiredText(config.about_headline_ar, 'تعلم تفاعلي\nالمفاهيم أولاً\nبمنهجية هندسية'),
+      aboutHeadlineEn: pickRequiredText(config.about_headline_en, 'Interactive\nConcept-First\nLearning'),
 
       teacherNameAr: config.teacher_name_ar || 'المهندسة / هبة عبدالوهاب',
       teacherNameEn: config.teacher_name_en || 'Eng. Heba Abdel-Wahab',
@@ -103,25 +111,27 @@ export class CmsService {
       teacherWhatsappCtaAr: config.teacher_whatsapp_cta_ar || 'تواصل مباشرة مع فريق م/ هبة عبر واتساب',
       teacherWhatsappCtaEn: config.teacher_whatsapp_cta_en || 'Direct WhatsApp Consultation',
 
-      curriculumBadgeAr: config.curriculum_badge_ar || 'المسارات الأكاديمية والمناهج',
-      curriculumBadgeEn: config.curriculum_badge_en || 'Academic Tracks & Curriculums',
+      curriculumBadgeAr: pickOptionalText(config.curriculum_badge_ar, 'المسارات الأكاديمية والمناهج'),
+      curriculumBadgeEn: pickOptionalText(config.curriculum_badge_en, 'Academic Tracks & Curriculums'),
       curriculumTitleAr: config.curriculum_title_ar || 'اختر منهجك الدراسي وابدأ رحلة التفوق',
       curriculumTitleEn: config.curriculum_title_en || 'Choose Your Curriculum & Begin Mastery',
-      curriculumSubtitleAr: config.curriculum_subtitle_ar || 'مناهج تعليمية متكاملة مصممة بأعلى معايير الجودة لتناسب نظامك الدراسي',
-      curriculumSubtitleEn: config.curriculum_subtitle_en || 'Comprehensive educational tracks designed with high engineering standards',
+      curriculumSubtitleAr: pickOptionalText(config.curriculum_subtitle_ar, 'مناهج تعليمية متكاملة مصممة بأعلى معايير الجودة لتناسب نظامك الدراسي'),
+      curriculumSubtitleEn: pickOptionalText(config.curriculum_subtitle_en, 'Comprehensive educational tracks designed with high engineering standards'),
 
-      placementBadgeAr: config.placement_badge_ar || 'اختبار تحديد المستوى وتشخيص المهارات الرياضية',
-      placementBadgeEn: config.placement_badge_en || 'Free Placement & Diagnostic Assessment',
+      placementRibbonAr: pickOptionalText(config.placement_ribbon_ar, 'مجاني'),
+      placementRibbonEn: pickOptionalText(config.placement_ribbon_en, 'Free'),
+      placementBadgeAr: pickOptionalText(config.placement_badge_ar, 'اختبار تحديد المستوى وتشخيص المهارات الرياضية'),
+      placementBadgeEn: pickOptionalText(config.placement_badge_en, 'Free Placement & Diagnostic Assessment'),
       placementHeadlineAr: config.placement_headline_ar || 'ابدأ اختبار تحديد المستوى واكتشف نقاط قوتك وضعفك',
       placementHeadlineEn: config.placement_headline_en || 'Assess Your Skills & Discover Your Strengths',
       placementSubtitleAr: config.placement_subtitle_ar || 'تقييم تشخيصي تفاعلي ذكي يقيس مهاراتك التأسيسية وحل المسائل التحليلية لتحديد خطتك الأكاديمية بدقة وبإشراف مباشر من المهندسة هبة عبدالوهاب.',
       placementSubtitleEn: config.placement_subtitle_en || 'Interactive diagnostic assessment designed to evaluate core foundational concepts and analytical problem solving with instant insights.',
-      placementFeature1Ar: config.placement_feature_1_ar || 'تقييم ذكي ومباشر',
-      placementFeature1En: config.placement_feature_1_en || 'Instant Diagnostic Feedback',
-      placementFeature2Ar: config.placement_feature_2_ar || 'تقرير مفصل بنقاط القوة والضعف',
-      placementFeature2En: config.placement_feature_2_en || 'Strengths & Weaknesses Report',
-      placementFeature3Ar: config.placement_feature_3_ar || 'متابعة شخصية من م/ هبة عبدالوهاب',
-      placementFeature3En: config.placement_feature_3_en || 'Eng. Heba Follow-up',
+      placementFeature1Ar: pickOptionalText(config.placement_feature_1_ar, 'تقييم ذكي ومباشر'),
+      placementFeature1En: pickOptionalText(config.placement_feature_1_en, 'Instant Diagnostic Feedback'),
+      placementFeature2Ar: pickOptionalText(config.placement_feature_2_ar, 'تقرير مفصل بنقاط القوة والضعف'),
+      placementFeature2En: pickOptionalText(config.placement_feature_2_en, 'Strengths & Weaknesses Report'),
+      placementFeature3Ar: pickOptionalText(config.placement_feature_3_ar, 'متابعة شخصية من م/ هبة عبدالوهاب'),
+      placementFeature3En: pickOptionalText(config.placement_feature_3_en, 'Eng. Heba Follow-up'),
       placementCtaAr: config.placement_cta_ar || 'ابدأ اختبار تحديد المستوى الآن',
       placementCtaEn: config.placement_cta_en || 'Start Diagnostic Assessment Now',
 
@@ -138,12 +148,24 @@ export class CmsService {
       pricingTitleEn: config.pricing_title_en || 'Transparent Tuition & Revision Packages',
       pricingSubtitleAr: config.pricing_subtitle_ar || 'خطط دراسية مرنة ومراجعات نهائية مكثفة تضمن لك التفوق بأفضل الأسعار',
       pricingSubtitleEn: config.pricing_subtitle_en || 'Flexible study units and intensive final revisions engineered for mastery',
-      hallOfFameBadgeAr: config.hall_of_fame_badge_ar || 'لوحة الشرف • أبطال الرياضيات',
-      hallOfFameBadgeEn: config.hall_of_fame_badge_en || 'Hall of Fame • Top Math Masters',
+      hallOfFameBadgeAr: pickOptionalText(config.hall_of_fame_badge_ar, 'لوحة الشرف • أبطال الرياضيات'),
+      hallOfFameBadgeEn: pickOptionalText(config.hall_of_fame_badge_en, 'Hall of Fame • Top Math Masters'),
       hallOfFameTitleAr: config.hall_of_fame_title_ar || 'لوحة الشرف والتفوق الأكاديمي',
       hallOfFameTitleEn: config.hall_of_fame_title_en || 'Academic Hall of Fame & Honor Roll',
       hallOfFameSubtitleAr: config.hall_of_fame_subtitle_ar || 'نخبة طلابنا الذين حققوا العلامات الكاملة وأعلى مراتب التميز والذكاء الرياضي.',
       hallOfFameSubtitleEn: config.hall_of_fame_subtitle_en || 'Elite students who achieved perfect scores and mathematical excellence across all academic curricula.',
+      honorCtaTitleAr: pickRequiredText(config.honor_cta_title_ar, 'انضم لقائمة الشرف'),
+      honorCtaTitleEn: pickRequiredText(config.honor_cta_title_en, 'Join the Honor Roll'),
+      honorCtaSubtitleAr: pickRequiredText(config.honor_cta_subtitle_ar, 'ابدأ تحديد المستوى لتقييم مستواك.'),
+      honorCtaSubtitleEn: pickRequiredText(config.honor_cta_subtitle_en, 'Start placement test to evaluate your level.'),
+      honorCtaButtonAr: pickRequiredText(config.honor_cta_button_ar, 'تحديد المستوى'),
+      honorCtaButtonEn: pickRequiredText(config.honor_cta_button_en, 'Start Placement'),
+      testimonialsBadgeAr: pickOptionalText(config.testimonials_badge_ar, 'قصص النجاح'),
+      testimonialsBadgeEn: pickOptionalText(config.testimonials_badge_en, 'Success Stories'),
+      testimonialsTitleAr: pickRequiredText(config.testimonials_title_ar, 'آراء الطلاب وأولياء الأمور'),
+      testimonialsTitleEn: pickRequiredText(config.testimonials_title_en, 'Student & Parent Reviews'),
+      testimonialsSubtitleAr: pickOptionalText(config.testimonials_subtitle_ar, 'تجارب طلابنا وأولياء الأمور.'),
+      testimonialsSubtitleEn: pickOptionalText(config.testimonials_subtitle_en, 'Real student reviews.'),
       honorBoardList: (config.honor_board_list && config.honor_board_list.length > 0) ? config.honor_board_list : DEFAULT_HONOR_BOARD_LIST,
       honor_board_list: (config.honor_board_list && config.honor_board_list.length > 0) ? config.honor_board_list : DEFAULT_HONOR_BOARD_LIST,
       activeAcademicYear: config.active_academic_year || '2026 / 2027',
@@ -224,6 +246,8 @@ export class CmsService {
       ['hero_cta_primary_en', 'heroCtaPrimaryEn'],
       ['hero_cta_secondary_ar', 'heroCtaSecondaryAr'],
       ['hero_cta_secondary_en', 'heroCtaSecondaryEn'],
+      ['about_headline_ar', 'aboutHeadlineAr'],
+      ['about_headline_en', 'aboutHeadlineEn'],
       ['teacher_name_ar', 'teacherNameAr'],
       ['teacher_name_en', 'teacherNameEn'],
       ['teacher_title_ar', 'teacherTitleAr'],
@@ -240,6 +264,8 @@ export class CmsService {
       ['curriculum_title_en', 'curriculumTitleEn'],
       ['curriculum_subtitle_ar', 'curriculumSubtitleAr'],
       ['curriculum_subtitle_en', 'curriculumSubtitleEn'],
+      ['placement_ribbon_ar', 'placementRibbonAr'],
+      ['placement_ribbon_en', 'placementRibbonEn'],
       ['placement_badge_ar', 'placementBadgeAr'],
       ['placement_badge_en', 'placementBadgeEn'],
       ['placement_headline_ar', 'placementHeadlineAr'],
@@ -271,7 +297,19 @@ export class CmsService {
       ['hall_of_fame_title_ar', 'hallOfFameTitleAr'],
       ['hall_of_fame_title_en', 'hallOfFameTitleEn'],
       ['hall_of_fame_subtitle_ar', 'hallOfFameSubtitleAr'],
-      ['hall_of_fame_subtitle_en', 'hallOfFameSubtitleEn']
+      ['hall_of_fame_subtitle_en', 'hallOfFameSubtitleEn'],
+      ['honor_cta_title_ar', 'honorCtaTitleAr'],
+      ['honor_cta_title_en', 'honorCtaTitleEn'],
+      ['honor_cta_subtitle_ar', 'honorCtaSubtitleAr'],
+      ['honor_cta_subtitle_en', 'honorCtaSubtitleEn'],
+      ['honor_cta_button_ar', 'honorCtaButtonAr'],
+      ['honor_cta_button_en', 'honorCtaButtonEn'],
+      ['testimonials_badge_ar', 'testimonialsBadgeAr'],
+      ['testimonials_badge_en', 'testimonialsBadgeEn'],
+      ['testimonials_title_ar', 'testimonialsTitleAr'],
+      ['testimonials_title_en', 'testimonialsTitleEn'],
+      ['testimonials_subtitle_ar', 'testimonialsSubtitleAr'],
+      ['testimonials_subtitle_en', 'testimonialsSubtitleEn']
     ];
 
     for (const [snake, camel] of bilingualPairs) {
@@ -286,11 +324,6 @@ export class CmsService {
 
     const term = dto.active_academic_term ?? (dto as any).activeAcademicTerm;
     if (term !== undefined) updatePayload.active_academic_term = term;
-
-    const whatsapp = dto.support_whatsapp ?? dto.supportWhatsapp;
-    if (whatsapp !== undefined) {
-      updatePayload['contact_channels.support_whatsapp'] = whatsapp;
-    }
 
     const activeGrades = dto.active_grades ?? (dto as any).activeGrades;
     if (activeGrades !== undefined && Array.isArray(activeGrades)) {
@@ -325,8 +358,30 @@ export class CmsService {
         is_active: s.is_active ?? true
       }));
     }
+
     if (dto.contact_channels) {
       updatePayload.contact_channels = dto.contact_channels;
+    } else {
+      const whatsapp = dto.support_whatsapp ?? dto.supportWhatsapp;
+      if (whatsapp !== undefined) {
+        updatePayload['contact_channels.support_whatsapp'] = whatsapp;
+        updatePayload['contact_channels.subscription_whatsapp'] = whatsapp;
+      }
+
+      const telegram = dto.support_telegram ?? dto.supportTelegram ?? dto.telegram_url ?? dto.telegramUrl;
+      if (telegram !== undefined) {
+        updatePayload['contact_channels.telegram_url'] = telegram;
+      }
+
+      const facebook = dto.facebook_url ?? dto.facebookUrl;
+      if (facebook !== undefined) {
+        updatePayload['contact_channels.facebook_url'] = facebook;
+      }
+
+      const youtube = dto.youtube_channel_url ?? dto.youtubeUrl;
+      if (youtube !== undefined) {
+        updatePayload['contact_channels.youtube_channel_url'] = youtube;
+      }
     }
 
     const honorBoard = (dto as any).honor_board_list ?? (dto as any).honorBoardList;
@@ -357,8 +412,9 @@ export class CmsService {
       { new: true, upsert: true }
     ).lean();
 
-    // Invalidate cache immediately
+    // Invalidate cache immediately (both cache keys)
     publicCmsCache.delete(CMS_CACHE_KEY);
+    publicCmsCache.delete('CMS_MAIN_SITE_CONFIG');
 
     return updated as unknown as ICmsConfig;
   }

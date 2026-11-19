@@ -259,6 +259,10 @@ export interface ICmsConfig {
   teacher_whatsapp_cta_ar?: string;
   teacher_whatsapp_cta_en?: string;
 
+  // About Section Headline
+  about_headline_ar?: string;
+  about_headline_en?: string;
+
   // Curriculum Section
   curriculum_badge_ar?: string;
   curriculum_badge_en?: string;
@@ -268,6 +272,8 @@ export interface ICmsConfig {
   curriculum_subtitle_en?: string;
 
   // Placement Test Section
+  placement_ribbon_ar?: string;
+  placement_ribbon_en?: string;
   placement_badge_ar?: string;
   placement_badge_en?: string;
   placement_headline_ar?: string;
@@ -306,7 +312,21 @@ export interface ICmsConfig {
   hall_of_fame_title_en?: string;
   hall_of_fame_subtitle_ar?: string;
   hall_of_fame_subtitle_en?: string;
+  honor_cta_title_ar?: string;
+  honor_cta_title_en?: string;
+  honor_cta_subtitle_ar?: string;
+  honor_cta_subtitle_en?: string;
+  honor_cta_button_ar?: string;
+  honor_cta_button_en?: string;
   honor_board_list?: IHonorBoardItem[];
+
+  // Testimonials Section
+  testimonials_badge_ar?: string;
+  testimonials_badge_en?: string;
+  testimonials_title_ar?: string;
+  testimonials_title_en?: string;
+  testimonials_subtitle_ar?: string;
+  testimonials_subtitle_en?: string;
 
   teacher_profile: ITeacherProfile;
   schedules_table: IScheduleItem[];
@@ -456,12 +476,22 @@ const CmsConfigSchema = new Schema<ICmsConfigDocument>(
     },
     hero_cta_secondary_ar: {
       type: String,
-      default: 'تواصل مع المساعد الذكي',
+      default: 'امتحان تحديد المستوى المجاني',
       trim: true
     },
     hero_cta_secondary_en: {
       type: String,
-      default: 'Speak to AI Tutor',
+      default: 'Free Placement Test',
+      trim: true
+    },
+    about_headline_ar: {
+      type: String,
+      default: 'تعلم تفاعلي\nالمفاهيم أولاً\nبمنهجية هندسية',
+      trim: true
+    },
+    about_headline_en: {
+      type: String,
+      default: 'Interactive\nConcept-First\nLearning',
       trim: true
     },
     teacher_name_ar: {
@@ -550,6 +580,16 @@ const CmsConfigSchema = new Schema<ICmsConfigDocument>(
     curriculum_subtitle_en: {
       type: String,
       default: 'Comprehensive educational tracks designed with high engineering standards',
+      trim: true
+    },
+    placement_ribbon_ar: {
+      type: String,
+      default: 'مجاني',
+      trim: true
+    },
+    placement_ribbon_en: {
+      type: String,
+      default: 'Free',
       trim: true
     },
     placement_badge_ar: {
@@ -710,6 +750,66 @@ const CmsConfigSchema = new Schema<ICmsConfigDocument>(
     hall_of_fame_subtitle_en: {
       type: String,
       default: 'Elite students who achieved perfect scores and mathematical excellence across all academic curricula.',
+      trim: true
+    },
+    honor_cta_title_ar: {
+      type: String,
+      default: 'انضم لقائمة الشرف',
+      trim: true
+    },
+    honor_cta_title_en: {
+      type: String,
+      default: 'Join the Honor Roll',
+      trim: true
+    },
+    honor_cta_subtitle_ar: {
+      type: String,
+      default: 'ابدأ تحديد المستوى لتقييم مستواك.',
+      trim: true
+    },
+    honor_cta_subtitle_en: {
+      type: String,
+      default: 'Start placement test to evaluate your level.',
+      trim: true
+    },
+    honor_cta_button_ar: {
+      type: String,
+      default: 'تحديد المستوى',
+      trim: true
+    },
+    honor_cta_button_en: {
+      type: String,
+      default: 'Start Placement',
+      trim: true
+    },
+    testimonials_badge_ar: {
+      type: String,
+      default: 'قصص النجاح',
+      trim: true
+    },
+    testimonials_badge_en: {
+      type: String,
+      default: 'Success Stories',
+      trim: true
+    },
+    testimonials_title_ar: {
+      type: String,
+      default: 'آراء الطلاب وأولياء الأمور',
+      trim: true
+    },
+    testimonials_title_en: {
+      type: String,
+      default: 'Student & Parent Reviews',
+      trim: true
+    },
+    testimonials_subtitle_ar: {
+      type: String,
+      default: 'تجارب طلابنا وأولياء الأمور.',
+      trim: true
+    },
+    testimonials_subtitle_en: {
+      type: String,
+      default: 'Real student reviews.',
       trim: true
     },
     honor_board_list: {
