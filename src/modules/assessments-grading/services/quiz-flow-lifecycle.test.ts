@@ -7,6 +7,7 @@ import { GamificationLogModel } from '../../../models/gamification-log.model';
 import { NotificationModel } from '../../../models/notification.model';
 import { QuestionGraderFactory } from '../factories/question-grader.factory';
 import { GradingService } from './grading.service';
+import { mapStudentSubmissionSummary } from './assessments.service';
 
 const CELEBRATION_PHRASES_BELOW_70 = [
   'الغلط مش فشل، الغلط أول خطوة للدرجة الكاملة',
@@ -419,6 +420,56 @@ async function runQuizFlowLifecycleTests(): Promise<void> {
     'Lightbox z-index (1500) must strictly exceed preview panels (900)'
   );
   console.log('[PASS] Phase 7 Passed: Lightbox layer 1500 guarantees solution images always display on top with dismiss controls.');
+
+  // ===========================================================================
+  // Phase 8: Bilingual Strict-Isolation Mapping in getMySubmissions
+  // ===========================================================================
+  console.log('\n--- Phase 8: Bilingual Strict-Isolation Mapping ---');
+  const pendingMapped = mapStudentSubmissionSummary({
+    _id: new Types.ObjectId(),
+    result_visibility: 'HIDDEN_PENDING_TEACHER',
+    createdAt: new Date('2026-11-17T10:00:00.000Z'),
+    assessment_id: {
+      _id: new Types.ObjectId(),
+      title_ar: 'رياضه',
+      title_en: '',
+      total_points: 5,
+      max_attempts: 1
+    },
+    unit_package_id: null
+  });
+  assert.equal(pendingMapped.gradeLabelAr, 'في انتظار التصحيح اليدوي');
+  assert.equal(pendingMapped.gradeLabelEn, 'Pending Manual Review');
+  assert.equal(pendingMapped.gradedByEn, 'Pending Manual Review');
+  assert.equal(/[\u0600-\u06FF\u0660-\u0669]/.test(pendingMapped.gradedDateEn), false, 'English date must use Latin digits/month');
+  assert.equal(/[\u0600-\u06FF]/.test(pendingMapped.titleEn), false, 'English title must never leak raw Arabic fallback');
+  assert.equal(/[\u0600-\u06FF]/.test(pendingMapped.unitTitleEn), false, 'English unit title must never leak raw Arabic fallback');
+
+  const publishedMapped = mapStudentSubmissionSummary({
+    _id: new Types.ObjectId(),
+    result_visibility: 'PUBLISHED_TO_STUDENT_AND_PARENT',
+    final_total_score: 9,
+    graded_at: new Date('2026-11-18T12:00:00.000Z'),
+    assessment_id: {
+      _id: new Types.ObjectId(),
+      title_ar: 'اختبار الجبر',
+      title_en: 'Algebra Quiz',
+      total_points: 10,
+      max_attempts: 2
+    },
+    unit_package_id: {
+      _id: new Types.ObjectId(),
+      title_ar: 'الوحدة الأولى',
+      title_en: 'Unit 1'
+    }
+  });
+  assert.equal(publishedMapped.gradeLabelAr, 'ممتاز');
+  assert.equal(/[A-Za-z]/.test(publishedMapped.gradeLabelAr), false, 'Arabic grade label must have zero English tokens');
+  assert.equal(publishedMapped.gradeLabelEn, 'Excellent');
+  assert.equal(publishedMapped.gradedByEn, 'Eng. Heba Abdelwahab');
+  assert.equal(publishedMapped.titleEn, 'Algebra Quiz');
+  assert.equal(publishedMapped.unitTitleEn, 'Unit 1');
+  console.log('[PASS] Phase 8 Passed: Bilingual strict isolation verified for pending & published submissions.');
 
   console.log('\n================================================================');
   console.log('[PASS] COMPLETE QUIZ FLOW LIFECYCLE AUTOMATED TEST SUITE PASSED! [PASS]');

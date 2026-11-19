@@ -44,6 +44,101 @@ export interface IStartAssessmentResponse {
   serverStartedAt: Date;
 }
 
+const ARABIC_CHAR_REGEX = /[\u0600-\u06FF]/;
+
+/**
+ * Resolves an English label without leaking Arabic text when `enVal` is missing.
+ */
+export function resolveSafeEnglishTitle(
+  enVal: string | undefined | null,
+  arVal: string | undefined | null,
+  fallback: string
+): string {
+  const trimmedEn = typeof enVal === 'string' ? enVal.trim() : '';
+  if (trimmedEn && !ARABIC_CHAR_REGEX.test(trimmedEn)) {
+    return trimmedEn;
+  }
+  const trimmedAr = typeof arVal === 'string' ? arVal.trim() : '';
+  if (trimmedAr && !ARABIC_CHAR_REGEX.test(trimmedAr)) {
+    return trimmedAr;
+  }
+  return fallback;
+}
+
+/**
+ * Maps a populated Submission document into a strictly bilingual student summary DTO.
+ */
+export function mapStudentSubmissionSummary(sub: any) {
+  const assessment = sub.assessment_id;
+  const unit = sub.unit_package_id;
+  const totalPoints = assessment ? assessment.total_points : 0;
+  const isPublished = sub.result_visibility === 'PUBLISHED_TO_STUDENT_AND_PARENT';
+  const isPending = sub.result_visibility === 'HIDDEN_PENDING_TEACHER';
+  const score = isPublished ? (sub.final_total_score ?? 0) : null;
+  const percentage = (totalPoints > 0 && isPublished)
+    ? Math.round(((sub.final_total_score ?? 0) / totalPoints) * 100)
+    : null;
+
+  let gradeLabelAr = isPending ? 'في انتظار التصحيح اليدوي' : 'قيد التصحيح';
+  let gradeLabelEn = isPending ? 'Pending Manual Review' : 'Grading in Progress';
+  if (isPublished) {
+    const pct = percentage ?? 0;
+    if (pct >= 85) {
+      gradeLabelAr = 'ممتاز';
+      gradeLabelEn = 'Excellent';
+    } else if (pct >= 65) {
+      gradeLabelAr = 'جيد جداً';
+      gradeLabelEn = 'Very Good';
+    } else if (pct >= 50) {
+      gradeLabelAr = 'جيد';
+      gradeLabelEn = 'Good';
+    } else {
+      gradeLabelAr = 'يحتاج لمراجعة';
+      gradeLabelEn = 'Needs Review';
+    }
+  }
+
+  const rawDate = sub.graded_at ? new Date(sub.graded_at) : (sub.createdAt ? new Date(sub.createdAt) : null);
+  const formattedDateAr = rawDate ? rawDate.toLocaleDateString('ar-EG', { dateStyle: 'medium' }) : '';
+  const formattedDateEn = rawDate ? rawDate.toLocaleDateString('en-US', { dateStyle: 'medium' }) : '';
+
+  const titleAr = assessment ? (assessment.title_ar || 'تقييم دراسي') : 'تقييم دراسي';
+  const titleEn = resolveSafeEnglishTitle(assessment?.title_en, assessment?.title_ar, 'Academic Assessment');
+  const unitTitleAr = unit ? (unit.title_ar || 'الوحدة الدراسية') : (assessment?.title_ar || 'الوحدة الدراسية');
+  const unitTitleEn = unit
+    ? resolveSafeEnglishTitle(unit.title_en, unit.title_ar, titleEn)
+    : resolveSafeEnglishTitle(assessment?.title_en, assessment?.title_ar, 'Course Unit');
+
+  const gradedByAr = isPending ? 'في انتظار التصحيح اليدوي' : 'م/ هبة عبدالوهاب';
+  const gradedByEn = isPending ? 'Pending Manual Review' : 'Eng. Heba Abdelwahab';
+
+  return {
+    id: sub._id.toString(),
+    submissionId: sub._id.toString(),
+    assessmentId: assessment ? assessment._id.toString() : '',
+    maxAttempts: assessment?.max_attempts || 1,
+    attemptNumber: sub.attempt_number || 1,
+    titleAr,
+    titleEn,
+    unitTitleAr,
+    unitTitleEn,
+    score,
+    maxScore: totalPoints,
+    percentage,
+    gradeLabelAr,
+    gradeLabelEn,
+    status: isPending ? 'PENDING_REVIEW' : (isPublished ? 'PUBLISHED' : sub.result_visibility),
+    isPending,
+    gradedBy: gradedByAr,
+    gradedByAr,
+    gradedByEn,
+    gradedDateAr: formattedDateAr,
+    gradedDateEn: formattedDateEn,
+    gradedAtIso: rawDate ? rawDate.toISOString() : undefined,
+    feedbackUrl: `/student/submissions/${sub._id}/feedback`
+  };
+}
+
 export interface ISyncSubmissionResponse {
   submissionId: string;
   idempotencyKey: string;
@@ -1463,9 +1558,10 @@ export class AssessmentsService {
       maxAttempts,
       completedAttemptsCount,
       canRetake,
-      assessmentTitleAr: assessment ? assessment.title_ar : 'تقييم تدريبي',
-      assessmentTitleEn: assessment ? assessment.title_en : 'Assessment',
-      unitTitleAr: unitPackage ? unitPackage.title_ar : 'الوحدة الدراسية',
+      assessmentTitleAr: assessment ? (assessment.title_ar || 'تقييم تدريبي') : 'تقييم تدريبي',
+      assessmentTitleEn: resolveSafeEnglishTitle(assessment?.title_en, assessment?.title_ar, 'Assessment'),
+      unitTitleAr: unitPackage ? (unitPackage.title_ar || 'الوحدة الدراسية') : 'الوحدة الدراسية',
+      unitTitleEn: unitPackage ? resolveSafeEnglishTitle(unitPackage.title_en, unitPackage.title_ar, 'Course Unit') : 'Course Unit',
       resultVisibility: submission.result_visibility,
       mcqAutoScore: isPublished ? submission.mcq_auto_score : null,
       essayManualScore: isPublished ? submission.essay_manual_score : null,
@@ -1497,47 +1593,7 @@ export class AssessmentsService {
       .sort({ createdAt: -1 })
       .lean();
 
-    return submissions.map((sub: any) => {
-      const assessment = sub.assessment_id;
-      const unit = sub.unit_package_id;
-      const totalPoints = assessment ? assessment.total_points : 0;
-      const isPublished = sub.result_visibility === 'PUBLISHED_TO_STUDENT_AND_PARENT';
-      const isPending = sub.result_visibility === 'HIDDEN_PENDING_TEACHER';
-      const score = isPublished ? (sub.final_total_score ?? 0) : null;
-      const percentage = (totalPoints > 0 && isPublished) ? Math.round(((sub.final_total_score ?? 0) / totalPoints) * 100) : null;
-
-      let gradeLabelAr = isPending ? 'في انتظار التصحيح اليدوي' : 'قيد التصحيح';
-      if (isPublished) {
-        const pct = percentage ?? 0;
-        if (pct >= 85) gradeLabelAr = 'ممتاز (Mastery)';
-        else if (pct >= 65) gradeLabelAr = 'جيد جداً (Proficient)';
-        else if (pct >= 50) gradeLabelAr = 'جيد (Developing)';
-        else gradeLabelAr = 'يحتاج لمراجعة';
-      }
-
-      const formattedDate = sub.graded_at
-        ? new Date(sub.graded_at).toLocaleDateString('ar-EG', { dateStyle: 'medium' })
-        : (sub.createdAt ? new Date(sub.createdAt).toLocaleDateString('ar-EG', { dateStyle: 'medium' }) : '');
-
-      return {
-        id: sub._id.toString(),
-        submissionId: sub._id.toString(),
-        assessmentId: assessment ? assessment._id.toString() : '',
-        maxAttempts: assessment?.max_attempts || 1,
-        attemptNumber: sub.attempt_number || 1,
-        titleAr: assessment ? assessment.title_ar : 'تقييم دراسي',
-        unitTitleAr: unit ? unit.title_ar : (assessment?.title_ar || 'الوحدة الدراسية'),
-        score,
-        maxScore: totalPoints,
-        percentage,
-        gradeLabelAr,
-        status: isPending ? 'PENDING_REVIEW' : (isPublished ? 'PUBLISHED' : sub.result_visibility),
-        isPending,
-        gradedBy: isPending ? 'في انتظار التصحيح اليدوي' : 'م/ هبة عبدالوهاب',
-        gradedDateAr: formattedDate,
-        feedbackUrl: `/student/submissions/${sub._id}/feedback`
-      };
-    });
+    return submissions.map((sub: any) => mapStudentSubmissionSummary(sub));
   }
 }
 
