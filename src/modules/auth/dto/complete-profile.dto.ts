@@ -43,7 +43,8 @@ export const completeProfileDtoSchema = z
       .optional()
       .nullable(),
 
-    avatarUrl: z.string().url().optional().nullable()
+    avatarUrl: z.string().url().optional().nullable(),
+    placementAttemptId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid placementAttemptId ObjectId').optional()
   })
   .superRefine((data, ctx) => {
     // 1. Validate that gradeLevel belongs to the chosen curriculum

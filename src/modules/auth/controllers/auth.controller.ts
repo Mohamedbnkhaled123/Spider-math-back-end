@@ -80,7 +80,8 @@ export class AuthController {
     try {
       const result = await authService.studentCodeLogin({
         student_ha_code: req.body.student_ha_code,
-        deviceUuid: req.header('X-Device-UUID') || req.body.deviceUuid
+        deviceUuid: req.header('X-Device-UUID') || req.body.deviceUuid,
+        placementAttemptId: req.body.placementAttemptId
       });
       res.status(200).json(createSuccessResponse(result));
     } catch (error) {

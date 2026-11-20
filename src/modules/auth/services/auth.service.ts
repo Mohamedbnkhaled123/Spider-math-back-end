@@ -71,6 +71,29 @@ export class AuthService {
     this.adminAuthAttempts.delete(bucketKey);
   }
 
+  private async linkPlacementAttemptToUser(
+    attemptId: string | undefined,
+    userId: Types.ObjectId,
+    studentCode?: string | null
+  ): Promise<void> {
+    if (!attemptId || !Types.ObjectId.isValid(attemptId)) {
+      return;
+    }
+    await PlacementAttemptModel.findOneAndUpdate(
+      {
+        _id: new Types.ObjectId(attemptId),
+        $or: [{ linked_user_id: null }, { linked_user_id: { $exists: false } }, { linked_user_id: userId }]
+      },
+      {
+        $set: {
+          is_unlocked_by_auth: true,
+          linked_user_id: userId,
+          ...(studentCode ? { student_code: studentCode } : {})
+        }
+      }
+    );
+  }
+
   /**
    * Verifies either a Google OAuth2 Access Token (ya29...) or GIS ID Token and returns normalized identity.
    */
@@ -207,6 +230,7 @@ export class AuthService {
         if (user.role === ROLES.STUDENT) {
           primeStudentLastSeenThrottle(user._id.toString());
           UserModel.updateOne({ _id: user._id }, { $set: { last_seen_at: new Date() } }).catch(() => {});
+          await this.linkPlacementAttemptToUser(dto.placementAttemptId, user._id, user.student_code);
         }
         const token = this.generateToken({
           sub: user._id.toString(),
@@ -271,12 +295,7 @@ export class AuthService {
       );
 
       // Link placement attempt if provided
-      if (dto.placementAttemptId && Types.ObjectId.isValid(dto.placementAttemptId)) {
-        await PlacementAttemptModel.findByIdAndUpdate(dto.placementAttemptId, {
-          is_unlocked_by_auth: true,
-          claimed_by_student_id: user._id
-        });
-      }
+      await this.linkPlacementAttemptToUser(dto.placementAttemptId, user._id, user.student_code);
 
       const token = this.generateToken({
         sub: user._id.toString(),
@@ -315,6 +334,7 @@ export class AuthService {
       if (user.role === ROLES.STUDENT) {
         primeStudentLastSeenThrottle(user._id.toString());
         UserModel.updateOne({ _id: user._id }, { $set: { last_seen_at: new Date() } }).catch(() => {});
+        await this.linkPlacementAttemptToUser(dto.placementAttemptId, user._id, user.student_code);
       }
       const token = this.generateToken({
         sub: user._id.toString(),
@@ -390,6 +410,7 @@ export class AuthService {
       if (user.role === ROLES.STUDENT) {
         primeStudentLastSeenThrottle(user._id.toString());
         UserModel.updateOne({ _id: user._id }, { $set: { last_seen_at: new Date() } }).catch(() => {});
+        await this.linkPlacementAttemptToUser(dto.placementAttemptId, user._id, user.student_code);
       }
 
       // Ensure LRU cache is fresh
@@ -516,9 +537,10 @@ export class AuthService {
     await user.save();
 
     // Link any anonymous placement attempts
+    await this.linkPlacementAttemptToUser(dto.placementAttemptId, user._id, studentCode);
     await PlacementAttemptModel.updateMany(
-      { claimed_by_student_id: user._id },
-      { student_code: studentCode }
+      { linked_user_id: user._id },
+      { $set: { student_code: studentCode, is_unlocked_by_auth: true } }
     );
 
     // Refresh token with studentCode
@@ -598,6 +620,7 @@ export class AuthService {
     });
 
     primeStudentLastSeenThrottle(user._id.toString());
+    await this.linkPlacementAttemptToUser(dto.placementAttemptId, user._id, studentCode);
 
     const token = this.generateToken({
       sub: user._id.toString(),
@@ -717,7 +740,7 @@ export class AuthService {
   /**
    * Directly authenticates a student via their unique HAxxxx code.
    */
-  public async studentCodeLogin(dto: { student_ha_code: string; deviceUuid?: string }) {
+  public async studentCodeLogin(dto: { student_ha_code: string; deviceUuid?: string; placementAttemptId?: string }) {
     const code = (dto.student_ha_code || '').trim().toUpperCase();
     const student = await UserModel.findOne({ student_code: code });
 
@@ -740,6 +763,7 @@ export class AuthService {
     if (isDeviceApproved) {
       primeStudentLastSeenThrottle(student._id.toString());
       UserModel.updateOne({ _id: student._id }, { $set: { last_seen_at: new Date() } }).catch(() => {});
+      await this.linkPlacementAttemptToUser(dto.placementAttemptId, student._id, student.student_code);
 
       deviceWhitelistCache.set(
         `device_whitelist:${student._id}`,

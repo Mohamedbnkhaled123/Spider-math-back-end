@@ -102,7 +102,10 @@ export class PlacementService {
    * Evaluates submitted anonymous answers and records an unclaimed PlacementAttempt.
    * Locked behind Lead Gate with 48-hour Partial TTL auto-purge.
    */
-  public async submitAnonymousPlacement(dto: SubmitPlacementDto) {
+  public async submitAnonymousPlacement(
+    dto: SubmitPlacementDto,
+    authenticatedUser?: { sub?: string; studentCode?: string }
+  ) {
     const term = dto.academicTerm || 'TERM_1';
 
     // 1. Fetch assessment with answer keys for server-authoritative evaluation (MCQ, INPUT_TEXT, ESSAY_PHOTO)
@@ -215,7 +218,13 @@ export class PlacementService {
       }
     });
 
-    // Create unclaimed attempt with 48h TTL
+    const roundedEarnedScore = Math.round(earnedPoints * 100) / 100;
+    const roundedMaxScore = Math.round(maxScore * 100) / 100;
+    const passThreshold = Number((assessment as any)?.pass_percentage ?? 50);
+    const passed = scorePct >= passThreshold;
+    const hasAuthUser = Boolean(authenticatedUser?.sub && Types.ObjectId.isValid(authenticatedUser.sub));
+
+    // Create attempt (48h TTL if unauthenticated/unclaimed)
     const attempt = await PlacementAttemptModel.create({
       curriculum: dto.curriculum,
       grade_level: dto.gradeLevel,
@@ -224,28 +233,85 @@ export class PlacementService {
       total_questions: totalQuestions,
       correct_count: correctCount,
       score_percentage: scorePct,
+      earned_score: roundedEarnedScore,
+      max_score: roundedMaxScore,
+      passed,
       academic_level_badge: badge,
       strengths_weaknesses: {
         strong_topics: strongTopics,
         weak_topics: weakTopics
       },
-      is_unlocked_by_auth: false,
+      is_unlocked_by_auth: hasAuthUser,
+      ...(hasAuthUser
+        ? {
+            linked_user_id: new Types.ObjectId(authenticatedUser!.sub!),
+            student_code: authenticatedUser?.studentCode || null
+          }
+        : {}),
       expires_if_unclaimed_at: new Date(Date.now() + 48 * 60 * 60 * 1000)
     });
 
-    const passThreshold = Number((assessment as any)?.pass_percentage ?? 50);
-
     return {
       attemptId: attempt._id,
-      status: 'LOCKED_BEHIND_GATE',
-      message: 'Placement assessment submitted successfully. Provide your contact details to unlock your comprehensive report.',
-      score: Math.round(earnedPoints * 100) / 100,
-      maxScore: Math.round(maxScore * 100) / 100,
+      status: hasAuthUser ? 'UNLOCKED' : 'LOCKED_BEHIND_GATE',
+      message: hasAuthUser
+        ? 'Placement assessment submitted and linked to your account.'
+        : 'Placement assessment submitted successfully. Sign in to view your report.',
+      score: roundedEarnedScore,
+      maxScore: roundedMaxScore,
       percentage: scorePct,
-      passed: scorePct >= passThreshold,
+      passed,
       totalQuestions,
       correctAnswersCount: correctCount,
-      isUnlocked: false
+      isUnlocked: hasAuthUser
+    };
+  }
+
+  /**
+   * Claims and unlocks a placement attempt for an authenticated student after login/signup.
+   */
+  public async claimPlacementAttemptForUser(
+    attemptId: string,
+    userId: string,
+    studentCode?: string
+  ) {
+    if (!Types.ObjectId.isValid(attemptId)) {
+      throw new AppError('Invalid attemptId format', 400, ERROR_CODES.BAD_REQUEST_400);
+    }
+    if (!Types.ObjectId.isValid(userId)) {
+      throw new AppError('Invalid userId format', 400, ERROR_CODES.BAD_REQUEST_400);
+    }
+
+    const attempt = await PlacementAttemptModel.findById(attemptId);
+    if (!attempt) {
+      throw new AppError('Placement assessment attempt not found or has expired', 404, ERROR_CODES.RESOURCE_NOT_FOUND_404);
+    }
+
+    if (attempt.linked_user_id && attempt.linked_user_id.toString() !== userId) {
+      throw new AppError('Not authorized to access this placement attempt', 403, ERROR_CODES.FORBIDDEN_403);
+    }
+
+    attempt.linked_user_id = new Types.ObjectId(userId);
+    attempt.is_unlocked_by_auth = true;
+    if (studentCode) {
+      attempt.student_code = studentCode;
+    }
+    await attempt.save();
+
+    return {
+      attemptId: attempt._id.toString(),
+      curriculum: attempt.curriculum,
+      gradeLevel: attempt.grade_level,
+      academicTerm: attempt.academic_term,
+      score: attempt.earned_score ?? attempt.correct_count,
+      maxScore: attempt.max_score ?? attempt.total_questions,
+      percentage: attempt.score_percentage,
+      passed: attempt.passed ?? (attempt.score_percentage >= 50),
+      totalQuestions: attempt.total_questions,
+      correctAnswersCount: attempt.correct_count,
+      academicLevelBadge: attempt.academic_level_badge,
+      strengthsWeaknesses: attempt.strengths_weaknesses,
+      isUnlocked: true
     };
   }
 

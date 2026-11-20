@@ -50,6 +50,7 @@ export const directRegisterStudentDtoSchema = z
       .nullable(),
 
     avatarUrl: z.string().optional().nullable(),
+    placementAttemptId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid placementAttemptId ObjectId').optional(),
 
     deviceUuid: z.string().optional().default('direct_reg_device'),
     deviceType: z.string().optional().default('Browser'),

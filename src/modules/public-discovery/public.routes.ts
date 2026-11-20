@@ -1,4 +1,4 @@
-import { authenticateJwt } from '../../middlewares/auth.middleware';
+import { authenticateJwt, optionalAuthenticateJwt } from '../../middlewares/auth.middleware';
 import { Router } from 'express';
 import { publicController } from './controllers/public.controller';
 import { validateRequest, validateBody } from '../../middlewares/validate.middleware';
@@ -72,12 +72,23 @@ publicRouter.get(
 
 /**
  * POST /api/v1/public/placement-test/submit-anonymous
- * Submit answers and generate unclaimed attempt
+ * Submit answers and generate attempt (automatically linked if authenticated)
  */
 publicRouter.post(
   '/placement-test/submit-anonymous',
+  optionalAuthenticateJwt,
   validateBody(submitPlacementDtoSchema),
   publicController.submitPlacementTest
+);
+
+/**
+ * POST /api/v1/public/placement-test/:attemptId/claim
+ * Claims and unlocks a placement attempt for an authenticated student after login/signup
+ */
+publicRouter.post(
+  '/placement-test/:attemptId/claim',
+  authenticateJwt,
+  publicController.claimPlacementTest
 );
 
 /**

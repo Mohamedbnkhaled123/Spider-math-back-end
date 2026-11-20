@@ -32,6 +32,9 @@ export interface IPlacementAttempt {
   total_questions: number;
   correct_count: number;
   score_percentage: number;
+  earned_score?: number;
+  max_score?: number;
+  passed?: boolean;
   academic_level_badge: AcademicLevelBadge;
   strengths_weaknesses: {
     strong_topics: string[];
@@ -40,6 +43,7 @@ export interface IPlacementAttempt {
   is_unlocked_by_auth: boolean;
   linked_lead_id?: Types.ObjectId | null;
   linked_user_id?: Types.ObjectId | null;
+  student_code?: string | null;
   expires_if_unclaimed_at: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -98,6 +102,18 @@ const PlacementAttemptSchema = new Schema<IPlacementAttemptDocument>(
       min: 0,
       max: 100
     },
+    earned_score: {
+      type: Number,
+      default: 0
+    },
+    max_score: {
+      type: Number,
+      default: 0
+    },
+    passed: {
+      type: Boolean,
+      default: false
+    },
     academic_level_badge: {
       type: String,
       enum: ACADEMIC_LEVEL_BADGES,
@@ -122,6 +138,11 @@ const PlacementAttemptSchema = new Schema<IPlacementAttemptDocument>(
     linked_user_id: {
       type: Schema.Types.ObjectId,
       ref: 'User',
+      default: null,
+      index: true
+    },
+    student_code: {
+      type: String,
       default: null,
       index: true
     },

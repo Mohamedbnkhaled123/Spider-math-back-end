@@ -72,7 +72,23 @@ export class PublicController {
    */
   public async submitPlacementTest(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await placementService.submitAnonymousPlacement(req.body);
+      const result = await placementService.submitAnonymousPlacement(req.body, req.user);
+      res.status(200).json(createSuccessResponse(result));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/public/placement-test/:attemptId/claim
+   * Claims and unlocks a placement attempt for the authenticated student.
+   */
+  public async claimPlacementTest(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const attemptId = req.params.attemptId!;
+      const studentId = req.user!.sub;
+      const studentCode = req.user!.studentCode;
+      const result = await placementService.claimPlacementAttemptForUser(attemptId, studentId, studentCode);
       res.status(200).json(createSuccessResponse(result));
     } catch (error) {
       next(error);
@@ -119,10 +135,7 @@ export class PublicController {
       let attempt = null;
       if (studentId && Types.ObjectId.isValid(studentId)) {
         attempt = await PlacementAttemptModel.findOne({
-          $or: [
-            { linked_user_id: new Types.ObjectId(studentId) },
-            { claimed_by_student_id: new Types.ObjectId(studentId) }
-          ]
+          linked_user_id: new Types.ObjectId(studentId)
         }).sort({ createdAt: -1 }).lean();
 
         if (!attempt) {
@@ -144,7 +157,11 @@ export class PublicController {
 
       res.status(200).json(createSuccessResponse({
         attemptId: attempt._id,
+        score: attempt.earned_score ?? attempt.correct_count,
+        maxScore: attempt.max_score ?? attempt.total_questions,
+        percentage: attempt.score_percentage,
         scorePercentage: attempt.score_percentage,
+        passed: attempt.passed ?? (attempt.score_percentage >= 50),
         academicLevelBadge: attempt.academic_level_badge,
         strengthsWeaknesses: attempt.strengths_weaknesses,
         curriculum: attempt.curriculum,
@@ -152,6 +169,7 @@ export class PublicController {
         academicTerm: attempt.academic_term,
         totalQuestions: attempt.total_questions,
         correctCount: attempt.correct_count,
+        correctAnswersCount: attempt.correct_count,
         createdAt: attempt.createdAt
       }));
     } catch (error) {

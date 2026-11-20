@@ -11,6 +11,8 @@ import { GamificationLogModel } from '../../../models/gamification-log.model';
 import { GradingService } from './grading.service';
 import { AssessmentsService } from './assessments.service';
 import { CloudinarySignedUploadAdapter } from '../adapters/cloudinary-signed-upload.adapter';
+import { directRegisterStudentDtoSchema } from '../../auth/dto/direct-register.dto';
+import { completeProfileDtoSchema } from '../../auth/dto/complete-profile.dto';
 
 async function runSuite(): Promise<void> {
   console.log('Running Placement Input/Essay, Half-Point Grading, and Image Isolation Suite...\n');
@@ -287,6 +289,98 @@ async function runSuite(): Promise<void> {
   }
 
   console.log('[PASS] Test 3 Passed: Question 8 & Question 9 images are strictly isolated in student feedback.\n');
+
+  // =========================================================================
+  // 4. Placement Post-Auth Claiming & Auto-Linking (User Login/Register Flow)
+  // =========================================================================
+  console.log('--- Test 4: Placement Attempt Claim & Auth Linking ---');
+
+  const claimAttemptId = new Types.ObjectId();
+  const claimStudentId = new Types.ObjectId();
+  const otherStudentId = new Types.ObjectId();
+  const origAttemptFindById = PlacementAttemptModel.findById;
+
+  const mockClaimAttemptDoc: any = {
+    _id: claimAttemptId,
+    curriculum: 'EGYPTIAN',
+    grade_level: 'SEC_3',
+    academic_term: 'TERM_1',
+    total_questions: 5,
+    correct_count: 4,
+    score_percentage: 80,
+    earned_score: 4,
+    max_score: 5,
+    passed: true,
+    academic_level_badge: 'GOOD',
+    strengths_weaknesses: { strong_topics: ['Topic 1'], weak_topics: ['Topic 2'] },
+    is_unlocked_by_auth: false,
+    linked_user_id: null,
+    student_code: null,
+    save: async function () { return this; }
+  };
+
+  (PlacementAttemptModel as any).findById = async () => mockClaimAttemptDoc;
+
+  try {
+    const placementService = new PlacementService();
+    const claimed = await placementService.claimPlacementAttemptForUser(
+      claimAttemptId.toString(),
+      claimStudentId.toString(),
+      'HA9001'
+    );
+
+    assert.equal(claimed.attemptId, claimAttemptId.toString());
+    assert.equal(claimed.score, 4);
+    assert.equal(claimed.maxScore, 5);
+    assert.equal(claimed.percentage, 80);
+    assert.equal(claimed.passed, true);
+    assert.equal(claimed.isUnlocked, true);
+    assert.equal(mockClaimAttemptDoc.is_unlocked_by_auth, true);
+    assert.equal(mockClaimAttemptDoc.linked_user_id.toString(), claimStudentId.toString());
+    assert.equal(mockClaimAttemptDoc.student_code, 'HA9001');
+
+    // Ownership guard: a different student must receive 403
+    let forbiddenThrown = false;
+    try {
+      await placementService.claimPlacementAttemptForUser(
+        claimAttemptId.toString(),
+        otherStudentId.toString(),
+        'HA9002'
+      );
+    } catch (err: any) {
+      forbiddenThrown = err?.statusCode === 403;
+    }
+    assert.equal(forbiddenThrown, true, 'Claiming another student attempt must throw 403');
+  } finally {
+    (PlacementAttemptModel as any).findById = origAttemptFindById;
+  }
+
+  // Verify directRegisterStudentDtoSchema & completeProfileDtoSchema accept optional placementAttemptId
+  const regDtoCheck = directRegisterStudentDtoSchema.safeParse({
+    fullName: 'Omar Khaled',
+    phone: '01012345678',
+    parentPhone: '01112345678',
+    curriculum: 'EGYPTIAN',
+    gradeLevel: 'SEC_3',
+    country: 'EG',
+    governorate: 'CAIRO',
+    placementAttemptId: claimAttemptId.toString()
+  });
+  assert.equal(regDtoCheck.success, true, 'directRegisterStudentDtoSchema must accept valid placementAttemptId');
+
+  const compDtoCheck = completeProfileDtoSchema.safeParse({
+    fullName: 'Omar Khaled',
+    phone: '01012345678',
+    parentPhone: '01112345678',
+    curriculum: 'EGYPTIAN',
+    gradeLevel: 'SEC_3',
+    country: 'EG',
+    governorate: 'CAIRO',
+    placementAttemptId: claimAttemptId.toString()
+  });
+  assert.equal(compDtoCheck.success, true, 'completeProfileDtoSchema must accept valid placementAttemptId');
+
+  console.log('[PASS] Test 4 Passed: Placement claim, ownership enforcement, and auth DTO linking verified.\n');
 }
 
 runSuite().catch((err) => {
